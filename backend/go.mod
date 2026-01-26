@@ -2,7 +2,11 @@ module port
 
 go 1.23.4
 
-require github.com/jackc/pgx/v4 v4.18.3
+require (
+	github.com/google/gopacket v1.1.19
+	github.com/gorilla/websocket v1.5.3
+	github.com/jackc/pgx/v4 v4.18.3
+)
 
 require (
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect

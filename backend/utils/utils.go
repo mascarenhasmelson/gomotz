@@ -20,6 +20,17 @@ type Service struct {
 // 	ISPInfo     string `json:"ispinfo"`
 // 	Interstatus string `json:"interstatus"`
 // }
+type ScanRequest struct {
+	Target string `json:"target"`
+}
+
+type ScanMessage struct {
+	Type      string `json:"type"`
+	Port      int    `json:"port,omitempty"`
+	Scanned   int    `json:"scanned,omitempty"`
+	Message   string `json:"message,omitempty"`
+	OpenPorts []int  `json:"openPorts,omitempty"`
+}
 type IPInfoRaw struct {
 	IP  string `json:"ip"`
 	Org string `json:"org"`

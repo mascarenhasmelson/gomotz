@@ -1,0 +1,667 @@
+<template>
+  <div class="dns-lookup-page">
+    <!-- Main Container -->
+    <div class="dns-container">
+      <!-- Input Form -->
+      <div class="input-card">
+        <form @submit.prevent="handleSubmit">
+          <div class="input-group">
+            <div class="relative">
+              <input
+                v-model="domain"
+                type="text"
+                id="domain"
+                placeholder="yourdomain.com"
+                class="domain-input"
+                :disabled="isLoading"
+              />
+              <label for="domain" class="input-label">
+                Name
+              </label>
+            </div>
+          </div>
+          
+          <!-- Record Type Selection -->
+          <div class="type-selection">
+            <div class="radio-group">
+              <input v-model="recordType" value="A" id="A" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="A" class="record-btn">A</label>
+
+              <input v-model="recordType" value="AAAA" id="AAAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="AAAA" class="record-btn">AAAA</label>
+
+              <input v-model="recordType" value="CAA" id="CAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="CAA" class="record-btn">CAA</label>
+
+              <input v-model="recordType" value="CNAME" id="CNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="CNAME" class="record-btn">CNAME</label>
+
+              <input v-model="recordType" value="MX" id="MX" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MX" class="record-btn">MX</label>
+
+              <input v-model="recordType" value="NAPTR" id="NAPTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NAPTR" class="record-btn">NAPTR</label>
+
+              <input v-model="recordType" value="NS" id="NS" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NS" class="record-btn">NS</label>
+
+              <input v-model="recordType" value="PTR" id="PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="PTR" class="record-btn">PTR</label>
+
+              <input v-model="recordType" value="SOA" id="SOA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="SOA" class="record-btn">SOA</label>
+
+              <input v-model="recordType" value="SRV" id="SRV" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="SRV" class="record-btn">SRV</label>
+
+              <input v-model="recordType" value="TXT" id="TXT" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="TXT" class="record-btn">TXT</label>
+            </div>
+            
+            <div class="all-records-btn">
+              <input v-model="recordType" value="ALL" id="ALL" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="ALL" class="all-btn">GET ME ALL THE RECORDS!</label>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div v-if="isLoading" class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <p>Querying DNS records...</p>
+      </div>
+
+      <!-- Error Message -->
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
+
+      <!-- Results Section -->
+      <div v-for="(result, index) in results" :key="index" class="result-card">
+        <div class="result-header">
+          <span class="result-badge">{{ result.type.toUpperCase() }} answers</span>
+        </div>
+        
+        <div v-if="result.answers && result.answers.length > 0">
+          <!-- Table for large screens -->
+          <table class="answers-table desktop-view">
+            <thead>
+              <tr class="table-header">
+                <th class="header-cell">name</th>
+                <th class="header-cell">TTL</th>
+                <th class="header-cell whitespace-nowrap">record type</th>
+                <th class="header-cell">value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(answer, ansIndex) in result.answers" :key="ansIndex" class="table-row">
+                <td class="table-cell">{{ answer.name }}</td>
+                <td class="table-cell">{{ answer.ttl }}</td>
+                <td class="table-cell type-cell">{{ answer.type }}</td>
+                <td class="table-cell value-cell">{{ answer.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- List for small screens -->
+          <div v-for="(answer, ansIndex) in result.answers" :key="ansIndex" class="mobile-view">
+            <ul class="answer-list">
+              <li><span class="list-label">Name:</span> {{ answer.name }}</li>
+              <li><span class="list-label">TTL:</span> {{ answer.ttl }}</li>
+              <li><span class="list-label">Record Type:</span> {{ answer.type }}</li>
+              <li><span class="list-label">Value:</span> {{ answer.value }}</li>
+            </ul>
+            <div v-if="ansIndex < result.answers.length - 1" class="list-divider"></div>
+          </div>
+        </div>
+        
+        <div v-else class="no-results">
+          &lt;no result&gt;
+        </div>
+      </div>
+
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'DnsLookup',
+
+  data() {
+    return {
+      domain: '',
+      recordType: 'A',
+      results: [],
+      isLoading: false,
+      error: null,
+      allRecordTypes: ['A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NAPTR', 'NS', 'PTR', 'SOA', 'SRV', 'TXT']
+    }
+  },
+
+  mounted() {
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+      const parts = hash.split('|');
+      if (parts.length === 2) {
+        this.domain = parts[0];
+        this.recordType = parts[1].toUpperCase();
+        this.performLookup();
+      }
+    }
+  },
+
+  methods: {
+    handleSubmit() {
+      if (!this.domain.trim()) {
+        this.error = 'Please enter a domain name';
+        return;
+      }
+      this.performLookup();
+    },
+
+    async performLookup() {
+      if (!this.domain.trim()) {
+        this.results = [];
+        return;
+      }
+
+      this.isLoading = true;
+      this.error = null;
+      this.results = [];
+
+      try {
+        const types =
+          this.recordType === 'ALL'
+            ? this.allRecordTypes
+            : [this.recordType];
+
+        const queryPromises = types.map(type => 
+          this.dnsQuery(this.domain, type)
+        );
+
+        const responses = await Promise.all(queryPromises);
+        
+        responses.forEach((response, index) => {
+          if (response) {
+            this.results.push({
+              type: types[index],
+              answers: response.answers || [],
+              timestamp: new Date().toISOString()
+            });
+          }
+        });
+
+        window.location.hash = `${this.domain}|${this.recordType}`;
+      } catch (error) {
+        console.error('DNS lookup error:', error);
+        this.error = `Failed to query DNS: ${error.message}`;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async dnsQuery(domain, type) {
+      try {
+        const response = await fetch(
+          `http://localhost:8082/dns?domain=${encodeURIComponent(domain)}&type=${type}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        // Format response based on your API structure
+        return this.formatResponse(data, domain, type);
+      } catch (error) {
+        console.error(`DNS query failed (${type}):`, error);
+        return { answers: [] };
+      }
+    },
+
+    formatResponse(data, domain, type) {
+      // This function formats the API response to match your UI structure
+      // Adjust based on your actual API response format
+      
+      let answers = [];
+      
+      // Check different possible response formats
+      if (Array.isArray(data)) {
+        // If API returns array directly
+        answers = data.map(item => ({
+          name: item.name || domain,
+          ttl: item.ttl || item.TTL || 0,
+          type: item.type || type,
+          value: item.value || item.data || item.content || ''
+        }));
+      } else if (data.answers && Array.isArray(data.answers)) {
+        // Format: { answers: [...] }
+        answers = data.answers.map(answer => ({
+          name: answer.name || domain,
+          ttl: answer.ttl || 0,
+          type: answer.type || type,
+          value: answer.value || ''
+        }));
+      } else if (data.Answer && Array.isArray(data.Answer)) {
+        // DNS-over-HTTPS format
+        answers = data.Answer.map(answer => ({
+          name: answer.name || domain,
+          ttl: answer.TTL || 0,
+          type: answer.type || type,
+          value: answer.data || ''
+        }));
+      } else if (data.result && Array.isArray(data.result)) {
+        // Another possible format
+        answers = data.result.map(item => ({
+          name: item.name || domain,
+          ttl: item.ttl || 0,
+          type: item.type || type,
+          value: item.value || ''
+        }));
+      }
+      
+      return {
+        domain: domain,
+        type: type,
+        answers: answers
+      };
+    }
+  },
+
+  watch: {
+    recordType() {
+      if (this.domain) {
+        this.performLookup();
+      }
+    }
+  }
+}
+</script>
+
+<style scoped>
+/* Reset and Base Styles */
+.dns-lookup-page {
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  min-height: 100vh;
+  background-color: #ffffff;
+  margin: 0;
+  padding: 0;
+}
+
+.dns-container {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* Input Card */
+.input-card {
+  margin: 2rem auto 0 auto;
+  width: 100%;
+  background-color: #f8fafc;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.input-group {
+  margin-bottom: 30px;
+}
+
+.relative {
+  position: relative;
+}
+
+.domain-input {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #cbd5e0;
+  outline: none;
+  transition: border-color 0.3s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.domain-input:focus {
+  border-bottom-color: #8b5cf6;
+}
+
+.domain-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background-color: #f1f5f9;
+}
+
+.input-label {
+  font-size: 14px;
+  color: #5b21b6;
+  font-weight: 500;
+  position: absolute;
+  left: 0;
+  top: -24px;
+}
+
+/* Record Type Selection */
+.type-selection {
+  margin-top: 30px;
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hidden-radio {
+  display: none;
+}
+
+.record-btn {
+  display: inline-block;
+  margin: 4px;
+  background-color: transparent;
+  font-weight: 500;
+  font-size: 14px;
+  color: #4a5568;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.record-btn:hover {
+  background-color: #e2e8f0;
+}
+
+.hidden-radio:checked + .record-btn {
+  color: white;
+  background-color: #8b5cf6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-color: #8b5cf6;
+}
+
+.hidden-radio:checked + .record-btn:hover {
+  background-color: #7c3aed;
+}
+
+.hidden-radio:disabled + .record-btn {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.all-records-btn {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.all-btn {
+  display: inline-block;
+  background-color: transparent;
+  font-weight: 500;
+  font-size: 14px;
+  color: #4a5568;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.all-btn:hover {
+  background-color: #e2e8f0;
+}
+
+.hidden-radio:checked + .all-btn {
+  color: white;
+  background-color: #8b5cf6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-color: #8b5cf6;
+}
+
+.hidden-radio:checked + .all-btn:hover {
+  background-color: #7c3aed;
+}
+
+.hidden-radio:disabled + .all-btn {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Loading Indicator */
+.loading-indicator {
+  text-align: center;
+  margin: 2rem auto;
+  padding: 2rem;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-indicator p {
+  color: #4a5568;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Error Message */
+.error-message {
+  margin: 2rem auto;
+  padding: 16px;
+  background-color: #fed7d7;
+  color: #c53030;
+  border-radius: 8px;
+  border-left: 4px solid #e53e3e;
+  text-align: center;
+  max-width: 600px;
+  font-weight: 500;
+}
+
+/* Results Card */
+.result-card {
+  position: relative;
+  margin: 2rem auto;
+  width: 100%;
+  background-color: #f8fafc;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-header {
+  position: absolute;
+  left: 16px;
+  top: -16px;
+}
+
+.result-badge {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 8px 16px;
+  background-color: #8b5cf6;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Answers Table */
+.answers-table {
+  width: 100%;
+  font-family: 'Monaco', 'Courier New', monospace;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.desktop-view {
+  display: table;
+}
+
+.table-header {
+  border-bottom: 1px solid #cbd5e0;
+}
+
+.header-cell {
+  padding: 16px;
+  text-align: left;
+  font-weight: 500;
+  color: #4a5568;
+  background-color: #f1f5f9;
+}
+
+.table-row {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.table-cell {
+  padding: 12px 16px;
+  vertical-align: top;
+}
+
+.type-cell {
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.value-cell {
+  width: 100%;
+  word-break: break-word;
+}
+
+/* Mobile View */
+.mobile-view {
+  display: none;
+}
+
+.answer-list {
+  font-family: 'Monaco', 'Courier New', monospace;
+  padding: 16px 0;
+  margin: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.answer-list li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.list-label {
+  color: #8b5cf6;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.list-divider {
+  border-top: 1px solid #cbd5e0;
+  margin: 16px 0;
+}
+
+.no-results {
+  font-family: 'Monaco', 'Courier New', monospace;
+  color: #718096;
+  padding: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dns-container {
+    padding: 10px;
+  }
+  
+  .input-card, .result-card {
+    padding: 20px;
+  }
+  
+  .desktop-view {
+    display: none;
+  }
+  
+  .mobile-view {
+    display: block;
+  }
+  
+  .radio-group {
+    justify-content: flex-start;
+  }
+  
+  .record-btn, .all-btn {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+}
+
+@media (min-width: 769px) {
+  .desktop-view {
+    display: table;
+  }
+  
+  .mobile-view {
+    display: none;
+  }
+}
+
+/* Focus styles for accessibility */
+.record-btn:focus-visible,
+.all-btn:focus-visible,
+.domain-input:focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+}
+
+/* Utility classes */
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+
+</style>

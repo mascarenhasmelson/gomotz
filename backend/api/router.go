@@ -3,9 +3,14 @@ package api
 import (
 	"context"
 	"net/http"
+	"port/servicetools"
+	"port/utils"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -26,10 +31,34 @@ func NewRouter(ctx context.Context, pool *pgxpool.Pool) *http.ServeMux {
 	return r.mux
 }
 
+var wsMu sync.Mutex
+
 func (r *Router) routes() {
 	r.mux.HandleFunc("/services", r.servicesHandler)
 	r.mux.HandleFunc("/services/", r.serviceHandler)
 	r.mux.HandleFunc("/services/isp", r.ispHandler)
+	r.mux.HandleFunc("/v1/scan", handleSynScan)
+}
+func handleSynScan(w http.ResponseWriter, r *http.Request) {
+	ws, err := servicetools.Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer ws.Close()
+	var req utils.ScanRequest
+	if err := ws.ReadJSON(&req); err != nil {
+		return
+	}
+	go servicetools.SynScan(ws, req.Target)
+	for {
+		time.Sleep(5 * time.Second)
+		wsMu.Lock()
+		err := ws.WriteMessage(websocket.PingMessage, nil)
+		wsMu.Unlock()
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (r *Router) servicesHandler(w http.ResponseWriter, req *http.Request) {
