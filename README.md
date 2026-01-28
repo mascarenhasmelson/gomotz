@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/tailpass.png" alt="Tailpass Logo" width="450">
+  <img src="images/gomotz.png" alt="Tailpass Logo" width="450">
 </p>
 
 # TailPass
