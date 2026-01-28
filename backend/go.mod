@@ -1,4 +1,4 @@
-module port
+module github.com/mascarenhasmelson/gomotz
 
 go 1.23.4
 

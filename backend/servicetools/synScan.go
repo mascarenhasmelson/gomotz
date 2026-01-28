@@ -2,12 +2,12 @@ package servicetools
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
-	"port/utils"
 	"sync"
 	"time"
+
+	"github.com/mascarenhasmelson/gomotz/utils"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -37,47 +37,6 @@ func localIP(dst net.IP) net.IP {
 	conn, _ := net.Dial("udp", dst.String()+":53")
 	defer conn.Close()
 	return conn.LocalAddr().(*net.UDPAddr).IP
-}
-func listenForResponses(
-	conn net.PacketConn,
-	dstIP net.IP,
-	srcPort layers.TCPPort,
-	openPorts map[layers.TCPPort]bool,
-	mu *sync.Mutex,
-) {
-	buf := make([]byte, 65535)
-
-	for {
-		n, addr, err := conn.ReadFrom(buf)
-		if err != nil {
-			return
-		}
-
-		ipAddr, ok := addr.(*net.IPAddr)
-		if !ok || !ipAddr.IP.Equal(dstIP) {
-			continue
-		}
-
-		p := gopacket.NewPacket(buf[:n], layers.LayerTypeTCP, gopacket.Default)
-		tcpLayer := p.Layer(layers.LayerTypeTCP)
-		if tcpLayer == nil {
-			continue
-		}
-
-		tcp := tcpLayer.(*layers.TCP)
-		if tcp.DstPort != srcPort {
-			continue
-		}
-
-		if tcp.SYN && tcp.ACK {
-			mu.Lock()
-			if !openPorts[tcp.SrcPort] {
-				openPorts[tcp.SrcPort] = true
-				log.Printf(" Port %d OPEN\n", tcp.SrcPort)
-			}
-			mu.Unlock()
-		}
-	}
 }
 
 // var receivedMsg utils.ScanMessage

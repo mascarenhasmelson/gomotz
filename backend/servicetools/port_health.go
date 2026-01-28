@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"port/utils"
 	"time"
+
+	"github.com/mascarenhasmelson/gomotz/utils"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 )

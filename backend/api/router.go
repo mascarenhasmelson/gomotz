@@ -3,12 +3,13 @@ package api
 import (
 	"context"
 	"net/http"
-	"port/servicetools"
-	"port/utils"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mascarenhasmelson/gomotz/servicetools"
+	"github.com/mascarenhasmelson/gomotz/utils"
 
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v4/pgxpool"

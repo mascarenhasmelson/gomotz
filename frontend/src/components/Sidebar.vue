@@ -4,7 +4,7 @@
 			<div class="logo-wrapper">
 				<img :src="logoURL" alt="Logo" class="logo-img" />
 				<transition name="fade">
-					<h1 class="logo-text" v-if="is_expanded">TailPass</h1>
+					<h1 class="logo-text" v-if="is_expanded">Gomotz</h1>
 				</transition>
 			</div>
 			

@@ -401,9 +401,10 @@ export default {
 
   mounted() {
     this.fetchISPInfo();
+    const FIVE_HOURS = 5 * 60 * 60 * 1000;
     this.intervalId = setInterval(() => {
       this.fetchISPInfo();
-    }, 30000); // Check every 30 seconds
+    }, FIVE_HOURS); // Check every 30 seconds
 
     // Add initial history event
     this.addHistoryEvent('info', 'Dashboard initialized');
