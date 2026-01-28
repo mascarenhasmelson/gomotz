@@ -36,7 +36,7 @@ var wsMu sync.Mutex
 func (r *Router) routes() {
 	r.mux.HandleFunc("/services", r.servicesHandler)
 	r.mux.HandleFunc("/services/", r.serviceHandler)
-	r.mux.HandleFunc("/services/isp", r.ispHandler)
+	r.mux.HandleFunc("/v1/services/isp", r.ispHandler)
 	r.mux.HandleFunc("/v1/scan", handleSynScan)
 }
 func handleSynScan(w http.ResponseWriter, r *http.Request) {
