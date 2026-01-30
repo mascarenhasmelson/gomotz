@@ -615,8 +615,6 @@ export default {
         this.error = 'Please enter a valid host and port (1-65535)'
         return
       }
-      
-      // Reset state
       this.isChecking = true
       this.showResults = false
       this.error = null
@@ -635,13 +633,9 @@ export default {
       this.elapsedTime = 0
       this.currentStep = 0
       this.progress = 0
-      
-      // Start progress simulation
       this.startProgressSimulation()
-      
       try {
-        // Call your Go backend
-        const response = await fetch('http://localhost:8082/check', {
+        const response = await fetch('http://localhost:8082/v1/tcpCheck', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -670,22 +664,19 @@ export default {
     },
     
     startProgressSimulation() {
-      // Update elapsed time
       this.progressInterval = setInterval(() => {
         this.elapsedTime = ((Date.now() - this.testStartTime) / 1000).toFixed(1)
-        
-        // Simulate progress steps
         if (this.elapsedTime < 0.5) {
-          this.currentStep = 1 // DNS Lookup
+          this.currentStep = 1 
           this.progress = 25
         } else if (this.elapsedTime < 1) {
-          this.currentStep = 2 // Sending SYN
+          this.currentStep = 2 
           this.progress = 50
         } else if (this.elapsedTime < 2) {
-          this.currentStep = 3 // Waiting Response
+          this.currentStep = 3 
           this.progress = 75
         } else if (this.elapsedTime < 3) {
-          this.currentStep = 4 // Analyzing
+          this.currentStep = 4 
           this.progress = 95
         }
       }, 100)
@@ -693,20 +684,15 @@ export default {
     
     processResult(data) {
       const duration = Date.now() - this.testStartTime
-      
-      // Since your Go code logs to console, we need to parse the output
-      // Adjust this based on your actual output format
       let status = 'closed'
       let title = 'Port Closed'
-      let message = 'No SYN-ACK response received'
+      let message = 'No response received'
       let responseTime = duration
       
-      // Check if the port was found open
-      // You might want to modify your Go code to return JSON instead of logging
       if (data && data.status === 'open') {
         status = 'open'
         title = 'Port Open'
-        message = 'SYN-ACK response received - Port is open'
+        message = 'response received - Port is open'
       } else if (data && data.status === 'filtered') {
         status = 'filtered'
         title = 'Port Filtered'
@@ -732,8 +718,6 @@ export default {
       
       this.showResults = true
       this.progress = 100
-      
-      // Save to history
       this.saveToHistory()
     },
     
@@ -822,8 +806,6 @@ export default {
       }
       
       this.history.unshift(historyItem)
-      
-      // Keep only last 50 items
       if (this.history.length > 50) {
         this.history = this.history.slice(0, 50)
       }

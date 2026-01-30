@@ -36,6 +36,24 @@ type IPInfoRaw struct {
 	Org string `json:"org"`
 }
 
+// ---------------------These from tcpcheck-----------------
+type TCPCheckRequest struct {
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	Timeout int    `json:"timeout"` // seconds
+}
+
+type TCPCheckResponse struct {
+	Success      bool   `json:"success"`
+	Status       string `json:"status"` // open, closed, filtered, error
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	ResponseTime int64  `json:"responseTime"` // ms
+	Message      string `json:"message"`
+}
+
+//-----------------ending Tcpcheck-------------------------
+
 type Error struct {
 	Message string
 }

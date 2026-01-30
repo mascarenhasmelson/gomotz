@@ -39,6 +39,8 @@ func (r *Router) routes() {
 	r.mux.HandleFunc("/services/", r.serviceHandler)
 	r.mux.HandleFunc("/v1/services/isp", r.ispHandler)
 	r.mux.HandleFunc("/v1/scan", handleSynScan)
+	r.mux.HandleFunc("/v1/tcpCheck", TcpCheckHandler)
+
 }
 func handleSynScan(w http.ResponseWriter, r *http.Request) {
 	ws, err := servicetools.Upgrader.Upgrade(w, r, nil)
