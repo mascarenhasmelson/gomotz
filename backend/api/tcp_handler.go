@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/mascarenhasmelson/gomotz/servicetools"
+	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/utils"
 )
 
@@ -38,7 +38,7 @@ func TcpCheckHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp := servicetools.TcpCheck(req)
+	resp := bgservices.TcpCheck(req)
 	writeJSON(w, resp)
 }
 

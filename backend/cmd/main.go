@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/mascarenhasmelson/gomotz/servicetools"
+	"github.com/mascarenhasmelson/gomotz/bgservices"
 
 	"github.com/mascarenhasmelson/gomotz/api"
 
@@ -42,7 +42,7 @@ func main() {
 	defer pool.Close()
 
 	fmt.Println("connected to PostgreSQL!")
-	go servicetools.StartPortMonitor(ctx, pool)
+	go bgservices.StartPortMonitor(ctx, pool)
 	server := &http.Server{
 		Addr:    ":8082",
 		Handler: api.NewRouter(ctx, pool),

@@ -1,4 +1,4 @@
-package servicetools
+package bgservices
 
 import (
 	"encoding/json"

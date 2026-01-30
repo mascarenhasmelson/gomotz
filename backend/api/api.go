@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/mascarenhasmelson/gomotz/servicetools"
+	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/utils"
 
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -106,7 +106,7 @@ func HandleAddService(ctx context.Context, w http.ResponseWriter, pool *pgxpool.
 		return
 	}
 
-	pid, err := servicetools.PortForward(ctx, s.LocalIP, strconv.Itoa(s.LocalPort), s.RemoteIP, strconv.Itoa(s.RemotePort))
+	pid, err := bgservices.PortForward(ctx, s.LocalIP, strconv.Itoa(s.LocalPort), s.RemoteIP, strconv.Itoa(s.RemotePort))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to start port forward: %v", err), http.StatusInternalServerError)
 		return

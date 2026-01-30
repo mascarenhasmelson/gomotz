@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mascarenhasmelson/gomotz/servicetools"
+	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/utils"
 
 	"github.com/gorilla/websocket"
@@ -43,7 +43,7 @@ func (r *Router) routes() {
 
 }
 func handleSynScan(w http.ResponseWriter, r *http.Request) {
-	ws, err := servicetools.Upgrader.Upgrade(w, r, nil)
+	ws, err := bgservices.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
@@ -52,7 +52,7 @@ func handleSynScan(w http.ResponseWriter, r *http.Request) {
 	if err := ws.ReadJSON(&req); err != nil {
 		return
 	}
-	go servicetools.SynScan(ws, req.Target)
+	go bgservices.SynScan(ws, req.Target)
 	for {
 		time.Sleep(5 * time.Second)
 		wsMu.Lock()
