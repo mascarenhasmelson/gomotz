@@ -24,43 +24,143 @@
           <!-- Record Type Selection -->
           <div class="type-selection">
             <div class="radio-group">
-              <input v-model="recordType" value="A" id="A" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="A" class="record-btn">A</label>
+             <!-- A -->
+<input v-model="recordType" value="A" id="A" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="A" class="record-btn">A</label>
 
-              <input v-model="recordType" value="AAAA" id="AAAA" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="AAAA" class="record-btn">AAAA</label>
+<!-- AAAA -->
+<input v-model="recordType" value="AAAA" id="AAAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="AAAA" class="record-btn">AAAA</label>
 
-              <input v-model="recordType" value="CAA" id="CAA" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="CAA" class="record-btn">CAA</label>
+<!-- AFSDB -->
+<input v-model="recordType" value="AFSDB" id="AFSDB" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="AFSDB" class="record-btn">AFSDB</label>
 
-              <input v-model="recordType" value="CNAME" id="CNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="CNAME" class="record-btn">CNAME</label>
+<!-- ATMA -->
+<input v-model="recordType" value="ATMA" id="ATMA" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="ATMA" class="record-btn">ATMA</label>
 
-              <input v-model="recordType" value="MX" id="MX" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="MX" class="record-btn">MX</label>
+<!-- CAA -->
+<input v-model="recordType" value="CAA" id="CAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="CAA" class="record-btn">CAA</label>
 
-              <input v-model="recordType" value="NAPTR" id="NAPTR" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="NAPTR" class="record-btn">NAPTR</label>
+<!-- CERT -->
+<input v-model="recordType" value="CERT" id="CERT" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="CERT" class="record-btn">CERT</label>
 
-              <input v-model="recordType" value="NS" id="NS" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="NS" class="record-btn">NS</label>
+<!-- CNAME -->
+<input v-model="recordType" value="CNAME" id="CNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="CNAME" class="record-btn">CNAME</label>
 
-              <input v-model="recordType" value="PTR" id="PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="PTR" class="record-btn">PTR</label>
+<!-- DHCID -->
+<input v-model="recordType" value="DHCID" id="DHCID" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="DHCID" class="record-btn">DHCID</label>
 
-              <input v-model="recordType" value="SOA" id="SOA" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="SOA" class="record-btn">SOA</label>
+<!-- DNAME -->
+<input v-model="recordType" value="DNAME" id="DNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="DNAME" class="record-btn">DNAME</label>
 
-              <input v-model="recordType" value="SRV" id="SRV" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="SRV" class="record-btn">SRV</label>
+<!-- DNSKEY -->
+<input v-model="recordType" value="DNSKEY" id="DNSKEY" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="DNSKEY" class="record-btn">DNSKEY</label>
 
-              <input v-model="recordType" value="TXT" id="TXT" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="TXT" class="record-btn">TXT</label>
+<!-- DS -->
+<input v-model="recordType" value="DS" id="DS" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="DS" class="record-btn">DS</label>
+
+<!-- HINFO -->
+<input v-model="recordType" value="HINFO" id="HINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="HINFO" class="record-btn">HINFO</label>
+
+<!-- ISDN -->
+<input v-model="recordType" value="ISDN" id="ISDN" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="ISDN" class="record-btn">ISDN</label>
+
+<!-- LOC -->
+<input v-model="recordType" value="LOC" id="LOC" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="LOC" class="record-btn">LOC</label>
+
+<!-- MB -->
+<input v-model="recordType" value="MB" id="MB" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="MB" class="record-btn">MB</label>
+
+<!-- MG -->
+<input v-model="recordType" value="MG" id="MG" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="MG" class="record-btn">MG</label>
+
+<!-- MINFO -->
+<input v-model="recordType" value="MINFO" id="MINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="MINFO" class="record-btn">MINFO</label>
+
+<!-- MR -->
+<input v-model="recordType" value="MR" id="MR" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="MR" class="record-btn">MR</label>
+
+<!-- MX -->
+<input v-model="recordType" value="MX" id="MX" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="MX" class="record-btn">MX</label>
+
+<!-- NAPTR -->
+<input v-model="recordType" value="NAPTR" id="NAPTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="NAPTR" class="record-btn">NAPTR</label>
+
+<!-- NS -->
+<input v-model="recordType" value="NS" id="NS" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="NS" class="record-btn">NS</label>
+
+<!-- NSAP-PTR -->
+<input v-model="recordType" value="NSAP-PTR" id="NSAP-PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="NSAP-PTR" class="record-btn">NSAP-PTR</label>
+
+<!-- NSEC -->
+<input v-model="recordType" value="NSEC" id="NSEC" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="NSEC" class="record-btn">NSEC</label>
+
+<!-- NSEC3 -->
+<input v-model="recordType" value="NSEC3" id="NSEC3" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="NSEC3" class="record-btn">NSEC3</label>
+
+<!-- PTR -->
+<input v-model="recordType" value="PTR" id="PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="PTR" class="record-btn">PTR</label>
+
+<!-- RP -->
+<input v-model="recordType" value="RP" id="RP" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="RP" class="record-btn">RP</label>
+
+<!-- RRSIG -->
+<input v-model="recordType" value="RRSIG" id="RRSIG" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="RRSIG" class="record-btn">RRSIG</label>
+
+<!-- RT -->
+<input v-model="recordType" value="RT" id="RT" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="RT" class="record-btn">RT</label>
+
+<!-- SOA -->
+<input v-model="recordType" value="SOA" id="SOA" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="SOA" class="record-btn">SOA</label>
+
+<!-- SRV -->
+<input v-model="recordType" value="SRV" id="SRV" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="SRV" class="record-btn">SRV</label>
+
+<!-- TLSA -->
+<input v-model="recordType" value="TLSA" id="TLSA" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="TLSA" class="record-btn">TLSA</label>
+
+<!-- TXT -->
+<input v-model="recordType" value="TXT" id="TXT" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="TXT" class="record-btn">TXT</label>
+
+<!-- X25 -->
+<input v-model="recordType" value="X25" id="X25" type="radio" class="hidden-radio" :disabled="isLoading" />
+<label for="X25" class="record-btn">X25</label>
+
             </div>
             
             <div class="all-records-btn">
               <input v-model="recordType" value="ALL" id="ALL" type="radio" class="hidden-radio" :disabled="isLoading" />
-              <label for="ALL" class="all-btn">GET ME ALL THE RECORDS!</label>
+              <label for="ALL" class="all-btn">ALL THE RECORDS</label>
             </div>
           </div>
         </form>
@@ -136,18 +236,23 @@ export default {
       results: [],
       isLoading: false,
       error: null,
-      allRecordTypes: ['A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NAPTR', 'NS', 'PTR', 'SOA', 'SRV', 'TXT']
+      allRecordTypes: [
+        'A', 'AAAA', 'AFSDB', 'ATMA', 'CAA', 'CERT', 'CNAME', 'DHCID',
+        'DNAME', 'DNSKEY', 'DS', 'HINFO', 'ISDN', 'LOC', 'MB', 'MG',
+        'MINFO', 'MR', 'MX', 'NAPTR', 'NS', 'NSAP-PTR', 'NSEC', 'NSEC3',
+        'PTR', 'RP', 'RRSIG', 'RT', 'SOA', 'SRV', 'TLSA', 'TXT', 'X25'
+      ]
     }
   },
 
   mounted() {
-    const hash = window.location.hash.substring(1);
+    const hash = window.location.hash.substring(1)
     if (hash) {
-      const parts = hash.split('|');
+      const parts = hash.split('|')
       if (parts.length === 2) {
-        this.domain = parts[0];
-        this.recordType = parts[1].toUpperCase();
-        this.performLookup();
+        this.domain = parts[0]
+        this.recordType = parts[1].toUpperCase()
+        this.performLookup()
       }
     }
   },
@@ -155,132 +260,131 @@ export default {
   methods: {
     handleSubmit() {
       if (!this.domain.trim()) {
-        this.error = 'Please enter a domain name';
-        return;
+        this.error = 'Please enter a domain name'
+        return
       }
-      this.performLookup();
+      this.performLookup()
     },
 
     async performLookup() {
       if (!this.domain.trim()) {
-        this.results = [];
-        return;
+        this.results = []
+        return
       }
 
-      this.isLoading = true;
-      this.error = null;
-      this.results = [];
+      this.isLoading = true
+      this.error = null
+      this.results = []
 
       try {
-        const types =
-          this.recordType === 'ALL'
-            ? this.allRecordTypes
-            : [this.recordType];
+        const types = this.recordType === 'ALL' 
+          ? this.allRecordTypes 
+          : [this.recordType]
 
-        const queryPromises = types.map(type => 
-          this.dnsQuery(this.domain, type)
-        );
-
-        const responses = await Promise.all(queryPromises);
-        
-        responses.forEach((response, index) => {
-          if (response) {
+        // Query types sequentially instead of all at once
+        for (const type of types) {
+          const response = await this.dnsQuery(this.domain, type)
+          if (response && response.answers && response.answers.length > 0) {
             this.results.push({
-              type: types[index],
-              answers: response.answers || [],
+              type: type,
+              answers: response.answers,
               timestamp: new Date().toISOString()
-            });
+            })
+          } else if (this.recordType !== 'ALL') {
+            // Only show empty result for single queries, not for ALL
+            this.results.push({
+              type: type,
+              answers: [],
+              timestamp: new Date().toISOString()
+            })
           }
-        });
+        }
 
-        window.location.hash = `${this.domain}|${this.recordType}`;
+        // Update URL hash
+        window.location.hash = `${this.domain}|${this.recordType}`
       } catch (error) {
-        console.error('DNS lookup error:', error);
-        this.error = `Failed to query DNS: ${error.message}`;
+        console.error('DNS lookup error:', error)
+        this.error = `Failed to query DNS: ${error.message}`
       } finally {
-        this.isLoading = false;
+        this.isLoading = false
       }
     },
 
     async dnsQuery(domain, type) {
       try {
-        const response = await fetch(
-          `http://localhost:8082/dns?domain=${encodeURIComponent(domain)}&type=${type}`,
-          {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-            }
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Using POST request as per your Go API
+        const requestBody = {
+          domain: domain,
+          type: type,
+          server: '8.8.8.8' // Default DNS server
         }
 
-        const data = await response.json();
+        const response = await fetch('http://localhost:8080/api/dns/query', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
+
+        const data = await response.json()
         
-        // Format response based on your API structure
-        return this.formatResponse(data, domain, type);
+        // Format response based on your Go API structure
+        return this.formatResponse(data, domain, type)
       } catch (error) {
-        console.error(`DNS query failed (${type}):`, error);
-        return { answers: [] };
+        console.error(`DNS query failed (${type}):`, error)
+        return { answers: [] }
       }
     },
 
     formatResponse(data, domain, type) {
-      // This function formats the API response to match your UI structure
-      // Adjust based on your actual API response format
+      // Format response from your Go API
+      let answers = []
       
-      let answers = [];
-      
-      // Check different possible response formats
-      if (Array.isArray(data)) {
-        // If API returns array directly
-        answers = data.map(item => ({
-          name: item.name || domain,
-          ttl: item.ttl || item.TTL || 0,
-          type: item.type || type,
-          value: item.value || item.data || item.content || ''
-        }));
-      } else if (data.answers && Array.isArray(data.answers)) {
-        // Format: { answers: [...] }
-        answers = data.answers.map(answer => ({
-          name: answer.name || domain,
-          ttl: answer.ttl || 0,
-          type: answer.type || type,
-          value: answer.value || ''
-        }));
+      if (data.success && data.records && Array.isArray(data.records)) {
+        // Format from your Go API: { success: true, records: [...] }
+        answers = data.records.map(record => ({
+          name: record.name || domain,
+          ttl: record.ttl || 0,
+          type: record.type || type,
+          value: record.value || ''
+        }))
       } else if (data.Answer && Array.isArray(data.Answer)) {
-        // DNS-over-HTTPS format
+        // DNS-over-HTTPS format (fallback)
         answers = data.Answer.map(answer => ({
           name: answer.name || domain,
           ttl: answer.TTL || 0,
-          type: answer.type || type,
+          type: type,
           value: answer.data || ''
-        }));
-      } else if (data.result && Array.isArray(data.result)) {
-        // Another possible format
-        answers = data.result.map(item => ({
+        }))
+      } else if (Array.isArray(data)) {
+        // Direct array format
+        answers = data.map(item => ({
           name: item.name || domain,
           ttl: item.ttl || 0,
           type: item.type || type,
           value: item.value || ''
-        }));
+        }))
       }
       
       return {
         domain: domain,
         type: type,
         answers: answers
-      };
+      }
     }
   },
 
   watch: {
     recordType() {
       if (this.domain) {
-        this.performLookup();
+        this.performLookup()
       }
     }
   }
@@ -663,5 +767,4 @@ export default {
 .whitespace-nowrap {
   white-space: nowrap;
 }
-
 </style>
