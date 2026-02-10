@@ -9,7 +9,7 @@ import (
 func TcpCheck(req utils.TCPCheckRequest) utils.TCPCheckResponse {
 	timeout := time.Duration(req.Timeout) * time.Second
 	if timeout == 0 {
-		timeout = 5 * time.Second
+		timeout = 3 * time.Second
 	}
 	start := time.Now()
 	open := CheckPort(req.Host, req.Port)

@@ -222,7 +222,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-
+// const API_URL = import.meta.env.VITE_API_URL;
 const API_URL = "http://192.168.20.17:8082";
 
 export default {

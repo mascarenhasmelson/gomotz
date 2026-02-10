@@ -451,6 +451,9 @@
 </template>
 
 <script>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+// const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = "http://192.168.20.17:8082";
 export default {
   name: 'TcpCheck',
   data() {
@@ -635,7 +638,7 @@ export default {
       this.progress = 0
       this.startProgressSimulation()
       try {
-        const response = await fetch('http://localhost:8082/v1/tcpCheck', {
+        const response = await fetch(`${API_URL}/v1/tcpCheck`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

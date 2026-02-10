@@ -226,6 +226,9 @@
 </template>
 
 <script>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+// const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = "http://192.168.20.17:8082";
 export default {
   name: 'DnsLookup',
 
@@ -310,75 +313,98 @@ export default {
       }
     },
 
-    async dnsQuery(domain, type) {
-      try {
-        // Using POST request as per your Go API
-        const requestBody = {
-          domain: domain,
-          type: type,
-          server: '8.8.8.8' // Default DNS server
-        }
-
-        const response = await fetch('http://localhost:8080/api/dns/query', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(requestBody)
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`HTTP ${response.status}: ${errorText}`)
-        }
-
-        const data = await response.json()
-        
-        // Format response based on your Go API structure
-        return this.formatResponse(data, domain, type)
-      } catch (error) {
-        console.error(`DNS query failed (${type}):`, error)
-        return { answers: [] }
-      }
-    },
-
-    formatResponse(data, domain, type) {
-      // Format response from your Go API
-      let answers = []
-      
-      if (data.success && data.records && Array.isArray(data.records)) {
-        // Format from your Go API: { success: true, records: [...] }
-        answers = data.records.map(record => ({
-          name: record.name || domain,
-          ttl: record.ttl || 0,
-          type: record.type || type,
-          value: record.value || ''
-        }))
-      } else if (data.Answer && Array.isArray(data.Answer)) {
-        // DNS-over-HTTPS format (fallback)
-        answers = data.Answer.map(answer => ({
-          name: answer.name || domain,
-          ttl: answer.TTL || 0,
-          type: type,
-          value: answer.data || ''
-        }))
-      } else if (Array.isArray(data)) {
-        // Direct array format
-        answers = data.map(item => ({
-          name: item.name || domain,
-          ttl: item.ttl || 0,
-          type: item.type || type,
-          value: item.value || ''
-        }))
-      }
-      
-      return {
-        domain: domain,
-        type: type,
-        answers: answers
-      }
+ async dnsQuery(domain, type) {
+  try {
+    // Using POST request as per your Go API
+    const requestBody = {
+      domain: domain,
+      type: type,
+      server: '1.1.1.1' // Default DNS server
     }
+
+    console.log('Making DNS query:', { domain, type }) // Debug log
+    //  const response = await fetch(`${API_URL}/v1/services/isp`);
+    const response = await fetch(`${API_URL}/v1/dnsCheck`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+
+    console.log('Response status:', response.status) // Debug log
+    
+    if (!response.ok) {
+      let errorText = 'Unknown error'
+      try {
+        const errorData = await response.json()
+        errorText = errorData.error || JSON.stringify(errorData)
+      } catch (e) {
+        errorText = await response.text()
+      }
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+
+    const data = await response.json()
+    console.log('API Response data:', data) // Debug log - check this in browser console
+    
+    // Format response based on your Go API structure
+    const formatted = this.formatResponse(data, domain, type)
+    console.log('Formatted response:', formatted) // Debug log
+    
+    return formatted
+  } catch (error) {
+    console.error(`DNS query failed (${type}):`, error)
+    return { answers: [] }
+  }
+},
+
+ formatResponse(data, domain, type) {
+  // Format response from your Go API - UPDATED
+  let answers = []
+  
+  // Check the actual structure from your Go API
+  if (data.answers && Array.isArray(data.answers)) {
+    // This matches your Go API's APIResponse struct
+    answers = data.answers.map(answer => ({
+      name: answer.name || domain,
+      ttl: answer.ttl || answer.TTL || 0,
+      type: answer.type || type,
+      value: answer.value || ''
+    }))
+  } else if (data.Answers && Array.isArray(data.Answers)) {
+    // Alternative format
+    answers = data.Answers.map(answer => ({
+      name: answer.name || domain,
+      ttl: answer.ttl || answer.TTL || 0,
+      type: answer.type || type,
+      value: answer.value || answer.data || ''
+    }))
+  } else if (Array.isArray(data)) {
+    // Direct array format
+    answers = data.map(item => ({
+      name: item.name || domain,
+      ttl: item.ttl || item.TTL || 0,
+      type: item.type || type,
+      value: item.value || item.data || ''
+    }))
+  } else if (data.result && Array.isArray(data.result)) {
+    // Another possible format
+    answers = data.result.map(item => ({
+      name: item.name || domain,
+      ttl: item.ttl || 0,
+      type: item.type || type,
+      value: item.value || ''
+    }))
+  }
+  
+  return {
+    domain: domain,
+    type: type,
+    answers: answers
+  }
+}
   },
 
   watch: {

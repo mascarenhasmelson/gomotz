@@ -45,7 +45,7 @@ const tools = ref([
   { id: 3, name: 'DNS Lookup', path: '/tools/dns-lookup', icon: '🌐', beta: false },
   { id: 4, name: 'Traceroute', path: '/tools/traceroute', icon: '🛣️', beta: false },
   { id: 5, name: 'Ping', path: '/tools/ping', icon: '📡', beta: false },
-  { id: 6, name: 'HTTP(S) Check', path: '/tools/http-check', icon: '🌍', beta: false },
+  { id: 6, name: 'HTTP(S) Check', path: '/tools/httpsCheck', icon: '🌍', beta: false },
   { id: 7, name: 'Speedtest', path: '/tools/speedtest', icon: '⚡', beta: false },
 ])
 
@@ -55,7 +55,7 @@ const toolDescriptions = {
   'dns-lookup': 'Resolve domain names to IP addresses',
   'traceroute': 'Trace network path to destination',
   'ping': 'Check host availability and latency',
-  'http-check': 'Verify website HTTP/HTTPS accessibility',
+  'http-check': 'Check if a website supports HTTPS and analyze its SSL/TLS configuration',
   'speedtest': 'Test network bandwidth and speed',
 }
 

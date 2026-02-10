@@ -58,15 +58,15 @@
 
           <!-- Connection Status -->
           <div class="connection-status" v-if="backendStatus !== null">
-            <div class="status-indicator" :class="backendStatus.connected ? 'connected' : 'disconnected'">
-              <span class="status-dot"></span>
+            <!-- <div class="status-indicator" :class="backendStatus.connected ? 'connected' : 'disconnected'"> -->
+              <!-- <span class="status-dot"></span>
               <span class="status-text">
                 {{ backendStatus.connected ? 'Backend Connected' : 'Backend Disconnected' }}
               </span>
               <span v-if="!backendStatus.connected" class="retry-link" @click="checkBackendConnection">
                 Retry
-              </span>
-            </div>
+              </span> -->
+            <!-- </div> -->
           </div>
 
           <!-- Ping Results -->
@@ -331,12 +331,12 @@ const setupWebSocket = () => {
     websocket.value.close()
   }
 
-  const ws = new WebSocket('ws://localhost:8080/ws')
+  const ws = new WebSocket('ws://localhost:8082/v1/icmp')
   
   ws.onopen = () => {
     console.log('WebSocket connected')
     backendStatus.value = { connected: true }
-    showNotification('Connected to ping backend')
+    // showNotification('Connected to ping backend')
   }
   
   ws.onmessage = (event) => {

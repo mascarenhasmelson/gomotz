@@ -54,6 +54,125 @@ type TCPCheckResponse struct {
 
 //-----------------ending Tcpcheck-------------------------
 
+//-----------------DNS check-------------------------------
+type Request struct {
+	Domain string `json:"domain"`
+	Type   string `json:"type"`
+	Server string `json:"server,omitempty"`
+}
+
+type RRResponse struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	TTL   uint32 `json:"ttl"`
+	Value string `json:"value"`
+}
+
+type APIResponse struct {
+	Domain   string       `json:"domain"`
+	Type     string       `json:"type"`
+	Answers  []RRResponse `json:"answers"`
+	Status   string       `json:"status"`
+	Server   string       `json:"server,omitempty"`
+	Duration string       `json:"duration,omitempty"`
+}
+
+//----------------------DNS end-------------------------------
+
+//----------------------Traceroute---------------------------
+
+type TracerouteRequest struct {
+	Target       string `json:"target"`
+	MaxHops      int    `json:"maxHops"`
+	ProbesPerHop int    `json:"probesPerHop"`
+	Timeout      int    `json:"timeout"`
+	Protocol     string `json:"protocol"`
+}
+
+type TracerouteMessage struct {
+	Type     string     `json:"type"`
+	Hop      *HopResult `json:"hop,omitempty"`
+	TargetIP string     `json:"ip,omitempty"`
+	Progress *Progress  `json:"progress,omitempty"`
+	Complete *Complete  `json:"complete,omitempty"`
+	Error    string     `json:"message,omitempty"`
+	Status   string     `json:"status,omitempty"`
+}
+
+type HopResult struct {
+	Hop        int     `json:"hop"`
+	IP         string  `json:"ip,omitempty"`
+	Hostname   string  `json:"hostname,omitempty"`
+	RTT        float64 `json:"rtt,omitempty"`
+	IsTarget   bool    `json:"isTarget,omitempty"`
+	Status     string  `json:"status,omitempty"`
+	ASN        string  `json:"asn,omitempty"`
+	Country    string  `json:"country,omitempty"`
+	Location   string  `json:"location,omitempty"`
+	ISP        string  `json:"isp,omitempty"`
+	ReverseDNS string  `json:"reverseDns,omitempty"`
+}
+
+type Progress struct {
+	CurrentHop int `json:"currentHop"`
+	TotalHops  int `json:"totalHops"`
+}
+
+type Complete struct {
+	Reached   bool        `json:"reached"`
+	TargetIP  string      `json:"targetIp"`
+	Hops      []HopResult `json:"hops"`
+	TotalTime float64     `json:"totalTime"`
+}
+
+//---------------------------Tracerouteend------------------------------
+
+//---------------------------ICMP------------------------------
+
+type PingRequest struct {
+	Target   string  `json:"target"`
+	Count    int     `json:"count"`
+	Size     int     `json:"size"`
+	Timeout  float64 `json:"timeout"`
+	Interval float64 `json:"interval"`
+}
+
+type PingMessage struct {
+	Type    string      `json:"type"`
+	Data    interface{} `json:"data,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+//-------------------------------------------------------------
+//---------------------------HTTPS-----------------------------
+
+type HTTPSCheckRequest struct {
+	URL              string `json:"url"`
+	Timeout          int    `json:"timeout"`
+	CheckCertificate bool   `json:"checkCertificate"`
+	CheckRedirects   bool   `json:"checkRedirects"`
+}
+
+type CertificateInfo struct {
+	Subject       string `json:"subject"`
+	Issuer        string `json:"issuer"`
+	ValidFrom     string `json:"validFrom"`
+	ValidUntil    string `json:"validUntil"`
+	DaysRemaining int    `json:"daysRemaining"`
+}
+
+type HTTPSCheckResponse struct {
+	HTTPSSupported bool             `json:"httpsSupported"`
+	StatusCode     int              `json:"statusCode"`
+	TLSVersion     string           `json:"tlsVersion,omitempty"`
+	Cipher         string           `json:"cipher,omitempty"`
+	HSTSEnabled    bool             `json:"hstsEnabled"`
+	Certificate    *CertificateInfo `json:"certificate,omitempty"`
+	ResponseTime   int64            `json:"responseTime"`
+	Error          string           `json:"error,omitempty"`
+}
+
+//----------------------------------------------------------
 type Error struct {
 	Message string
 }

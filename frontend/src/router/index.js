@@ -37,8 +37,8 @@ const router = createRouter({
           component: () => import('../views/tools/Ping.vue')
         },
         {
-          path: 'http-check',
-          component: () => import('../views/tools/HttpCheck.vue')
+          path: 'HttpsCheck',
+          component: () => import('../views/tools/HttpsCheck.vue')
         },
         {
           path: 'speedtest',
