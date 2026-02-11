@@ -2,6 +2,7 @@
   <div class="tools-layout">
     <aside class="tools-sidebar">
       
+      
       <nav class="tools-nav">
         <router-link 
           v-for="tool in tools" 
@@ -15,21 +16,15 @@
           <span v-if="tool.beta" class="beta-badge">BETA</span>
         </router-link>
       </nav>
-      
-
     </aside>
     
     <main class="tools-content">
-      <div class="content-header">
+      <div class="scan-header">
         <h1>{{ currentToolName }}</h1>
         <p class="tool-description">{{ currentToolDescription }}</p>
       </div>
       <div class="content-wrapper">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+        <router-view />
       </div>
     </main>
   </div>
@@ -42,46 +37,56 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const tools = ref([
-   { id: 1, name: 'Device Monitoring', path: '/monitor/ARP', icon: '🔎', beta: false },
+  { id: 1, name: 'Device Monitoring', path: '/monitor/discovery', icon: '🔎', beta: false },
   { id: 2, name: 'TCP Port Check', path: '/monitor/TCPMonitoring', icon: '🔌', beta: false },
   { id: 3, name: 'SMTP Monitor', path: '/monitor/SMTPMonitoring', icon: '📧', beta: false },
   { id: 4, name: 'SNMP Monitor', path: '/monitor/SNMPMonitor', icon: '📊', beta: false },
   { id: 5, name: 'Ping Monitor', path: '/monitor/PingMonitor', icon: '📡', beta: false },
- { id: 6, name: 'HTTP(s) Keyword', path: '/monitor/HTTPsKeyword', icon: '🔍', beta: false },
-  { id: 7, name: 'HTTP(s) JSON ', path: '/monitor/HTTPsJSON', icon: '📋', beta: false },
+  { id: 6, name: 'HTTP(s) Keyword', path: '/monitor/HTTPsKeyword', icon: '🔍', beta: false },
+  { id: 7, name: 'HTTP(s) JSON', path: '/monitor/HTTPsJSON', icon: '📋', beta: false },
   { id: 8, name: 'gRPC Monitor', path: '/monitor/gRPCJSON', icon: '⚡', beta: true },
-   { id: 9, name: 'HTTP(s) Monitor', path: '/monitor/HTTPsMonitoring', icon: '🌍', beta: false },
-  { id: 10, name: 'LanWakeup', path: '/monitor/LanWakeup', icon: '🔌', beta: true },
+  { id: 9, name: 'HTTP(s) Monitor', path: '/monitor/HTTPsMonitoring', icon: '🌍', beta: false },
+  { id: 10, name: 'LanWakeup', path: '/monitor/LANWakeup', icon: '🔌', beta: true },
   { id: 11, name: 'Domain Expiry', path: '/monitor/domain-expiry', icon: '📅', beta: false },
 ])
 
 const toolDescriptions = {
-  'device scanner': 'Scan network devices, discover IPs, MAC addresses and open ports',
-  'http-monitor': 'Monitor website HTTP/HTTPS availability and response time',
-  'tcp-check': 'Check TCP port connectivity and response time',
-  'smtp-monitor': 'Monitor SMTP server availability and mail delivery',
-  'snmp-monitor': 'Monitor network devices via SNMP v1/v2 with custom OIDs',
-  'ping-monitor': 'Monitor host availability, latency, and packet loss',
-  'https-keyword': 'Verify specific keywords exist in HTTP(S) response',
-  'http-json': 'Query and validate JSON data from HTTP(S) APIs',
-  'grpc-monitor': 'Monitor gRPC service health with protocol buffers',
-  
-  'lan-wakeup': 'Wake up devices on local network using Wake-on-LAN',
+  'discovery': 'Scan network devices, discover IPs, MAC addresses and open ports',
+  'TCPMonitoring': 'Check TCP port connectivity and response time',
+  'SMTPMonitoring': 'Monitor SMTP server availability and mail delivery',
+  'SNMPMonitor': 'Monitor network devices via SNMP v1/v2 with custom OIDs',
+  'PingMonitor': 'Monitor host availability, latency, and packet loss',
+  'HTTPsKeyword': 'Verify specific keywords exist in HTTP(S) response',
+  'HTTPsJSON': 'Query and validate JSON data from HTTP(S) APIs',
+  'gRPCJSON': 'Monitor gRPC service health with protocol buffers',
+  'HTTPsMonitoring': 'Monitor website HTTP/HTTPS availability and response time',
+  'LANWakeup': 'Wake up devices on local network using Wake-on-LAN',
   'domain-expiry': 'Monitor domain expiration dates with WHOIS queries and alerts',
 }
 
+
 const currentToolName = computed(() => {
-  const tool = tools.value.find(t => route.path.includes(t.path))
-  return tool ? tool.name : 'Monitoring'
+  if (route.path === '/monitor' || route.path === '/monitor/') {
+    return 'Device Monitoring'
+  }
+  
+  const tool = tools.value.find(t => route.path === t.path)
+  return tool ? tool.name : 'Device Monitoring'
 })
 
 const currentToolDescription = computed(() => {
-  const toolKey = route.path.split('/').pop()
-  return toolDescriptions[toolKey] || 'Select a tool from the sidebar'
+
+  if (route.path === '/monitor' || route.path === '/monitor/') {
+    return toolDescriptions['discovery']
+  }
+  
+  const pathSegment = route.path.split('/').pop()
+  return toolDescriptions[pathSegment] || toolDescriptions['discovery']
 })
 </script>
 
 <style scoped>
+/* Keep all your existing styles exactly as they are */
 .tools-layout {
   display: flex;
   height: 100vh;
@@ -90,7 +95,6 @@ const currentToolDescription = computed(() => {
   overflow: hidden;
 }
 
-/* Sidebar Styles */
 .tools-sidebar {
   width: 250px;
   flex-shrink: 0;
@@ -144,7 +148,6 @@ const currentToolDescription = computed(() => {
   color: rgba(255, 255, 255, 0.8);
 }
 
-/* Navigation Styles */
 .tools-nav {
   padding: 20px 15px;
   flex: 1;
@@ -233,7 +236,6 @@ const currentToolDescription = computed(() => {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Main Content Styles */
 .tools-content {
   flex: 1;
   min-width: 0;
@@ -305,7 +307,6 @@ const currentToolDescription = computed(() => {
   background: linear-gradient(90deg, transparent, rgba(244, 114, 182, 0.3), transparent);
 }
 
-/* Animation for router transitions */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -321,7 +322,6 @@ const currentToolDescription = computed(() => {
   transform: translateY(-10px);
 }
 
-/* Scrollbar Styling */
 .tools-nav::-webkit-scrollbar {
   width: 6px;
 }
@@ -359,20 +359,16 @@ const currentToolDescription = computed(() => {
   background: rgba(148, 163, 184, 0.5);
 }
 
-/* Responsive Design */
 @media (max-width: 1024px) {
   .tools-sidebar {
     width: 220px;
   }
-  
   .tools-content {
     padding: 30px;
   }
-  
   .content-wrapper {
     padding: 30px;
   }
-  
   .scan-header h1 {
     font-size: 2.2rem;
   }
@@ -384,18 +380,15 @@ const currentToolDescription = computed(() => {
     height: auto;
     min-height: 100vh;
   }
-  
   .tools-sidebar {
     width: 100%;
     height: auto;
     border-right: none;
     border-bottom: 1px solid rgba(30, 41, 59, 0.5);
   }
-  
   .sidebar-header {
     padding: 20px;
   }
-  
   .tools-nav {
     display: flex;
     overflow-x: auto;
@@ -403,22 +396,18 @@ const currentToolDescription = computed(() => {
     padding: 15px;
     gap: 10px;
   }
-  
   .tool-link {
     flex-shrink: 0;
     margin-bottom: 0;
     white-space: nowrap;
   }
-  
   .tools-content {
     padding: 20px;
   }
-  
   .content-wrapper {
     padding: 20px;
     min-height: 400px;
   }
-  
   .scan-header h1 {
     font-size: 1.8rem;
   }
@@ -428,15 +417,12 @@ const currentToolDescription = computed(() => {
   .sidebar-header h2 {
     font-size: 1.3rem;
   }
-  
   .scan-header h1 {
     font-size: 1.5rem;
   }
-  
   .tool-description {
     font-size: 1rem;
   }
-  
   .content-wrapper {
     padding: 15px;
   }

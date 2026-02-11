@@ -34,10 +34,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+// const router = useRouter
+
+// Redirect to portscan by default when on the base tools route
+// onMounted(() => {
+//   if (route.path === '/tools' || route.path === '/tools/') {
+//     router.replace('/tools/portscan')
+//   }
+// })
 
 const tools = ref([
   { id: 1, name: 'Portscan', path: '/tools/portscan', icon: '🔍', beta: false },
@@ -60,13 +68,22 @@ const toolDescriptions = {
 }
 
 const currentToolName = computed(() => {
-  const tool = tools.value.find(t => route.path.includes(t.path))
-  return tool ? tool.name : 'Network Tools'
+  if (route.path === '/tools' || route.path === '/tools/') {
+    return 'Portscan'
+  }
+  
+  const tool = tools.value.find(t => route.path === t.path)
+  return tool ? tool.name : 'Portscan'
 })
 
 const currentToolDescription = computed(() => {
-  const toolKey = route.path.split('/').pop()
-  return toolDescriptions[toolKey] || 'Select a tool from the sidebar'
+
+  if (route.path === '/tools' || route.path === '/tools/') {
+    return toolDescriptions['portscan']
+  }
+  
+  const pathSegment = route.path.split('/').pop()
+  return toolDescriptions[pathSegment] || toolDescriptions['portscan']
 })
 </script>
 
@@ -431,3 +448,6 @@ const currentToolDescription = computed(() => {
   }
 }
 </style>
+
+
+
