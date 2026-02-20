@@ -94,6 +94,35 @@
   </transition>
   <div class="active-indicator"></div>
 </router-link>
+
+    <router-link to="/block" class="nav-item block-item" active-class="active">
+      <div class="nav-icon">
+        <!-- Shield with Block Symbol - Main Icon -->
+        <svg class="icon-svg" viewBox="0 0 24 24" width="24" height="24">
+          <!-- Shield Background -->
+          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" 
+                fill="currentColor" opacity="0.9"/>
+          <!-- Block Symbol (X) -->
+          <path d="M15.5 8.5L8.5 15.5M8.5 8.5L15.5 15.5" 
+                stroke="currentColor" 
+                stroke-width="2" 
+                stroke-linecap="round"
+                fill="none"/>
+          <!-- Lock Icon (Optional detail) -->
+          <circle cx="12" cy="13" r="2" fill="white" stroke="currentColor" stroke-width="1"/>
+          <path d="M10 11V9c0-1.1.9-2 2-2s2 .9 2 2v2" 
+                stroke="white" 
+                stroke-width="1.5" 
+                fill="none"/>
+        </svg>
+      </div>
+      <transition name="slide">
+        <span class="nav-text" v-if="is_expanded">
+          <span class="block-text">Internet Block</span>
+        </span>
+      </transition>
+      <div class="active-indicator"></div>
+    </router-link>
 				</div>
 			</nav>
 
@@ -101,9 +130,9 @@
 
 			<nav class="secondary-nav">
 				<div class="nav-section">
-					<!-- <div class="section-label" v-if="is_expanded">System</div> -->
+					 <div class="section-label" v-if="is_expanded">System</div> 
 					
-					<!-- <router-link to="/settings" class="nav-item" active-class="active">
+					 <router-link to="/settings" class="nav-item" active-class="active">
 						<div class="nav-icon">
 							<svg class="icon-svg" viewBox="0 0 24 24" width="24" height="24">
 								<path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" 
@@ -116,7 +145,7 @@
 						<div class="active-indicator"></div>
 					</router-link>
 					
-					<a href="#" class="nav-item" @click.prevent="logout">
+					<!-- <a href="#" class="nav-item" @click.prevent="logout">
 						<div class="nav-icon">
 							<svg class="icon-svg" viewBox="0 0 24 24" width="24" height="24">
 								<path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" 
@@ -126,7 +155,7 @@
 						<transition name="slide">
 							<span class="nav-text" v-if="is_expanded">Logout</span>
 						</transition>
-					</a> -->
+					</a>  -->
 				</div>
 			</nav>
 		</div>

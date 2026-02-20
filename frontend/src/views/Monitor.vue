@@ -38,7 +38,7 @@ const route = useRoute()
 
 const tools = ref([
   { id: 1, name: 'Device Monitoring', path: '/monitor/discovery', icon: '🔎', beta: false },
-  { id: 2, name: 'TCP Port Check', path: '/monitor/TCPMonitoring', icon: '🔌', beta: false },
+  { id: 2, name: 'TCP Port Monitoring', path: '/monitor/TCPMonitoring', icon: '🔌', beta: false },
   { id: 3, name: 'SMTP Monitor', path: '/monitor/SMTPMonitoring', icon: '📧', beta: false },
   { id: 4, name: 'SNMP Monitor', path: '/monitor/SNMPMonitor', icon: '📊', beta: false },
   { id: 5, name: 'Ping Monitor', path: '/monitor/PingMonitor', icon: '📡', beta: false },

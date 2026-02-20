@@ -24,138 +24,137 @@
           <!-- Record Type Selection -->
           <div class="type-selection">
             <div class="radio-group">
-             <!-- A -->
-<input v-model="recordType" value="A" id="A" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="A" class="record-btn">A</label>
+              <!-- A -->
+              <input v-model="recordType" value="A" id="A" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="A" class="record-btn">A</label>
 
-<!-- AAAA -->
-<input v-model="recordType" value="AAAA" id="AAAA" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="AAAA" class="record-btn">AAAA</label>
+              <!-- AAAA -->
+              <input v-model="recordType" value="AAAA" id="AAAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="AAAA" class="record-btn">AAAA</label>
 
-<!-- AFSDB -->
-<input v-model="recordType" value="AFSDB" id="AFSDB" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="AFSDB" class="record-btn">AFSDB</label>
+              <!-- AFSDB -->
+              <input v-model="recordType" value="AFSDB" id="AFSDB" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="AFSDB" class="record-btn">AFSDB</label>
 
-<!-- ATMA -->
-<input v-model="recordType" value="ATMA" id="ATMA" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="ATMA" class="record-btn">ATMA</label>
+              <!-- ATMA -->
+              <input v-model="recordType" value="ATMA" id="ATMA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="ATMA" class="record-btn">ATMA</label>
 
-<!-- CAA -->
-<input v-model="recordType" value="CAA" id="CAA" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="CAA" class="record-btn">CAA</label>
+              <!-- CAA -->
+              <input v-model="recordType" value="CAA" id="CAA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="CAA" class="record-btn">CAA</label>
 
-<!-- CERT -->
-<input v-model="recordType" value="CERT" id="CERT" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="CERT" class="record-btn">CERT</label>
+              <!-- CERT -->
+              <input v-model="recordType" value="CERT" id="CERT" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="CERT" class="record-btn">CERT</label>
 
-<!-- CNAME -->
-<input v-model="recordType" value="CNAME" id="CNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="CNAME" class="record-btn">CNAME</label>
+              <!-- CNAME -->
+              <input v-model="recordType" value="CNAME" id="CNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="CNAME" class="record-btn">CNAME</label>
 
-<!-- DHCID -->
-<input v-model="recordType" value="DHCID" id="DHCID" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="DHCID" class="record-btn">DHCID</label>
+              <!-- DHCID -->
+              <input v-model="recordType" value="DHCID" id="DHCID" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="DHCID" class="record-btn">DHCID</label>
 
-<!-- DNAME -->
-<input v-model="recordType" value="DNAME" id="DNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="DNAME" class="record-btn">DNAME</label>
+              <!-- DNAME -->
+              <input v-model="recordType" value="DNAME" id="DNAME" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="DNAME" class="record-btn">DNAME</label>
 
-<!-- DNSKEY -->
-<input v-model="recordType" value="DNSKEY" id="DNSKEY" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="DNSKEY" class="record-btn">DNSKEY</label>
+              <!-- DNSKEY -->
+              <input v-model="recordType" value="DNSKEY" id="DNSKEY" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="DNSKEY" class="record-btn">DNSKEY</label>
 
-<!-- DS -->
-<input v-model="recordType" value="DS" id="DS" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="DS" class="record-btn">DS</label>
+              <!-- DS -->
+              <input v-model="recordType" value="DS" id="DS" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="DS" class="record-btn">DS</label>
 
-<!-- HINFO -->
-<input v-model="recordType" value="HINFO" id="HINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="HINFO" class="record-btn">HINFO</label>
+              <!-- HINFO -->
+              <input v-model="recordType" value="HINFO" id="HINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="HINFO" class="record-btn">HINFO</label>
 
-<!-- ISDN -->
-<input v-model="recordType" value="ISDN" id="ISDN" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="ISDN" class="record-btn">ISDN</label>
+              <!-- ISDN -->
+              <input v-model="recordType" value="ISDN" id="ISDN" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="ISDN" class="record-btn">ISDN</label>
 
-<!-- LOC -->
-<input v-model="recordType" value="LOC" id="LOC" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="LOC" class="record-btn">LOC</label>
+              <!-- LOC -->
+              <input v-model="recordType" value="LOC" id="LOC" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="LOC" class="record-btn">LOC</label>
 
-<!-- MB -->
-<input v-model="recordType" value="MB" id="MB" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="MB" class="record-btn">MB</label>
+              <!-- MB -->
+              <input v-model="recordType" value="MB" id="MB" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MB" class="record-btn">MB</label>
 
-<!-- MG -->
-<input v-model="recordType" value="MG" id="MG" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="MG" class="record-btn">MG</label>
+              <!-- MG -->
+              <input v-model="recordType" value="MG" id="MG" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MG" class="record-btn">MG</label>
 
-<!-- MINFO -->
-<input v-model="recordType" value="MINFO" id="MINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="MINFO" class="record-btn">MINFO</label>
+              <!-- MINFO -->
+              <input v-model="recordType" value="MINFO" id="MINFO" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MINFO" class="record-btn">MINFO</label>
 
-<!-- MR -->
-<input v-model="recordType" value="MR" id="MR" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="MR" class="record-btn">MR</label>
+              <!-- MR -->
+              <input v-model="recordType" value="MR" id="MR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MR" class="record-btn">MR</label>
 
-<!-- MX -->
-<input v-model="recordType" value="MX" id="MX" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="MX" class="record-btn">MX</label>
+              <!-- MX -->
+              <input v-model="recordType" value="MX" id="MX" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="MX" class="record-btn">MX</label>
 
-<!-- NAPTR -->
-<input v-model="recordType" value="NAPTR" id="NAPTR" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="NAPTR" class="record-btn">NAPTR</label>
+              <!-- NAPTR -->
+              <input v-model="recordType" value="NAPTR" id="NAPTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NAPTR" class="record-btn">NAPTR</label>
 
-<!-- NS -->
-<input v-model="recordType" value="NS" id="NS" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="NS" class="record-btn">NS</label>
+              <!-- NS -->
+              <input v-model="recordType" value="NS" id="NS" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NS" class="record-btn">NS</label>
 
-<!-- NSAP-PTR -->
-<input v-model="recordType" value="NSAP-PTR" id="NSAP-PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="NSAP-PTR" class="record-btn">NSAP-PTR</label>
+              <!-- NSAP-PTR -->
+              <input v-model="recordType" value="NSAP-PTR" id="NSAP-PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NSAP-PTR" class="record-btn">NSAP-PTR</label>
 
-<!-- NSEC -->
-<input v-model="recordType" value="NSEC" id="NSEC" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="NSEC" class="record-btn">NSEC</label>
+              <!-- NSEC -->
+              <input v-model="recordType" value="NSEC" id="NSEC" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NSEC" class="record-btn">NSEC</label>
 
-<!-- NSEC3 -->
-<input v-model="recordType" value="NSEC3" id="NSEC3" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="NSEC3" class="record-btn">NSEC3</label>
+              <!-- NSEC3 -->
+              <input v-model="recordType" value="NSEC3" id="NSEC3" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="NSEC3" class="record-btn">NSEC3</label>
 
-<!-- PTR -->
-<input v-model="recordType" value="PTR" id="PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="PTR" class="record-btn">PTR</label>
+              <!-- PTR -->
+              <input v-model="recordType" value="PTR" id="PTR" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="PTR" class="record-btn">PTR</label>
 
-<!-- RP -->
-<input v-model="recordType" value="RP" id="RP" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="RP" class="record-btn">RP</label>
+              <!-- RP -->
+              <input v-model="recordType" value="RP" id="RP" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="RP" class="record-btn">RP</label>
 
-<!-- RRSIG -->
-<input v-model="recordType" value="RRSIG" id="RRSIG" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="RRSIG" class="record-btn">RRSIG</label>
+              <!-- RRSIG -->
+              <input v-model="recordType" value="RRSIG" id="RRSIG" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="RRSIG" class="record-btn">RRSIG</label>
 
-<!-- RT -->
-<input v-model="recordType" value="RT" id="RT" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="RT" class="record-btn">RT</label>
+              <!-- RT -->
+              <input v-model="recordType" value="RT" id="RT" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="RT" class="record-btn">RT</label>
 
-<!-- SOA -->
-<input v-model="recordType" value="SOA" id="SOA" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="SOA" class="record-btn">SOA</label>
+              <!-- SOA -->
+              <input v-model="recordType" value="SOA" id="SOA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="SOA" class="record-btn">SOA</label>
 
-<!-- SRV -->
-<input v-model="recordType" value="SRV" id="SRV" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="SRV" class="record-btn">SRV</label>
+              <!-- SRV -->
+              <input v-model="recordType" value="SRV" id="SRV" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="SRV" class="record-btn">SRV</label>
 
-<!-- TLSA -->
-<input v-model="recordType" value="TLSA" id="TLSA" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="TLSA" class="record-btn">TLSA</label>
+              <!-- TLSA -->
+              <input v-model="recordType" value="TLSA" id="TLSA" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="TLSA" class="record-btn">TLSA</label>
 
-<!-- TXT -->
-<input v-model="recordType" value="TXT" id="TXT" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="TXT" class="record-btn">TXT</label>
+              <!-- TXT -->
+              <input v-model="recordType" value="TXT" id="TXT" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="TXT" class="record-btn">TXT</label>
 
-<!-- X25 -->
-<input v-model="recordType" value="X25" id="X25" type="radio" class="hidden-radio" :disabled="isLoading" />
-<label for="X25" class="record-btn">X25</label>
-
+              <!-- X25 -->
+              <input v-model="recordType" value="X25" id="X25" type="radio" class="hidden-radio" :disabled="isLoading" />
+              <label for="X25" class="record-btn">X25</label>
             </div>
             
             <div class="all-records-btn">
@@ -220,7 +219,6 @@
           &lt;no result&gt;
         </div>
       </div>
-
     </div>
   </div>
 </template>
@@ -418,13 +416,14 @@ export default {
 </script>
 
 <style scoped>
-/* Reset and Base Styles */
+/* Dark Mode Theme */
 .dns-lookup-page {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
   min-height: 100vh;
-  background-color: #ffffff;
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
   margin: 0;
   padding: 0;
+  color: #e2e8f0;
 }
 
 .dns-container {
@@ -438,10 +437,12 @@ export default {
 .input-card {
   margin: 2rem auto 0 auto;
   width: 100%;
-  background-color: #f8fafc;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
   padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .input-group {
@@ -458,11 +459,12 @@ export default {
   font-size: 16px;
   background: transparent;
   border: none;
-  border-bottom: 2px solid #cbd5e0;
+  border-bottom: 2px solid #334155;
   outline: none;
   transition: border-color 0.3s;
   font-family: inherit;
   box-sizing: border-box;
+  color: #e2e8f0;
 }
 
 .domain-input:focus {
@@ -472,12 +474,16 @@ export default {
 .domain-input:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-  background-color: #f1f5f9;
+  background-color: transparent;
+}
+
+.domain-input::placeholder {
+  color: #64748b;
 }
 
 .input-label {
   font-size: 14px;
-  color: #5b21b6;
+  color: #8b5cf6;
   font-weight: 500;
   position: absolute;
   left: 0;
@@ -503,31 +509,32 @@ export default {
 .record-btn {
   display: inline-block;
   margin: 4px;
-  background-color: transparent;
+  background-color: #1e293b;
   font-weight: 500;
   font-size: 14px;
-  color: #4a5568;
+  color: #cbd5e1;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
-  border: 1px solid transparent;
+  border: 1px solid #334155;
 }
 
 .record-btn:hover {
-  background-color: #e2e8f0;
+  background-color: #2d3748;
+  border-color: #8b5cf6;
 }
 
 .hidden-radio:checked + .record-btn {
   color: white;
-  background-color: #8b5cf6;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
   border-color: #8b5cf6;
 }
 
 .hidden-radio:checked + .record-btn:hover {
-  background-color: #7c3aed;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
 }
 
 .hidden-radio:disabled + .record-btn {
@@ -543,30 +550,31 @@ export default {
 
 .all-btn {
   display: inline-block;
-  background-color: transparent;
+  background-color: #1e293b;
   font-weight: 500;
   font-size: 14px;
-  color: #4a5568;
+  color: #cbd5e1;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid transparent;
+  border: 1px solid #334155;
 }
 
 .all-btn:hover {
-  background-color: #e2e8f0;
+  background-color: #2d3748;
+  border-color: #8b5cf6;
 }
 
 .hidden-radio:checked + .all-btn {
   color: white;
-  background-color: #8b5cf6;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
   border-color: #8b5cf6;
 }
 
 .hidden-radio:checked + .all-btn:hover {
-  background-color: #7c3aed;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
 }
 
 .hidden-radio:disabled + .all-btn {
@@ -580,15 +588,17 @@ export default {
   text-align: center;
   margin: 2rem auto;
   padding: 2rem;
-  background-color: #f8fafc;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
+  border: 3px solid #1e293b;
   border-top-color: #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -601,7 +611,7 @@ export default {
 }
 
 .loading-indicator p {
-  color: #4a5568;
+  color: #cbd5e1;
   font-weight: 500;
   margin: 0;
 }
@@ -610,10 +620,10 @@ export default {
 .error-message {
   margin: 2rem auto;
   padding: 16px;
-  background-color: #fed7d7;
-  color: #c53030;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
   border-radius: 8px;
-  border-left: 4px solid #e53e3e;
+  border-left: 4px solid #ef4444;
   text-align: center;
   max-width: 600px;
   font-weight: 500;
@@ -624,10 +634,12 @@ export default {
   position: relative;
   margin: 2rem auto;
   width: 100%;
-  background-color: #f8fafc;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
   padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -650,13 +662,14 @@ export default {
 
 .result-badge {
   display: inline-block;
-  border-radius: 4px;
-  padding: 8px 16px;
-  background-color: #8b5cf6;
+  border-radius: 20px;
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
   color: white;
   font-weight: 600;
   font-size: 14px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Answers Table */
@@ -665,6 +678,7 @@ export default {
   font-family: 'Monaco', 'Courier New', monospace;
   border-collapse: collapse;
   font-size: 14px;
+  color: #e2e8f0;
 }
 
 .desktop-view {
@@ -672,19 +686,19 @@ export default {
 }
 
 .table-header {
-  border-bottom: 1px solid #cbd5e0;
+  border-bottom: 1px solid #334155;
 }
 
 .header-cell {
   padding: 16px;
   text-align: left;
   font-weight: 500;
-  color: #4a5568;
-  background-color: #f1f5f9;
+  color: #94a3b8;
+  background-color: #0f172a;
 }
 
 .table-row {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #334155;
 }
 
 .table-row:last-child {
@@ -694,16 +708,19 @@ export default {
 .table-cell {
   padding: 12px 16px;
   vertical-align: top;
+  color: #cbd5e1;
 }
 
 .type-cell {
   min-width: 100px;
   white-space: nowrap;
+  color: #8b5cf6;
 }
 
 .value-cell {
   width: 100%;
   word-break: break-word;
+  color: #60a5fa;
 }
 
 /* Mobile View */
@@ -722,6 +739,7 @@ export default {
 .answer-list li {
   margin-bottom: 8px;
   line-height: 1.5;
+  color: #cbd5e1;
 }
 
 .list-label {
@@ -731,16 +749,35 @@ export default {
 }
 
 .list-divider {
-  border-top: 1px solid #cbd5e0;
+  border-top: 1px solid #334155;
   margin: 16px 0;
 }
 
 .no-results {
   font-family: 'Monaco', 'Courier New', monospace;
-  color: #718096;
+  color: #64748b;
   padding: 20px;
   text-align: center;
   font-size: 14px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Responsive Design */

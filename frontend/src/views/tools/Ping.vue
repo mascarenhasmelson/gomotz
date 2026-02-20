@@ -1,19 +1,13 @@
 <!-- src/views/Ping.vue -->
 <template>
   <div class="ping-tool">
-    <div class="dashboard-header">
-      <h1 class="page-title">ICMP Ping Tool</h1>
-      <p class="page-subtitle">Real ICMP ping using Go backend</p>
-    </div>
+   
 
     <div class="dashboard-content">
       <!-- Main Ping Tool Section -->
       <div class="ping-tool-section">
         <div class="tool-card">
-          <div class="tool-header">
-            <h2>ICMP Ping</h2>
-            <p class="tool-description">Enter an IP address or domain name to perform real ICMP ping</p>
-          </div>
+          
 
           <!-- Input Section -->
           <div class="input-section">
@@ -56,37 +50,24 @@
             </div>
           </div>
 
-          <!-- Connection Status -->
-          <div class="connection-status" v-if="backendStatus !== null">
-            <!-- <div class="status-indicator" :class="backendStatus.connected ? 'connected' : 'disconnected'"> -->
-              <!-- <span class="status-dot"></span>
-              <span class="status-text">
-                {{ backendStatus.connected ? 'Backend Connected' : 'Backend Disconnected' }}
-              </span>
-              <span v-if="!backendStatus.connected" class="retry-link" @click="checkBackendConnection">
-                Retry
-              </span> -->
-            <!-- </div> -->
-          </div>
-
           <!-- Ping Results -->
           <div class="results-section" v-if="pingResults.length > 0">
             <div class="results-header">
               <h3>Ping Results</h3>
-          <div class="results-controls">
-  <button class="control-btn" @click="clearResults" title="Clear all results">
-    <svg viewBox="0 0 24 24" width="16" height="16">
-      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
-    </svg>
-    Clear
-  </button>
-  <button class="control-btn" @click="exportResults" title="Export results">
-    <svg viewBox="0 0 24 24" width="16" height="16">
-      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
-    </svg>
-    Export
-  </button>
-</div>
+              <div class="results-controls">
+                <button class="control-btn" @click="clearResults" title="Clear all results">
+                  <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+                  </svg>
+                  Clear
+                </button>
+                <button class="control-btn" @click="exportResults" title="Export results">
+                  <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+                  </svg>
+                  Export
+                </button>
+              </div>
             </div>
 
             <!-- Summary Statistics -->
@@ -336,7 +317,6 @@ const setupWebSocket = () => {
   ws.onopen = () => {
     console.log('WebSocket connected')
     backendStatus.value = { connected: true }
-    // showNotification('Connected to ping backend')
   }
   
   ws.onmessage = (event) => {
@@ -691,26 +671,32 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Dark Mode Theme */
 .ping-tool {
   min-height: 100vh;
-  background: #f8fafc;
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
+  color: #e2e8f0;
 }
 
 .dashboard-header {
-  background: white;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
   padding: 2rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .page-subtitle {
-  color: #64748b;
+  color: #94a3b8;
   margin: 0;
 }
 
@@ -728,22 +714,23 @@ onMounted(() => {
 }
 
 .tool-card {
-  background: white;
-  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 2rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .tool-header h2 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0 0 0.5rem 0;
 }
 
 .tool-description {
-  color: #64748b;
+  color: #94a3b8;
   margin: 0 0 1.5rem 0;
 }
 
@@ -766,26 +753,33 @@ onMounted(() => {
 .ping-input {
   flex: 1;
   padding: 1rem;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 8px;
   font-size: 1rem;
   transition: all 0.2s;
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 .ping-input:focus {
   outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.ping-input::placeholder {
+  color: #64748b;
 }
 
 .ping-input:disabled {
-  background: #f8fafc;
+  background: #1e293b;
   cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .ping-button {
   padding: 1rem 2rem;
-  background: #3b82f6;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -797,8 +791,8 @@ onMounted(() => {
 }
 
 .ping-button:hover:not(:disabled) {
-  background: #2563eb;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 
 .ping-button:disabled {
@@ -830,7 +824,7 @@ onMounted(() => {
 }
 
 .quick-label {
-  color: #64748b;
+  color: #94a3b8;
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -843,74 +837,24 @@ onMounted(() => {
 
 .quick-option {
   padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 6px;
-  color: #475569;
+  color: #cbd5e1;
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .quick-option:hover:not(:disabled) {
-  background: #e2e8f0;
+  background: #2d3748;
+  border-color: #3b82f6;
   transform: translateY(-1px);
 }
 
 .quick-option:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* Connection Status */
-.connection-status {
-  margin: 1rem 0;
-}
-
-.status-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.875rem;
-}
-
-.status-indicator.connected {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
-.status-indicator.disconnected {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.status-indicator.connected .status-dot {
-  background: #16a34a;
-  box-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
-  animation: pulse 2s infinite;
-}
-
-.status-indicator.disconnected .status-dot {
-  background: #dc2626;
-}
-
-.retry-link {
-  margin-left: 0.5rem;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 /* Results Section */
@@ -928,7 +872,7 @@ onMounted(() => {
 .results-header h3 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0;
 }
 
@@ -942,17 +886,18 @@ onMounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 6px;
-  color: #475569;
+  color: #cbd5e1;
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .control-btn:hover:not(:disabled) {
-  background: #e2e8f0;
+  background: #2d3748;
+  border-color: #3b82f6;
 }
 
 .control-btn:disabled {
@@ -962,8 +907,8 @@ onMounted(() => {
 
 /* Summary Card */
 .summary-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #334155;
   border-radius: 8px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
@@ -983,7 +928,7 @@ onMounted(() => {
 
 .summary-label {
   font-size: 0.75rem;
-  color: #64748b;
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -991,27 +936,32 @@ onMounted(() => {
 .summary-value {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
 }
 
 .summary-value.good {
-  color: #16a34a;
+  color: #34d399;
 }
 
 .summary-value.warning {
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .summary-value.poor {
-  color: #dc2626;
+  color: #f87171;
+}
+
+.summary-value.offline {
+  color: #9ca3af;
 }
 
 /* Ping Output */
 .ping-output {
-  background: #1e293b;
+  background: #0f172a;
   border-radius: 8px;
   margin-bottom: 1.5rem;
   overflow: hidden;
+  border: 1px solid #334155;
 }
 
 .output-header {
@@ -1019,7 +969,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1rem;
-  background: #0f172a;
+  background: #1e293b;
   border-bottom: 1px solid #334155;
 }
 
@@ -1046,6 +996,7 @@ onMounted(() => {
 
 .copy-btn:hover {
   background: #475569;
+  color: #f8fafc;
 }
 
 .output-content {
@@ -1072,12 +1023,12 @@ onMounted(() => {
 .individual-results h4 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0 0 1rem 0;
 }
 
 .results-table {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1085,8 +1036,8 @@ onMounted(() => {
 .table-header {
   display: grid;
   grid-template-columns: 80px 100px 100px 80px 1fr;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
 }
 
 .table-body {
@@ -1097,7 +1048,7 @@ onMounted(() => {
 .table-row {
   display: grid;
   grid-template-columns: 80px 100px 100px 80px 1fr;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #334155;
 }
 
 .table-row:last-child {
@@ -1105,7 +1056,7 @@ onMounted(() => {
 }
 
 .table-row:hover {
-  background: #f8fafc;
+  background: #1e293b;
 }
 
 .table-cell {
@@ -1113,36 +1064,37 @@ onMounted(() => {
   font-size: 0.875rem;
   display: flex;
   align-items: center;
+  color: #cbd5e1;
 }
 
 .table-header .table-cell {
   font-weight: 600;
-  color: #64748b;
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .table-body .table-cell {
-  color: #475569;
+  color: #cbd5e1;
 }
 
 .table-body .table-cell.good {
-  color: #16a34a;
+  color: #34d399;
   font-weight: 600;
 }
 
 .table-body .table-cell.warning {
-  color: #d97706;
+  color: #fbbf24;
   font-weight: 600;
 }
 
 .table-body .table-cell.poor {
-  color: #dc2626;
+  color: #f87171;
   font-weight: 600;
 }
 
 .table-body .table-cell.offline {
-  color: #94a3b8;
+  color: #9ca3af;
 }
 
 .status-badge {
@@ -1156,13 +1108,15 @@ onMounted(() => {
 }
 
 .status-badge.success {
-  background: #dcfce7;
-  color: #16a34a;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .status-badge.timeout {
-  background: #fee2e2;
-  color: #dc2626;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 /* Advanced Section */
@@ -1171,8 +1125,8 @@ onMounted(() => {
 }
 
 .advanced-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #334155;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1182,20 +1136,21 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  background: #f1f5f9;
+  background: #1e293b;
   cursor: pointer;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #334155;
 }
 
 .advanced-header h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0;
 }
 
 .toggle-icon {
   transition: transform 0.3s ease;
+  color: #94a3b8;
 }
 
 .toggle-icon.rotated {
@@ -1221,25 +1176,28 @@ onMounted(() => {
 .option-group label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #374151;
+  color: #cbd5e1;
 }
 
 .option-input {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid #334155;
   border-radius: 6px;
   font-size: 0.875rem;
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 .option-input:focus {
   outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .option-input:disabled {
-  background: #f8fafc;
+  background: #1e293b;
   cursor: not-allowed;
+  opacity: 0.7;
 }
 
 /* History Section */
@@ -1248,8 +1206,9 @@ onMounted(() => {
 }
 
 .history-card {
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1259,32 +1218,32 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
 }
 
 .history-header h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   margin: 0;
 }
 
 .clear-history {
   padding: 0.25rem 0.75rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 4px;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .clear-history:hover {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fee2e2;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 .history-list {
@@ -1297,13 +1256,13 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #334155;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .history-item:hover {
-  background: #f8fafc;
+  background: #1e293b;
 }
 
 .history-item:last-child {
@@ -1318,12 +1277,12 @@ onMounted(() => {
 
 .history-address {
   font-weight: 500;
-  color: #1e293b;
+  color: #f8fafc;
 }
 
 .history-hostname {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .history-info {
@@ -1338,21 +1297,40 @@ onMounted(() => {
 }
 
 .history-status.success {
-  color: #16a34a;
+  color: #34d399;
 }
 
 .history-status.failed {
-  color: #dc2626;
+  color: #f87171;
 }
 
 .history-latency {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .history-time {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #64748b;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Animations */

@@ -1,229 +1,271 @@
 <template>
   <div class="lan-scanner">
-    <!-- Header -->
-    
-
-    <!-- Controls Bar -->
-    <div class="controls-bar">
-      <!-- VLAN Filter -->
-      <div class="vlan-filter">
-        <label for="vlan-select">VLAN:</label>
-        <select 
-          id="vlan-select" 
-          v-model="selectedVlan" 
-          @change="filterByVlan"
-          class="vlan-select"
-          :disabled="!connected"
-        >
-          <option value="all">All VLANs</option>
-          <option v-for="vlan in vlanList" :key="vlan" :value="vlan">
-            VLAN {{ vlan }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Search Bar -->
-      <div class="search-bar">
-        <span class="search-icon">🔍</span>
-        <input 
-          v-model="searchQuery" 
-          type="text" 
-          placeholder="Search by IP, MAC, hostname, or vendor..."
-          class="search-input"
-        />
-      </div>
-
-      <!-- Connection Status -->
-      <div class="connection-status" :class="{ connected, disconnected: !connected }">
-        {{ connected ? '🟢 Connected' : '🔴 Disconnected' }}
-      </div>
-    </div>
-
-    <!-- Stats Bar -->
-    <div class="stats-bar">
-      <div class="stat-item">
-        <span class="stat-label">Total Devices:</span>
-        <span class="stat-value">{{ filteredDevices.length }}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Online:</span>
-        <span class="stat-value online">{{ onlineCount }}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Offline:</span>
-        <span class="stat-value offline">{{ offlineCount }}</span>
-      </div>
-      <div class="stat-item" v-if="lastUpdateTime">
-        <span class="stat-label">Last Update:</span>
-        <span class="stat-value">{{ lastUpdateTime }}</span>
-      </div>
-    </div>
-
-    <!-- Connection Error -->
-    <div v-if="connectionError" class="error-message">
-      <span class="error-icon">⚠️</span>
-      <span>{{ connectionError }}</span>
-      <button @click="reconnect" class="retry-btn">Reconnect</button>
-    </div>
-
-    <!-- Loading State -->
-    <div v-if="loading && devices.length === 0" class="loading">
-      <div class="loading-spinner"></div>
-      <p>Connecting to server...</p>
-    </div>
-
-    <!-- Device List -->
-    <div v-else class="devices-list">
-      <div 
-        v-for="device in paginatedDevices" 
-        :key="device.mac" 
-        class="device-card"
-        :class="{ online: device.status === 'online', offline: device.status === 'offline', new: device.isNew }"
-        @click="showDeviceDetails(device)"
-      >
-        <!-- Status Indicator -->
-        <div class="status-indicator" :class="device.status">
-          {{ device.status === 'online' ? '🟢' : '🔴' }}
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <!-- Controls Bar -->
+      <div class="controls-bar">
+        <!-- VLAN Filter -->
+        <div class="vlan-filter">
+          <label for="vlan-select">VLAN:</label>
+          <select 
+            id="vlan-select" 
+            v-model="selectedVlan" 
+            @change="filterByVlan"
+            class="vlan-select"
+            :disabled="!connected"
+          >
+            <option value="all">All VLANs</option>
+            <option v-for="vlan in vlanList" :key="vlan" :value="vlan">
+              VLAN {{ vlan }}
+            </option>
+          </select>
         </div>
 
-        <!-- Device Content -->
-        <div class="device-content">
-          <div class="device-header">
-            <div class="device-name-section">
-              <span class="device-name">{{ device.hostname || 'Generic' }}</span>
-              <span v-if="device.deviceType" class="device-type">{{ device.deviceType }}</span>
+        <!-- Search Bar -->
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="Search by IP, MAC, hostname, or vendor..."
+            class="search-input"
+          />
+        </div>
+
+        <!-- Connection Status -->
+        <div class="connection-status" :class="{ connected, disconnected: !connected }">
+          {{ connected ? '🟢 Connected' : '🔴 Disconnected' }}
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-label">Total Devices:</span>
+          <span class="stat-value">{{ filteredDevices.length }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Online:</span>
+          <span class="stat-value online">{{ onlineCount }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Offline:</span>
+          <span class="stat-value offline">{{ offlineCount }}</span>
+        </div>
+        <div class="stat-item" v-if="lastUpdateTime">
+          <span class="stat-label">Last Update:</span>
+          <span class="stat-value">{{ lastUpdateTime }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area - Split into two panels -->
+    <div class="main-content">
+      <!-- Left Panel - Device List -->
+      <div class="device-list-panel">
+        <div class="panel-header">
+          <h2>Network Devices</h2>
+          <span class="device-count">{{ filteredDevices.length }} devices</span>
+        </div>
+
+        <!-- Connection Error -->
+        <div v-if="connectionError" class="error-message">
+          <span class="error-icon">⚠️</span>
+          <span>{{ connectionError }}</span>
+          <button @click="reconnect" class="retry-btn">Reconnect</button>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="loading && devices.length === 0" class="loading">
+          <div class="loading-spinner"></div>
+          <p>Connecting to server...</p>
+        </div>
+
+        <!-- Device List -->
+        <div v-else class="devices-list">
+          <div 
+            v-for="device in paginatedDevices" 
+            :key="device.mac" 
+            class="device-card"
+            :class="{ 
+              online: device.status === 'online', 
+              offline: device.status === 'offline', 
+              new: device.isNew,
+              selected: selectedDevice && selectedDevice.mac === device.mac
+            }"
+            @click="selectDevice(device)"
+          >
+            <!-- Status Indicator -->
+            <div class="status-indicator" :class="device.status">
+              {{ device.status === 'online' ? '🟢' : '🔴' }}
             </div>
-            <span class="device-vlan" v-if="device.vlan">VLAN {{ device.vlan }}</span>
+
+            <!-- Device Content -->
+            <div class="device-content">
+              <div class="device-header">
+                <div class="device-name-section">
+                  <span class="device-name">{{ device.hostname || 'Generic' }}</span>
+                  <span v-if="device.deviceType" class="device-type">{{ device.deviceType }}</span>
+                </div>
+                <!-- <span class="device-vlan" v-if="device.vlan">VLAN {{ device.vlan }}</span> -->
+              </div>
+
+              <div class="device-details">
+                <div class="detail-row">
+                  <span class="detail-label">IP:</span>
+                  <span class="detail-value ip">{{ device.ip }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">MAC:</span>
+                  <span class="detail-value mac">{{ formatMAC(device.mac) }}</span>
+                </div>
+                <div class="detail-row" v-if="device.vendor">
+                  <span class="detail-label">Vendor:</span>
+                  <span class="detail-value vendor">{{ device.vendor }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Last Seen:</span>
+                  <span class="detail-value last-seen">{{ formatTime(device.lastSeen) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- New Badge -->
+            <div v-if="device.isNew" class="new-badge">NEW</div>
           </div>
 
-          <div class="device-details">
-            <div class="detail-row">
-              <span class="detail-label">IP:</span>
-              <span class="detail-value ip">{{ device.ip }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">MAC:</span>
-              <span class="detail-value mac">{{ formatMAC(device.mac) }}</span>
-              <button @click.stop="copyToClipboard(device.mac)" class="copy-btn" title="Copy MAC address">
-                📋
-              </button>
-            </div>
-            <div class="detail-row" v-if="device.vendor">
-              <span class="detail-label">Vendor:</span>
-              <span class="detail-value vendor">{{ device.vendor }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Last Seen:</span>
-              <span class="detail-value last-seen">{{ formatTime(device.lastSeen) }}</span>
-            </div>
+          <!-- Pagination -->
+          <div v-if="filteredDevices.length > 0" class="pagination">
+            <button 
+              @click="currentPage--" 
+              :disabled="currentPage === 1"
+              class="pagination-btn"
+            >
+              ←
+            </button>
+            <span class="page-info">
+              Page {{ currentPage }} of {{ totalPages }}
+            </span>
+            <button 
+              @click="currentPage++" 
+              :disabled="currentPage === totalPages"
+              class="pagination-btn"
+            >
+              →
+            </button>
+            <select v-model="itemsPerPage" class="items-per-page">
+              <option :value="10">10 per page</option>
+              <option :value="25">25 per page</option>
+              <option :value="50">50 per page</option>
+            </select>
+          </div>
+
+          <!-- No Devices Message -->
+          <div v-if="filteredDevices.length === 0 && !loading" class="no-devices">
+            <div class="no-devices-icon">📡</div>
+            <h3>No Devices Found</h3>
+            <p v-if="searchQuery">No devices match your search criteria</p>
+            <p v-else-if="selectedVlan !== 'all'">No devices in VLAN {{ selectedVlan }}</p>
+            <p v-else>{{ connected ? 'Waiting for devices...' : 'Unable to connect to server' }}</p>
           </div>
         </div>
-
-        <!-- New Badge -->
-        <div v-if="device.isNew" class="new-badge">NEW</div>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="filteredDevices.length > 0" class="pagination">
-        <button 
-          @click="currentPage--" 
-          :disabled="currentPage === 1"
-          class="pagination-btn"
-        >
-          ←
-        </button>
-        <span class="page-info">
-          Page {{ currentPage }} of {{ totalPages }}
-        </span>
-        <button 
-          @click="currentPage++" 
-          :disabled="currentPage === totalPages"
-          class="pagination-btn"
-        >
-          →
-        </button>
-        <select v-model="itemsPerPage" class="items-per-page">
-          <option :value="10">10 per page</option>
-          <option :value="25">25 per page</option>
-          <option :value="50">50 per page</option>
-        </select>
-      </div>
-
-      <!-- No Devices Message -->
-      <div v-if="filteredDevices.length === 0 && !loading" class="no-devices">
-        <div class="no-devices-icon">📡</div>
-        <h3>No Devices Found</h3>
-        <p v-if="searchQuery">No devices match your search criteria</p>
-        <p v-else-if="selectedVlan !== 'all'">No devices in VLAN {{ selectedVlan }}</p>
-        <p v-else>{{ connected ? 'Waiting for devices...' : 'Unable to connect to server' }}</p>
-      </div>
-    </div>
-
-    <!-- Device Details Modal -->
-    <div v-if="selectedDevice" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>{{ selectedDevice.hostname || 'Generic Device' }}</h3>
-          <button @click="closeModal" class="close-btn">&times;</button>
+      <!-- Right Panel - Selected Device Details (Fixed) -->
+      <div class="device-details-panel" :class="{ 'has-device': selectedDevice }">
+        <div class="panel-header">
+          <h2>Device Details</h2>
+          <button v-if="selectedDevice" @click="clearSelection" class="clear-btn">×</button>
         </div>
-        <div class="modal-body">
-          <div class="device-details-grid">
-            <div class="detail-row">
-              <span class="detail-label">Status:</span>
-              <span class="detail-value" :class="selectedDevice.status">
-                {{ selectedDevice.status === 'online' ? '🟢 Online' : '🔴 Offline' }}
-              </span>
+
+        <!-- Empty State -->
+        <div v-if="!selectedDevice" class="no-selection">
+          <div class="no-selection-icon">👆</div>
+          <h3>No Device Selected</h3>
+          <p>Click on any device from the list to view details</p>
+        </div>
+
+        <!-- Selected Device Details -->
+        <div v-else class="selected-device-details">
+          <div class="device-status-banner" :class="selectedDevice.status">
+            <span class="status-icon">{{ selectedDevice.status === 'online' ? '🟢' : '🔴' }}</span>
+            <span class="status-text">{{ selectedDevice.status === 'online' ? 'Online' : 'Offline' }}</span>
+          </div>
+
+          <div class="details-content">
+            <div class="detail-section">
+              <h3>Basic Information</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Hostname:</span>
+                  <span class="detail-value">{{ selectedDevice.hostname || 'Generic' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">IP Address:</span>
+                  <span class="detail-value ip">{{ selectedDevice.ip }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">MAC Address:</span>
+                  <div class="value-with-copy">
+                    <span class="detail-value mac">{{ formatMAC(selectedDevice.mac) }}</span>
+                    <button @click="copyToClipboard(selectedDevice.mac)" class="copy-btn" title="Copy MAC">
+                      📋
+                    </button>
+                  </div>
+                </div>
+                <div class="detail-item" v-if="selectedDevice.deviceType">
+                  <span class="detail-label">Device Type:</span>
+                  <span class="detail-value">{{ selectedDevice.deviceType }}</span>
+                </div>
+                <div class="detail-item" v-if="selectedDevice.vendor">
+                  <span class="detail-label">Vendor:</span>
+                  <span class="detail-value">{{ selectedDevice.vendor }}</span>
+                </div>
+                <div class="detail-item" v-if="selectedDevice.vlan">
+                  <span class="detail-label">VLAN:</span>
+                  <span class="detail-value vlan-badge">VLAN {{ selectedDevice.vlan }}</span>
+                </div>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="detail-label">IP Address:</span>
-              <span class="detail-value ip">{{ selectedDevice.ip }}</span>
+
+            <div class="detail-section">
+              <h3>Timing Information</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">First Seen:</span>
+                  <span class="detail-value">{{ formatFullTime(selectedDevice.firstSeen) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Last Seen:</span>
+                  <span class="detail-value">{{ formatFullTime(selectedDevice.lastSeen) }}</span>
+                </div>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="detail-label">MAC Address:</span>
-              <span class="detail-value mac">{{ formatMAC(selectedDevice.mac) }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Hostname:</span>
-              <span class="detail-value">{{ selectedDevice.hostname || 'Generic' }}</span>
-            </div>
-            <div class="detail-row" v-if="selectedDevice.deviceType">
-              <span class="detail-label">Device Type:</span>
-              <span class="detail-value">{{ selectedDevice.deviceType }}</span>
-            </div>
-            <div class="detail-row" v-if="selectedDevice.vendor">
-              <span class="detail-label">Vendor:</span>
-              <span class="detail-value">{{ selectedDevice.vendor }}</span>
-            </div>
-            <div class="detail-row" v-if="selectedDevice.vlan">
-              <span class="detail-label">VLAN:</span>
-              <span class="detail-value">VLAN {{ selectedDevice.vlan }}</span>
-            </div>
-            <div class="detail-row" v-if="selectedDevice.ports && selectedDevice.ports.length">
-              <span class="detail-label">Open Ports:</span>
-              <span class="detail-value">
+
+            <div class="detail-section" v-if="selectedDevice.ports && selectedDevice.ports.length">
+              <h3>Open Ports</h3>
+              <div class="ports-container">
                 <span v-for="port in selectedDevice.ports" :key="port" class="port-badge">
                   {{ port }}
                 </span>
-              </span>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="detail-label">First Seen:</span>
-              <span class="detail-value">{{ formatFullTime(selectedDevice.firstSeen) }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Last Seen:</span>
-              <span class="detail-value">{{ formatFullTime(selectedDevice.lastSeen) }}</span>
+
+            <div class="action-buttons">
+              <button @click="copyToClipboard(selectedDevice.ip)" class="action-btn copy-ip">
+                📋 Copy IP
+              </button>
+              <button @click="copyToClipboard(selectedDevice.mac)" class="action-btn copy-mac">
+                📋 Copy MAC
+              </button>
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping">
+                📡 Ping
+              </button>
+              <button @click="scanPorts(selectedDevice)" class="action-btn scan">
+                🔍 Scan Ports
+              </button>
             </div>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="copyToClipboard(selectedDevice.mac)" class="modal-btn copy">
-            📋 Copy MAC
-          </button>
-          <button @click="copyToClipboard(selectedDevice.ip)" class="modal-btn copy">
-            📋 Copy IP
-          </button>
-          <button @click="closeModal" class="modal-btn close">Close</button>
         </div>
       </div>
     </div>
@@ -395,6 +437,7 @@ export default {
       if (!device.mac) return
       
       const index = devices.value.findIndex(d => d.mac === device.mac)
+      const wasSelected = selectedDevice.value && selectedDevice.value.mac === device.mac
       
       if (index === -1) {
         // New device
@@ -416,6 +459,11 @@ export default {
           ...device,
           lastSeen: new Date().toISOString(),
           firstSeen: devices.value[index].firstSeen || device.firstSeen || new Date().toISOString()
+        }
+        
+        // Update selected device if it's the same
+        if (wasSelected) {
+          selectedDevice.value = devices.value[index]
         }
         
         // Remove updated flag after 3 seconds
@@ -478,18 +526,27 @@ export default {
     const copyToClipboard = (text) => {
       navigator.clipboard.writeText(text)
         .then(() => {
-          // Show temporary tooltip or notification
           console.log('Copied to clipboard:', text)
         })
         .catch(err => console.error('Failed to copy:', err))
     }
     
-    const showDeviceDetails = (device) => {
+    const selectDevice = (device) => {
       selectedDevice.value = device
     }
     
-    const closeModal = () => {
+    const clearSelection = () => {
       selectedDevice.value = null
+    }
+    
+    const pingDevice = (device) => {
+      console.log('Pinging device:', device.ip)
+      // Implement ping functionality
+    }
+    
+    const scanPorts = (device) => {
+      console.log('Scanning ports for device:', device.ip)
+      // Implement port scan functionality
     }
     
     const reconnect = () => {
@@ -516,6 +573,14 @@ export default {
     watch(filteredDevices, () => {
       if (currentPage.value > totalPages.value) {
         currentPage.value = totalPages.value || 1
+      }
+      
+      // Clear selection if selected device is no longer in filtered list
+      if (selectedDevice.value) {
+        const stillExists = filteredDevices.value.some(d => d.mac === selectedDevice.value.mac)
+        if (!stillExists) {
+          selectedDevice.value = null
+        }
       }
     })
     
@@ -552,8 +617,10 @@ export default {
       formatTime,
       formatFullTime,
       copyToClipboard,
-      showDeviceDetails,
-      closeModal,
+      selectDevice,
+      clearSelection,
+      pingDevice,
+      scanPorts,
       reconnect
     }
   }
@@ -563,35 +630,19 @@ export default {
 <style scoped>
 /* Dark Mode Theme */
 .lan-scanner {
-  padding: 30px;
-  max-width: 1200px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
-  min-height: 100vh;
   color: #e2e8f0;
+  overflow: hidden;
 }
 
-/* Header */
-.scanner-header {
-  margin-bottom: 25px;
-}
-
-.scanner-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0 0 5px 0;
-  letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.subtitle {
-  color: #94a3b8;
-  font-size: 15px;
-  margin: 0;
+/* Top Bar */
+.top-bar {
+  padding: 20px 20px 10px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 /* Controls Bar */
@@ -599,7 +650,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   padding: 16px 20px;
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
@@ -706,8 +757,7 @@ export default {
 .stats-bar {
   display: flex;
   gap: 25px;
-  margin-bottom: 25px;
-  padding: 16px 20px;
+  padding: 12px 20px;
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
   border-radius: 12px;
@@ -741,104 +791,159 @@ export default {
   color: #f87171;
 }
 
+/* Main Content - Split Panels */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  padding: 0 20px 20px 20px;
+  gap: 20px;
+  min-height: 0;
+}
+
+/* Left Panel - Device List */
+.device-list-panel {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  min-width: 600px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.device-count {
+  font-size: 1rem;
+  color: #94a3b8;
+  background: #0f172a;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #334155;
+  font-weight: 500;
+}
+
 /* Error Message */
 .error-message {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 10px;
-  padding: 14px 18px;
-  margin-bottom: 25px;
+  margin: 20px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 18px 22px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 15px;
   color: #fca5a5;
-  font-size: 14px;
-  backdrop-filter: blur(10px);
+  font-size: 15px;
 }
 
 .error-icon {
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .retry-btn {
   margin-left: auto;
-  padding: 6px 16px;
+  padding: 8px 20px;
   background: #ef4444;
   color: white;
   border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .retry-btn:hover {
   background: #dc2626;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 /* Loading State */
 .loading {
   text-align: center;
-  padding: 60px 20px;
+  padding: 80px 30px;
   color: #94a3b8;
-  font-size: 15px;
-  background: rgba(30, 41, 59, 0.8);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 16px;
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #1e293b;
+  width: 50px;
+  height: 50px;
+  border: 4px solid #1e293b;
   border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 15px auto;
+  margin: 0 auto 20px auto;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* Device List */
+/* Device List Container */
 .devices-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 9px;
 }
 
+/* Device Cards */
 .device-card {
   display: flex;
-  background: rgba(30, 41, 59, 0.8);
-  backdrop-filter: blur(10px);
+  background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 0;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  min-height: 120px;
 }
 
 .device-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateX(4px);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.device-card.selected {
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
 .device-card.online {
-  border-left: 4px solid #10b981;
+  border-left: 6px solid #10b981;
 }
 
 .device-card.offline {
-  border-left: 4px solid #ef4444;
-  opacity: 0.7;
+  border-left: 6px solid #ef4444;
+  opacity: 0.8;
 }
 
 .device-card.new {
@@ -846,136 +951,158 @@ export default {
 }
 
 @keyframes highlight-new {
-  0% { background: rgba(16, 185, 129, 0.2); }
-  100% { background: rgba(30, 41, 59, 0.8); }
+  0% { background: rgba(16, 185, 129, 0.3); }
+  100% { background: rgba(15, 23, 42, 0.8); }
 }
 
+/* Status Indicator */
 .status-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  font-size: 20px;
-  background: rgba(15, 23, 42, 0.6);
+  width: 60px;
+  font-size: 24px;
+  background: rgba(0, 0, 0, 0.3);
   border-right: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+/* Device Content */
 .device-content {
   flex: 1;
-  padding: 18px 20px;
+  padding: 12px 15px;
 }
 
 .device-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .device-name-section {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .device-name {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 16px;
   color: #f8fafc;
 }
 
 .device-type {
-  font-size: 12px;
+  font-size: 11px;
   color: #94a3b8;
   background: #0f172a;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border-radius: 12px;
-  font-weight: 500;
   border: 1px solid #334155;
+  font-weight: 500;
 }
 
 .device-vlan {
-  font-size: 12px;
+  font-size: 11px;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   color: white;
-  padding: 4px 12px;
+  padding: 3px 8px;
   border-radius: 12px;
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
 }
 
+/* Device Details Grid */
 .device-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 12px 20px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 8px;
+  margin-top: 4px;
 }
 
 .detail-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 2px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.05);
+  min-width: 0;
+  width: 100%;
 }
 
 .detail-label {
   color: #94a3b8;
-  min-width: 70px;
+  min-width: 35px;
+  font-size: 11px;
+  font-weight: 300;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .detail-value {
   color: #e2e8f0;
   font-weight: 500;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
 .detail-value.ip {
   color: #60a5fa;
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .detail-value.mac {
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   color: #94a3b8;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .detail-value.vendor {
   color: #c4b5fd;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .detail-value.last-seen {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.copy-btn {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: all 0.2s;
-  margin-left: 4px;
+/* Make MAC row span both columns for better visibility */
+.detail-row.mac-row {
+  grid-column: span 2;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
 }
 
-.copy-btn:hover {
-  background: #1e293b;
-  color: #60a5fa;
-}
-
+/* New Badge */
 .new-badge {
   position: absolute;
   top: 12px;
   right: 12px;
   background: #10b981;
   color: white;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
   letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Pagination */
@@ -983,280 +1110,442 @@ export default {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 16px;
-  margin-top: 25px;
-  padding-top: 20px;
+  gap: 15px;
+  margin-top: 20px;
+  padding: 16px 20px;
   border-top: 1px solid rgba(148, 163, 184, 0.1);
-  flex-wrap: wrap;
+  background: rgba(15, 23, 42, 0.4);
 }
 
 .pagination-btn {
   background: #0f172a;
   border: 1px solid #334155;
   color: #cbd5e1;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  min-width: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pagination-btn:hover:not(:disabled) {
   background: #1e293b;
   border-color: #3b82f6;
   color: #60a5fa;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .pagination-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .page-info {
   color: #94a3b8;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .items-per-page {
-  padding: 8px 12px;
+  padding: 10px 14px;
   border: 1px solid #334155;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: 10px;
+  font-size: 14px;
   color: #e2e8f0;
   background: #0f172a;
   cursor: pointer;
   outline: none;
+  font-weight: 500;
+}
+
+.items-per-page:hover {
+  border-color: #3b82f6;
 }
 
 /* No Devices */
 .no-devices {
   text-align: center;
-  padding: 80px 20px;
-  background: rgba(30, 41, 59, 0.8);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  border: 1px dashed rgba(148, 163, 184, 0.2);
+  padding: 80px 30px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 14px;
+  margin: 20px;
 }
 
 .no-devices-icon {
-  font-size: 48px;
-  margin-bottom: 20px;
+  font-size: 64px;
+  margin-bottom: 25px;
   opacity: 0.7;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .no-devices h3 {
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 15px;
+}
+
+.no-devices p {
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1.5;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Right Panel - Device Details - COMPACT VERSION */
+.device-details-panel {
+  width: 450px;
+  min-width: 450px;
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.device-details-panel.has-device {
+  border-color: #3b82f6;
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+}
+
+/* No Selection State - Compact */
+.no-selection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.no-selection-icon {
+  font-size: 60px;
+  margin-bottom: 20px;
+  opacity: 0.7;
+  animation: bounce 2s infinite;
+}
+
+.no-selection h3 {
+  font-size: 18px;
   font-weight: 600;
   color: #f8fafc;
   margin-bottom: 10px;
 }
 
-.no-devices p {
+.no-selection p {
   color: #94a3b8;
-  font-size: 15px;
+  font-size: 14px;
+  max-width: 250px;
+  line-height: 1.4;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.modal-content {
-  background: #1e293b;
-  border-radius: 16px;
-  width: 550px;
-  max-width: 90vw;
-  max-height: 90vh;
+/* Selected Device Details - Compact */
+.selected-device-details {
+  flex: 1;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  animation: slideUp 0.3s ease;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.modal-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  flex-direction: column;
 }
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
+.device-status-banner {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
-  color: #f8fafc;
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 0;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  transition: all 0.2s;
+.device-status-banner.online {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.close-btn:hover {
-  background: #ef4444;
-  color: white;
+.device-status-banner.offline {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-.modal-body {
-  padding: 24px;
+.status-icon {
+  font-size: 20px;
 }
 
-.device-details-grid {
+.status-text {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.details-content {
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.modal-body .detail-row {
-  display: flex;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  margin: 0;
+.detail-section {
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
-.modal-body .detail-row:last-child {
-  border-bottom: none;
-}
-
-.modal-body .detail-label {
-  width: 110px;
-  font-size: 14px;
+.detail-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
   color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding-bottom: 6px;
 }
 
-.modal-body .detail-value {
-  flex: 1;
-  font-size: 14px;
-  color: #e2e8f0;
+.detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-item .detail-label {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   font-weight: 500;
 }
 
-.modal-body .detail-value.ip {
+.detail-item .detail-value {
+  font-size: 14px;
+  color: #f8fafc;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.detail-item .detail-value.ip {
   color: #60a5fa;
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 15px;
+  font-weight: 600;
 }
 
-.modal-body .detail-value.mac {
+.detail-item .detail-value.mac {
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   color: #94a3b8;
+  font-size: 14px;
+  letter-spacing: 0.3px;
 }
 
-.modal-body .detail-value.online {
-  color: #34d399;
+.value-with-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.modal-body .detail-value.offline {
-  color: #f87171;
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  background: #1e293b;
+  color: #60a5fa;
+}
+
+.vlan-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  width: fit-content;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+/* Open Ports Section - Compact */
+.ports-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .port-badge {
   display: inline-block;
   background: #0f172a;
   color: #94a3b8;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  margin-right: 8px;
-  margin-bottom: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   border: 1px solid #334155;
+  transition: all 0.2s;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px 24px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
+.port-badge:hover {
+  background: #1e293b;
+  border-color: #3b82f6;
+  color: #60a5fa;
+  transform: translateY(-2px);
 }
 
-.modal-btn {
-  padding: 10px 18px;
+/* Action Buttons - Compact */
+.action-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.action-btn {
+  padding: 10px 8px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid #334155;
   background: #0f172a;
   color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.modal-btn:hover {
+.action-btn:hover {
   background: #1e293b;
   border-color: #475569;
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.modal-btn.copy {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-.modal-btn.copy:hover {
+.action-btn.copy-ip:hover {
   background: rgba(59, 130, 246, 0.2);
   border-color: #3b82f6;
+  color: #60a5fa;
 }
 
-.modal-btn.close {
-  background: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
+.action-btn.copy-mac:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+  color: #c4b5fd;
 }
 
-.modal-btn.close:hover {
-  background: #2563eb;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+.action-btn.ping:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #34d399;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .lan-scanner {
-    padding: 20px;
+.action-btn.scan:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+/* Scrollbar Styling */
+.devices-list::-webkit-scrollbar,
+.selected-device-details::-webkit-scrollbar {
+  width: 10px;
+}
+
+.devices-list::-webkit-scrollbar-track,
+.selected-device-details::-webkit-scrollbar-track {
+  background: #0f172a;
+  border-radius: 5px;
+}
+
+.devices-list::-webkit-scrollbar-thumb,
+.selected-device-details::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 5px;
+  border: 2px solid #0f172a;
+}
+
+.devices-list::-webkit-scrollbar-thumb:hover,
+.selected-device-details::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1400px) {
+  .device-list-panel {
+    min-width: 500px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .device-list-panel {
+    min-width: 450px;
   }
   
+  .device-name {
+    font-size: 15px;
+  }
+  
+  .device-details-panel {
+    width: 400px;
+    min-width: 400px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .device-list-panel {
+    min-width: 100%;
+    height: 500px;
+  }
+  
+  .device-details-panel {
+    width: 100%;
+    min-width: 100%;
+    height: 500px;
+  }
+  
+  .device-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
   .controls-bar {
     flex-direction: column;
     align-items: stretch;
@@ -1270,62 +1559,43 @@ export default {
     gap: 15px;
   }
   
+  .device-list-panel {
+    height: 400px;
+  }
+  
+  .device-card {
+    min-height: 100px;
+  }
+  
+  .status-indicator {
+    width: 50px;
+    font-size: 20px;
+  }
+  
   .device-details {
     grid-template-columns: 1fr;
   }
   
-  .device-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  
-  .device-vlan {
-    align-self: flex-start;
-  }
-  
-  .status-indicator {
-    width: 40px;
-  }
-  
   .pagination {
+    flex-wrap: wrap;
     justify-content: center;
   }
-}
-
-@media (max-width: 480px) {
-  .device-card {
-    flex-direction: column;
+  
+  .device-details-panel {
+    height: 450px;
   }
   
-  .status-indicator {
-    width: 100%;
-    padding: 8px;
-    border-right: none;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  .detail-item .detail-value {
+    font-size: 13px;
   }
   
-  .device-content {
-    padding: 16px;
+  .detail-item .detail-value.ip,
+  .detail-item .detail-value.mac {
+    font-size: 13px;
   }
-}
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0f172a;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  
+  .action-buttons {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1,8 +1,5 @@
 <template>
   <div class="speedtest-container">
-   
-      
-
     <!-- Main Button -->
     <div class="button-container">
       <button 
@@ -189,35 +186,17 @@ const startSpeedtest = () => {
 </script>
 
 <style scoped>
+/* Dark Mode Theme */
 .speedtest-container {
   max-width: 800px;
   margin: 2rem auto;
   padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
   border-radius: 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  color: white;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.header h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0;
-  background: linear-gradient(to right, #ffffff, #e0e7ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-  opacity: 0.9;
-  margin-top: 0.5rem;
-  font-size: 1.1rem;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .button-container {
@@ -226,7 +205,7 @@ const startSpeedtest = () => {
 }
 
 .start-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   border: none;
   border-radius: 16px;
   padding: 1.25rem 3rem;
@@ -235,15 +214,16 @@ const startSpeedtest = () => {
   color: white;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
   min-width: 250px;
   position: relative;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .start-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
 }
 
 .start-button:active:not(:disabled) {
@@ -256,7 +236,8 @@ const startSpeedtest = () => {
 }
 
 .start-button.running {
-  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
 .start-button.pulse:not(:disabled)::before {
@@ -273,13 +254,13 @@ const startSpeedtest = () => {
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
   }
   70% {
-    box-shadow: 0 0 0 20px rgba(102, 126, 234, 0);
+    box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
   }
 }
 
@@ -299,6 +280,12 @@ const startSpeedtest = () => {
   width: 24px;
   height: 24px;
   animation: spin 1s linear infinite;
+  stroke: #3b82f6;
+}
+
+.spinner circle {
+  stroke: #3b82f6;
+  stroke-linecap: round;
 }
 
 @keyframes spin {
@@ -308,7 +295,7 @@ const startSpeedtest = () => {
 
 .last-test-info {
   margin-top: 1rem;
-  opacity: 0.8;
+  color: #94a3b8;
   font-size: 0.9rem;
 }
 
@@ -320,16 +307,27 @@ const startSpeedtest = () => {
 }
 
 .speed-card {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
   border-radius: 20px;
   padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: transform 0.3s ease;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .speed-card:hover {
   transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.download-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.upload-card:hover {
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
 .card-header {
@@ -342,13 +340,22 @@ const startSpeedtest = () => {
 .card-icon {
   width: 32px;
   height: 32px;
-  opacity: 0.9;
+  color: #94a3b8;
+}
+
+.download-card:hover .card-icon {
+  color: #60a5fa;
+}
+
+.upload-card:hover .card-icon {
+  color: #a78bfa;
 }
 
 .card-header h2 {
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
+  color: #f8fafc;
 }
 
 .speed-value {
@@ -359,26 +366,27 @@ const startSpeedtest = () => {
   font-feature-settings: "tnum";
   font-variant-numeric: tabular-nums;
   transition: color 0.3s ease;
+  color: #f8fafc;
 }
 
 .speed-value.active {
-  color: #a78bfa;
+  color: #60a5fa;
   animation: glow 1s ease-in-out infinite alternate;
 }
 
 @keyframes glow {
   from {
-    text-shadow: 0 0 5px rgba(167, 139, 250, 0.5);
+    text-shadow: 0 0 5px rgba(96, 165, 250, 0.3);
   }
   to {
-    text-shadow: 0 0 20px rgba(167, 139, 250, 0.8);
+    text-shadow: 0 0 20px rgba(96, 165, 250, 0.5);
   }
 }
 
 .unit {
   font-size: 1.5rem;
   font-weight: 600;
-  opacity: 0.8;
+  color: #94a3b8;
   margin-left: 4px;
 }
 
@@ -388,29 +396,43 @@ const startSpeedtest = () => {
 
 .progress-container {
   height: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 4px;
   overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #a78bfa, #8b5cf6);
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
   border-radius: 4px;
   width: 0%;
   transition: width 0.5s ease;
+  position: relative;
 }
 
-.progress-bar.active {
+.progress-bar.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
   animation: shimmer 2s infinite;
 }
 
 @keyframes shimmer {
   0% {
-    background-position: -200% center;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: 200% center;
+    transform: translateX(100%);
   }
 }
 
@@ -420,8 +442,9 @@ const startSpeedtest = () => {
   gap: 1.5rem;
   margin: 2rem 0;
   padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .info-item {
@@ -433,22 +456,23 @@ const startSpeedtest = () => {
 .info-icon {
   width: 24px;
   height: 24px;
-  opacity: 0.8;
+  color: #64748b;
 }
 
 .info-label {
   font-size: 0.875rem;
-  opacity: 0.8;
+  color: #94a3b8;
   margin-bottom: 0.25rem;
 }
 
 .info-value {
   font-size: 1.25rem;
   font-weight: 600;
+  color: #f8fafc;
 }
 
 .status {
-  color: #10b981;
+  color: #34d399;
 }
 
 .status.active {
@@ -459,9 +483,9 @@ const startSpeedtest = () => {
   text-align: center;
   margin-top: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
   font-size: 0.875rem;
-  opacity: 0.7;
+  color: #64748b;
 }
 
 /* Responsive design */
@@ -469,10 +493,6 @@ const startSpeedtest = () => {
   .speedtest-container {
     margin: 1rem;
     padding: 1.5rem;
-  }
-  
-  .header h1 {
-    font-size: 2rem;
   }
   
   .speed-cards {
@@ -487,5 +507,24 @@ const startSpeedtest = () => {
     width: 100%;
     padding: 1rem 2rem;
   }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 </style>

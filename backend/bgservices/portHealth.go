@@ -111,7 +111,6 @@ func CheckPort(host string, port int) bool {
 			}
 		}
 	}()
-
 	_, err = conn.WriteTo(buf.Bytes(), &net.IPAddr{IP: dstIP})
 	if err != nil {
 		log.Printf("Failed to send packet: %v", err)
@@ -140,10 +139,8 @@ func updateStatus(ctx context.Context, db *pgxpool.Pool, id int, online bool) {
 
 func StartPortMonitor(ctx context.Context, pool *pgxpool.Pool) {
 	fmt.Println("Port monitoring service started...")
-
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ticker.C:

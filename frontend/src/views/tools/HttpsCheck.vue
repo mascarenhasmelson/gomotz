@@ -1,8 +1,6 @@
 <template>
   <div class="https-checker-page">
     <div class="https-container">
-      <!-- Header -->
-    
       <!-- Input Form -->
       <div class="checker-card">
         <div class="input-group">
@@ -433,12 +431,13 @@ export default {
 </script>
 
 <style scoped>
-/* Base Styles */
+/* Dark Mode Theme */
 .https-checker-page {
   padding: 0;
   width: 100%;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
+  color: #e2e8f0;
 }
 
 .https-container {
@@ -447,45 +446,21 @@ export default {
   padding: 30px;
 }
 
-/* Header */
-.checker-header {
-  text-align: center;
-  margin-bottom: 40px;
-  padding: 30px;
-  background: white;
-  border-radius: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
-
-.checker-header h1 {
-  font-size: 2.5rem;
-  color: #2d3748;
-  margin: 0 0 10px 0;
-  font-weight: 700;
-  background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-  color: #718096;
-  font-size: 1.1rem;
-  margin: 0;
-}
-
 /* Checker Card */
 .checker-card {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .input-group label {
   display: block;
   font-weight: 600;
-  color: #4a5568;
+  color: #cbd5e1;
   margin-bottom: 12px;
   font-size: 1.1rem;
 }
@@ -499,35 +474,40 @@ export default {
 .url-input {
   flex: 1;
   padding: 16px 20px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 10px;
   font-size: 1rem;
   transition: all 0.3s;
-  background: #f8fafc;
+  background: #0f172a;
+  color: #e2e8f0;
   font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .url-input:focus {
   outline: none;
-  border-color: #38a169;
-  box-shadow: 0 0 0 3px rgba(56, 161, 105, 0.1);
-  background: white;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.url-input::placeholder {
+  color: #64748b;
 }
 
 .url-input:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+  background: #1e293b;
 }
 
 .input-hint {
-  color: #718096;
+  color: #94a3b8;
   font-size: 0.9rem;
   margin-top: 8px;
   margin-left: 5px;
 }
 
 .check-button {
-  background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   border: none;
   padding: 16px 40px;
@@ -545,7 +525,7 @@ export default {
 
 .check-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(56, 161, 105, 0.3);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
 }
 
 .check-button:disabled {
@@ -562,8 +542,8 @@ export default {
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid white;
-  border-top-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -574,26 +554,28 @@ export default {
 
 /* Loading Section */
 .loading-section {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 40px;
   margin-bottom: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   text-align: center;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .loading-spinner-large {
   width: 60px;
   height: 60px;
-  border: 4px solid #e2e8f0;
-  border-top-color: #38a169;
+  border: 4px solid #1e293b;
+  border-top-color: #10b981;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 20px auto;
 }
 
 .loading-section p {
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
   margin-bottom: 30px;
 }
@@ -611,37 +593,41 @@ export default {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: #a0aec0;
+  color: #64748b;
 }
 
 .step.active {
-  color: #38a169;
+  color: #10b981;
 }
 
 .step.completed {
-  color: #38a169;
+  color: #10b981;
 }
 
 .step-icon {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: #e2e8f0;
+  background: #1e293b;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
+  color: #94a3b8;
+  border: 1px solid #334155;
 }
 
 .step.active .step-icon {
-  background: #38a169;
+  background: #10b981;
   color: white;
   animation: pulse 1.5s infinite;
+  border-color: #10b981;
 }
 
 .step.completed .step-icon {
-  background: #38a169;
+  background: #10b981;
   color: white;
+  border-color: #10b981;
 }
 
 @keyframes pulse {
@@ -656,15 +642,16 @@ export default {
 
 /* Error Message */
 .error-message {
-  background: #fed7d7;
-  color: #c53030;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
   border-radius: 10px;
   padding: 20px;
   margin-bottom: 30px;
   display: flex;
   align-items: center;
   gap: 15px;
-  border-left: 4px solid #e53e3e;
+  border-left: 4px solid #ef4444;
+  backdrop-filter: blur(10px);
 }
 
 .error-icon {
@@ -681,11 +668,13 @@ export default {
 
 /* Results Section */
 .results-section {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
   margin-bottom: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
   animation: slideIn 0.5s ease-out;
 }
 
@@ -706,12 +695,12 @@ export default {
   align-items: center;
   margin-bottom: 30px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 1px solid #334155;
 }
 
 .results-header h2 {
   margin: 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.8rem;
 }
 
@@ -725,12 +714,12 @@ export default {
 .target-url {
   font-family: 'Monaco', 'Courier New', monospace;
   font-weight: 600;
-  color: #4a5568;
+  color: #60a5fa;
   font-size: 1.1rem;
 }
 
 .check-time {
-  color: #718096;
+  color: #94a3b8;
   font-size: 0.9rem;
 }
 
@@ -745,13 +734,13 @@ export default {
 }
 
 .status-card.success {
-  background: #f0fff4;
-  border: 2px solid #9ae6b4;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .status-card.error {
-  background: #fff5f5;
-  border: 2px solid #fed7d7;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .status-icon {
@@ -760,13 +749,13 @@ export default {
 
 .status-content h3 {
   margin: 0 0 8px 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.5rem;
 }
 
 .status-content p {
   margin: 0;
-  color: #718096;
+  color: #94a3b8;
 }
 
 /* Details Grid */
@@ -784,15 +773,15 @@ export default {
 }
 
 .detail-card {
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 12px;
   padding: 25px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
 }
 
 .detail-card h4 {
   margin: 0 0 20px 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.2rem;
 }
 
@@ -811,14 +800,14 @@ export default {
 
 .detail-label {
   font-weight: 500;
-  color: #4a5568;
+  color: #94a3b8;
   font-size: 0.95rem;
   min-width: 120px;
 }
 
 .detail-value {
   font-weight: 600;
-  color: #2d3748;
+  color: #e2e8f0;
   font-size: 0.95rem;
   text-align: right;
   font-family: 'Monaco', 'Courier New', monospace;
@@ -826,38 +815,38 @@ export default {
 }
 
 .detail-value.good {
-  color: #38a169;
+  color: #34d399;
 }
 
 .detail-value.bad {
-  color: #e53e3e;
+  color: #f87171;
 }
 
 .detail-value.warning {
-  color: #d69e2e;
+  color: #fbbf24;
 }
 
 .detail-value.expiring {
-  color: #ed8936;
+  color: #fbbf24;
 }
 
 .detail-value.expired {
-  color: #e53e3e;
+  color: #f87171;
   font-weight: 700;
 }
 
 /* Connection Details */
 .connection-details {
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 12px;
   padding: 25px;
   margin-bottom: 30px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
 }
 
 .connection-details h4 {
   margin: 0 0 20px 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.2rem;
 }
 
@@ -875,45 +864,45 @@ export default {
 
 .connection-label {
   font-weight: 500;
-  color: #4a5568;
+  color: #94a3b8;
   font-size: 0.9rem;
 }
 
 .connection-value {
   font-weight: 600;
-  color: #2d3748;
+  color: #e2e8f0;
   font-size: 1.1rem;
   font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .connection-value.good {
-  color: #38a169;
+  color: #34d399;
 }
 
 .connection-value.bad {
-  color: #e53e3e;
+  color: #f87171;
 }
 
 .connection-value.redirect {
-  color: #d69e2e;
+  color: #fbbf24;
 }
 
 .connection-value.error {
-  color: #e53e3e;
+  color: #f87171;
 }
 
 /* Recommendations */
 .recommendations {
-  background: #fffaf0;
+  background: rgba(245, 158, 11, 0.1);
   border-radius: 12px;
   padding: 25px;
-  border: 1px solid #feebc8;
+  border: 1px solid rgba(245, 158, 11, 0.3);
   margin-bottom: 30px;
 }
 
 .recommendations h4 {
   margin: 0 0 15px 0;
-  color: #744210;
+  color: #fbbf24;
   font-size: 1.2rem;
 }
 
@@ -928,7 +917,7 @@ export default {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 12px;
-  color: #744210;
+  color: #fde68a;
   line-height: 1.5;
 }
 
@@ -948,9 +937,9 @@ export default {
 }
 
 .debug-toggle {
-  background: #e2e8f0;
-  color: #4a5568;
-  border: none;
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
   padding: 10px 20px;
   border-radius: 8px;
   font-weight: 500;
@@ -960,12 +949,13 @@ export default {
 }
 
 .debug-toggle:hover {
-  background: #cbd5e0;
+  background: #2d3748;
+  border-color: #3b82f6;
 }
 
 .debug-output {
-  background: #2d3748;
-  color: #e2e8f0;
+  background: #0f172a;
+  color: #94a3b8;
   padding: 20px;
   border-radius: 8px;
   font-family: 'Monaco', 'Courier New', monospace;
@@ -973,19 +963,22 @@ export default {
   overflow-x: auto;
   max-height: 300px;
   overflow-y: auto;
+  border: 1px solid #334155;
 }
 
 /* Recent Checks */
 .recent-checks {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 25px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .recent-checks h3 {
   margin: 0 0 20px 0;
-  color: #4a5568;
+  color: #f8fafc;
   font-size: 1.3rem;
 }
 
@@ -1000,16 +993,16 @@ export default {
   align-items: center;
   gap: 15px;
   padding: 15px 20px;
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .check-item:hover {
-  background: #edf2f7;
-  border-color: #cbd5e0;
+  background: #1e293b;
+  border-color: #3b82f6;
   transform: translateX(5px);
 }
 
@@ -1019,11 +1012,11 @@ export default {
 }
 
 .check-status.success {
-  color: #38a169;
+  color: #34d399;
 }
 
 .check-status.error {
-  color: #e53e3e;
+  color: #f87171;
 }
 
 .check-info {
@@ -1032,14 +1025,14 @@ export default {
 
 .check-url {
   font-weight: 600;
-  color: #4a5568;
+  color: #f8fafc;
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.9rem;
   margin-bottom: 4px;
 }
 
 .check-time {
-  color: #718096;
+  color: #94a3b8;
   font-size: 0.8rem;
 }
 
@@ -1048,9 +1041,9 @@ export default {
 }
 
 .recheck-btn {
-  background: #e2e8f0;
-  color: #4a5568;
-  border: none;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -1063,23 +1056,35 @@ export default {
 }
 
 .recheck-btn:hover {
-  background: #38a169;
+  background: #10b981;
   color: white;
   transform: rotate(90deg);
+  border-color: #10b981;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .https-container {
     padding: 20px;
-  }
-  
-  .checker-header {
-    padding: 20px;
-  }
-  
-  .checker-header h1 {
-    font-size: 2rem;
   }
   
   .input-with-button {

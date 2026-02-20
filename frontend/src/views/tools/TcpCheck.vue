@@ -1,8 +1,6 @@
 <template>
   <div class="tcp-check-page">
     <div class="tcp-check-container">
-    
-
       <!-- Main Form -->
       <div class="check-form">
         <div class="form-grid">
@@ -122,64 +120,9 @@
             Clear
           </button>
 
-          <button 
-            @click="toggleAdvanced" 
-            class="advanced-toggle-btn"
-          >
-            <span class="button-icon">{{ showAdvanced ? '▲' : '▼' }}</span>
-            Advanced
-          </button>
+  
         </div>
 
-        <!-- Advanced Options -->
-        <div v-if="showAdvanced" class="advanced-options">
-          <div class="advanced-grid">
-            <div class="option-group">
-              <label>
-                <input type="checkbox" v-model="options.customTimeout" />
-                Custom Timeout
-              </label>
-              <div class="option-control">
-                <input 
-                  v-model.number="options.timeoutValue" 
-                  type="range" 
-                  min="1" 
-                  max="10" 
-                  step="1"
-                  :disabled="!options.customTimeout"
-                  class="timeout-slider"
-                />
-                <span class="slider-value">{{ options.timeoutValue }}s</span>
-              </div>
-            </div>
-            
-            <div class="option-group">
-              <label>
-                <input type="checkbox" v-model="options.retry" />
-                Auto Retry
-              </label>
-              <div class="option-control">
-                <input 
-                  v-model.number="options.retryCount" 
-                  type="range" 
-                  min="1" 
-                  max="5" 
-                  step="1"
-                  :disabled="!options.retry"
-                  class="retry-slider"
-                />
-                <span class="slider-value">{{ options.retryCount }} times</span>
-              </div>
-            </div>
-            
-            <div class="option-group">
-              <label>
-                <input type="checkbox" v-model="options.verbose" />
-                Verbose Output
-              </label>
-            </div>
-          </div>
-        </div>
 
         <div v-if="error" class="error-message">
           <span class="error-icon">⚠️</span>
@@ -473,6 +416,7 @@ export default {
       progressInterval: null,
       ws: null,
       testStartTime: null,
+      isWaitingForResponse: true, // New flag to track if we're waiting for response
       
       result: {
         status: '', // 'open', 'closed', 'filtered', 'error'
@@ -621,6 +565,7 @@ export default {
       this.isChecking = true
       this.showResults = false
       this.error = null
+      this.isWaitingForResponse = true // Reset waiting flag
       this.result = {
         status: '',
         title: '',
@@ -636,7 +581,11 @@ export default {
       this.elapsedTime = 0
       this.currentStep = 0
       this.progress = 0
-      this.startProgressSimulation()
+      
+      // Start progress simulation based on timeout
+      const timeoutValue = this.options.customTimeout ? this.options.timeoutValue * 1000 : 5000
+      this.startProgressSimulation(timeoutValue)
+      
       try {
         const response = await fetch(`${API_URL}/v1/tcpCheck`, {
           method: 'POST',
@@ -655,32 +604,58 @@ export default {
         }
         
         const data = await response.json()
+        
+        // If we get a response (open port), immediately update progress and show results
+        if (data && data.status === 'open') {
+          this.isWaitingForResponse = false
+          this.progress = 100
+          this.currentStep = 4
+        }
+        
         this.processResult(data)
         
       } catch (err) {
         console.error('TCP check error:', err)
-        this.handleError(err)
+        // Only handle as error if we haven't already processed a result
+        if (this.isWaitingForResponse) {
+          this.isWaitingForResponse = false
+          this.handleError(err)
+        }
       } finally {
         this.isChecking = false
         this.cleanup()
       }
     },
     
-    startProgressSimulation() {
+    startProgressSimulation(timeoutMs) {
+      const startTime = Date.now()
+      const timeoutSeconds = timeoutMs / 1000
+      
       this.progressInterval = setInterval(() => {
-        this.elapsedTime = ((Date.now() - this.testStartTime) / 1000).toFixed(1)
-        if (this.elapsedTime < 0.5) {
-          this.currentStep = 1 
-          this.progress = 25
-        } else if (this.elapsedTime < 1) {
-          this.currentStep = 2 
-          this.progress = 50
-        } else if (this.elapsedTime < 2) {
-          this.currentStep = 3 
-          this.progress = 75
-        } else if (this.elapsedTime < 3) {
-          this.currentStep = 4 
-          this.progress = 95
+        const elapsedMs = Date.now() - this.testStartTime
+        this.elapsedTime = (elapsedMs / 1000).toFixed(1)
+        
+        // If we're still waiting for response, continue progress simulation
+        if (this.isWaitingForResponse) {
+          // Calculate progress based on elapsed time vs timeout
+          const progressPercent = Math.min((elapsedMs / timeoutMs) * 100, 95)
+          this.progress = Math.round(progressPercent)
+          
+          // Update steps based on progress
+          if (elapsedMs < 500) {
+            this.currentStep = 1 // DNS Lookup
+          } else if (elapsedMs < 1000) {
+            this.currentStep = 2 // Sending SYN
+          } else if (elapsedMs < 2000) {
+            this.currentStep = 3 // Waiting Response
+          } else {
+            this.currentStep = 3 // Still waiting
+          }
+          
+          // If we've reached timeout, show that we're waiting for response
+          if (elapsedMs >= timeoutMs) {
+            this.currentStep = 3 // Still in waiting response
+          }
         }
       }, 100)
     },
@@ -689,17 +664,18 @@ export default {
       const duration = Date.now() - this.testStartTime
       let status = 'closed'
       let title = 'Port Closed'
-      let message = 'No response received'
+      let message = 'No response received (connection refused or timeout)'
       let responseTime = duration
       
       if (data && data.status === 'open') {
         status = 'open'
         title = 'Port Open'
-        message = 'response received - Port is open'
+        message = 'Response received - Port is open and accepting connections'
+        responseTime = data.responseTime || duration
       } else if (data && data.status === 'filtered') {
         status = 'filtered'
         title = 'Port Filtered'
-        message = 'Port may be filtered by firewall'
+        message = 'Port may be filtered by firewall (no response)'
       }
       
       this.result = {
@@ -713,7 +689,8 @@ export default {
           synSent: 'Yes',
           synAckReceived: status === 'open' ? 'Yes' : 'No',
           packetSize: '60 bytes',
-          ttl: '64'
+          ttl: '64',
+          timeout: this.options.customTimeout ? this.options.timeoutValue : 5
         },
         banner: data.banner || '',
         recommendation: this.getRecommendation(status)
@@ -729,17 +706,17 @@ export default {
         case 'open':
           return {
             title: 'Port Security Check',
-            message: 'An open port may be a security risk. Consider firewall rules.'
+            message: 'An open port may be a security risk. Ensure this service is intended to be publicly accessible and properly secured.'
           }
         case 'closed':
           return {
             title: 'Standard Security',
-            message: 'Closed ports are secure by default.'
+            message: 'Closed ports are secure by default. No action required.'
           }
         case 'filtered':
           return {
             title: 'Firewall Detected',
-            message: 'A firewall appears to be blocking connections.'
+            message: 'A firewall appears to be blocking connections. Check your firewall rules if this port should be accessible.'
           }
         default:
           return null
@@ -756,11 +733,14 @@ export default {
         responseTime: 0,
         timestamp: new Date().toLocaleString(),
         duration: Math.round(duration),
-        details: null,
+        details: {
+          error: err.message,
+          timeout: this.options.customTimeout ? this.options.timeoutValue : 5
+        },
         banner: '',
         recommendation: {
           title: 'Troubleshooting',
-          message: 'Check your network connection and ensure the host is reachable.'
+          message: 'Check your network connection, firewall settings, and ensure the host is reachable.'
         }
       }
       
@@ -770,6 +750,7 @@ export default {
     
     stopTest() {
       this.isChecking = false
+      this.isWaitingForResponse = false
       this.cleanup()
       
       this.result = {
@@ -880,7 +861,6 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
       
       navigator.clipboard.writeText(text)
         .then(() => {
-          // Show success message
           alert('Result copied to clipboard!')
         })
         .catch(err => {
@@ -934,11 +914,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 </script>
 
 <style scoped>
+/* Dark Mode Theme */
 .tcp-check-page {
-  padding: 20px;
+  padding: 24px;
   width: 100%;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
+  color: #e2e8f0;
 }
 
 .tcp-check-container {
@@ -947,39 +929,15 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   padding: 20px;
 }
 
-/* Header */
-.check-header {
-  text-align: center;
-  margin-bottom: 40px;
-  padding: 30px;
-  background: white;
-  border-radius: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
-
-.check-header h1 {
-  font-size: 2.5rem;
-  color: #2d3748;
-  margin: 0 0 10px 0;
-  font-weight: 700;
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-  color: #718096;
-  font-size: 1.1rem;
-  margin: 0;
-}
-
 /* Form */
 .check-form {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .form-grid {
@@ -1005,7 +963,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   gap: 10px;
   font-weight: 600;
-  color: #4a5568;
+  color: #cbd5e1;
   margin-bottom: 12px;
   font-size: 1rem;
 }
@@ -1021,19 +979,29 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .host-input, .port-input {
   width: 100%;
   padding: 16px 20px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 10px;
   font-size: 1rem;
   font-family: 'Monaco', 'Courier New', monospace;
   transition: all 0.3s;
-  background: #f8fafc;
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 .host-input:focus, .port-input:focus {
   outline: none;
-  border-color: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-  background: white;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.host-input::placeholder, .port-input::placeholder {
+  color: #64748b;
+}
+
+.host-input:disabled, .port-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: #1e293b;
 }
 
 .suggestions {
@@ -1041,11 +1009,11 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   top: 100%;
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 8px;
   margin-top: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   overflow: hidden;
 }
@@ -1054,11 +1022,12 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   padding: 12px 20px;
   cursor: pointer;
   transition: all 0.2s;
-  border-bottom: 1px solid #f7fafc;
+  color: #cbd5e1;
+  border-bottom: 1px solid #334155;
 }
 
 .suggestion-item:hover {
-  background: #f8fafc;
+  background: #2d3748;
 }
 
 .suggestion-item:last-child {
@@ -1077,7 +1046,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .ports-header {
   font-size: 0.9rem;
-  color: #718096;
+  color: #94a3b8;
   margin-bottom: 10px;
   font-weight: 500;
 }
@@ -1102,9 +1071,10 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .port-btn {
   padding: 8px 6px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 6px;
-  background: white;
+  background: #0f172a;
+  color: #cbd5e1;
   cursor: pointer;
   transition: all 0.3s;
   display: flex;
@@ -1114,13 +1084,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .port-btn:hover {
-  border-color: #cbd5e0;
+  border-color: #3b82f6;
   transform: translateY(-2px);
+  background: #1e293b;
 }
 
 .port-btn.active {
-  background: #4299e1;
-  border-color: #3182ce;
+  background: #3b82f6;
+  border-color: #3b82f6;
   color: white;
 }
 
@@ -1139,14 +1110,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .quick-tests {
   margin: 25px 0;
   padding: 20px;
-  background: #f8fafc;
+  background: #1e293b;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
 }
 
 .quick-tests h4 {
   margin: 0 0 15px 0;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
 }
 
@@ -1170,9 +1141,10 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .quick-btn {
   padding: 12px 15px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #334155;
   border-radius: 8px;
-  background: white;
+  background: #0f172a;
+  color: #cbd5e1;
   cursor: pointer;
   transition: all 0.3s;
   display: flex;
@@ -1181,13 +1153,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .quick-btn:hover {
-  border-color: #cbd5e0;
+  border-color: #3b82f6;
   transform: translateY(-2px);
+  background: #1e293b;
 }
 
 .quick-btn.active {
-  background: #4299e1;
-  border-color: #3182ce;
+  background: #3b82f6;
+  border-color: #3b82f6;
   color: white;
 }
 
@@ -1222,14 +1195,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .check-button {
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   flex: 1;
 }
 
 .check-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 
 .check-button:disabled {
@@ -1238,33 +1211,34 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .stop-button {
-  background: linear-gradient(135deg, #fc8181 0%, #e53e3e 100%);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
 }
 
 .stop-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(229, 62, 62, 0.3);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
 }
 
 .clear-button {
-  background: #e2e8f0;
-  color: #4a5568;
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
 }
 
 .clear-button:hover:not(:disabled) {
-  background: #cbd5e0;
+  background: #2d3748;
   transform: translateY(-2px);
 }
 
 .advanced-toggle-btn {
-  background: #f8fafc;
-  color: #4a5568;
-  border: 2px solid #e2e8f0;
+  background: #0f172a;
+  color: #cbd5e1;
+  border: 1px solid #334155;
 }
 
 .advanced-toggle-btn:hover {
-  border-color: #cbd5e0;
+  border-color: #3b82f6;
   transform: translateY(-2px);
 }
 
@@ -1275,8 +1249,8 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid white;
-  border-top-color: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -1289,9 +1263,9 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .advanced-options {
   margin: 20px 0;
   padding: 25px;
-  background: #f8fafc;
+  background: #1e293b;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
   animation: slideDown 0.3s ease-out;
 }
 
@@ -1317,8 +1291,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   gap: 10px;
   font-weight: 500;
-  color: #4a5568;
+  color: #cbd5e1;
   cursor: pointer;
+}
+
+.option-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #3b82f6;
 }
 
 .option-control {
@@ -1330,7 +1310,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .timeout-slider, .retry-slider {
   flex: 1;
   height: 6px;
-  background: #e2e8f0;
+  background: #334155;
   border-radius: 3px;
   outline: none;
   -webkit-appearance: none;
@@ -1341,17 +1321,17 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   -webkit-appearance: none;
   width: 20px;
   height: 20px;
-  background: #4299e1;
+  background: #3b82f6;
   border-radius: 50%;
   cursor: pointer;
-  border: 3px solid white;
+  border: 2px solid white;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .slider-value {
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.9rem;
-  color: #718096;
+  color: #94a3b8;
   min-width: 80px;
 }
 
@@ -1359,10 +1339,10 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .error-message {
   margin-top: 20px;
   padding: 15px;
-  background: #fed7d7;
-  color: #c53030;
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
   border-radius: 8px;
-  border-left: 4px solid #e53e3e;
+  border-left: 4px solid #ef4444;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1375,11 +1355,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 /* Progress Section */
 .progress-section {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
   animation: slideInUp 0.5s ease-out;
 }
 
@@ -1400,7 +1382,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   gap: 10px;
   font-weight: 500;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
 }
 
@@ -1410,21 +1392,22 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .progress-time {
   font-family: 'Monaco', 'Courier New', monospace;
-  color: #718096;
+  color: #94a3b8;
   font-size: 0.9rem;
 }
 
 .progress-container {
   height: 10px;
-  background: #e2e8f0;
+  background: #1e293b;
   border-radius: 5px;
   overflow: hidden;
   margin-bottom: 30px;
+  border: 1px solid #334155;
 }
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #4299e1, #3182ce);
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
   border-radius: 5px;
   transition: width 0.3s ease;
   position: relative;
@@ -1468,29 +1451,31 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #e2e8f0;
+  background: #334155;
   transition: all 0.3s;
 }
 
 .step.active .step-dot {
-  background: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .step-label {
   font-size: 0.85rem;
-  color: #718096;
+  color: #94a3b8;
   text-align: center;
   font-weight: 500;
 }
 
 /* Results Section */
 .results-section {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
   animation: slideInUp 0.5s ease-out;
 }
 
@@ -1500,12 +1485,12 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   margin-bottom: 25px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 1px solid #334155;
 }
 
 .result-title h2 {
   margin: 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.8rem;
 }
 
@@ -1516,7 +1501,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   margin-top: 10px;
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 1.1rem;
-  color: #4a5568;
+  color: #cbd5e1;
 }
 
 .target-icon {
@@ -1525,7 +1510,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .target-port {
   font-weight: 700;
-  color: #4299e1;
+  color: #60a5fa;
 }
 
 .result-actions {
@@ -1535,10 +1520,10 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .action-btn {
   padding: 10px 20px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 8px;
-  color: #4a5568;
+  color: #cbd5e1;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s;
@@ -1548,8 +1533,8 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .action-btn:hover {
-  background: #edf2f7;
-  border-color: #cbd5e0;
+  background: #2d3748;
+  border-color: #3b82f6;
   transform: translateY(-2px);
 }
 
@@ -1561,28 +1546,28 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .result-card {
   border-radius: 12px;
   overflow: hidden;
-  border: 2px solid #e2e8f0;
+  border: 2px solid transparent;
   transition: all 0.3s;
 }
 
 .result-card.open {
-  border-color: #38a169;
-  background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .result-card.closed {
-  border-color: #e53e3e;
-  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .result-card.filtered {
-  border-color: #ed8936;
-  background: linear-gradient(135deg, #fffaf0 0%, #feebc8 100%);
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .result-card.error {
-  border-color: #718096;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border-color: #6b7280;
+  background: rgba(107, 114, 128, 0.1);
 }
 
 .result-status {
@@ -1611,13 +1596,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .status-title {
   margin: 0 0 10px 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.5rem;
 }
 
 .status-message {
   margin: 0 0 15px 0;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
   line-height: 1.5;
 }
@@ -1636,21 +1621,21 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .detail-label {
   font-size: 0.85rem;
-  color: #718096;
+  color: #94a3b8;
   font-weight: 500;
 }
 
 .detail-value {
   font-family: 'Monaco', 'Courier New', monospace;
   font-weight: 600;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.1rem;
 }
 
 /* Technical Details */
 .technical-details {
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.5);
+  border-top: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.4);
 }
 
 .details-header {
@@ -1663,18 +1648,18 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .details-header:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .details-title {
   font-weight: 600;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
 }
 
 .toggle-icon {
   font-size: 1.2rem;
-  color: #718096;
+  color: #94a3b8;
 }
 
 .details-content {
@@ -1693,9 +1678,9 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: white;
+  background: #0f172a;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
 }
 
 .banner-section {
@@ -1704,13 +1689,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .banner-section h4 {
   margin: 0 0 15px 0;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.1rem;
 }
 
 .banner-content {
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #334155;
   border-radius: 8px;
   padding: 20px;
   max-height: 200px;
@@ -1718,15 +1703,16 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.9rem;
   line-height: 1.4;
+  color: #94a3b8;
 }
 
 /* Recommendation */
 .recommendation {
   margin-top: 25px;
   padding: 25px;
-  background: linear-gradient(135deg, #bee3f8 0%, #90cdf4 100%);
+  background: rgba(59, 130, 246, 0.1);
   border-radius: 10px;
-  border: 1px solid #63b3ed;
+  border: 1px solid rgba(59, 130, 246, 0.3);
   display: flex;
   gap: 20px;
   align-items: flex-start;
@@ -1743,15 +1729,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .recommendation-content strong {
   display: block;
-  color: #2c5282;
+  color: #60a5fa;
   margin-bottom: 8px;
   font-size: 1.1rem;
 }
 
 .recommendation-content p {
   margin: 0;
-  color: #2c5282;
-  opacity: 0.9;
+  color: #94a3b8;
   line-height: 1.5;
 }
 
@@ -1759,15 +1744,16 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .history-sidebar {
   position: fixed;
   top: 0;
-  right: -400px;
-  width: 400px;
+  right: -450px;
+  width: 450px;
   height: 100vh;
-  background: white;
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+  background: #1e293b;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.3);
   transition: right 0.3s ease;
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  border-left: 1px solid #334155;
 }
 
 .history-sidebar.visible {
@@ -1779,12 +1765,12 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 1px solid #334155;
 }
 
 .history-header h3 {
   margin: 0;
-  color: #2d3748;
+  color: #f8fafc;
   font-size: 1.5rem;
 }
 
@@ -1792,7 +1778,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   width: 40px;
   height: 40px;
   border: none;
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 50%;
   font-size: 1.5rem;
   cursor: pointer;
@@ -1800,10 +1786,12 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #94a3b8;
+  border: 1px solid #334155;
 }
 
 .close-history:hover {
-  background: #e53e3e;
+  background: #ef4444;
   color: white;
 }
 
@@ -1811,8 +1799,8 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   padding: 20px 25px;
   display: flex;
   gap: 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
 }
 
 .history-stat {
@@ -1820,17 +1808,17 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   text-align: center;
 }
 
-.stat-value {
+.history-stat .stat-value {
   display: block;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #4299e1;
+  color: #60a5fa;
   margin-bottom: 5px;
 }
 
-.stat-label {
+.history-stat .stat-label {
   font-size: 0.8rem;
-  color: #718096;
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1846,13 +1834,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   gap: 15px;
   padding: 15px 25px;
-  border-bottom: 1px solid #f7fafc;
+  border-bottom: 1px solid #334155;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .history-item:hover {
-  background: #f8fafc;
+  background: #2d3748;
 }
 
 .history-status {
@@ -1863,19 +1851,23 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .history-status.open {
-  background: #38a169;
+  background: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
 
 .history-status.closed {
-  background: #e53e3e;
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
 }
 
 .history-status.filtered {
-  background: #ed8936;
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .history-status.error {
-  background: #718096;
+  background: #6b7280;
+  box-shadow: 0 0 10px rgba(107, 114, 128, 0.5);
 }
 
 .history-info {
@@ -1886,7 +1878,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .history-target {
   font-family: 'Monaco', 'Courier New', monospace;
   font-weight: 600;
-  color: #4a5568;
+  color: #f8fafc;
   margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -1895,13 +1887,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 .history-time {
   font-size: 0.8rem;
-  color: #a0aec0;
+  color: #94a3b8;
 }
 
 .history-response {
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.9rem;
-  color: #718096;
+  color: #60a5fa;
   font-weight: 500;
 }
 
@@ -1918,8 +1910,8 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   width: 24px;
   height: 24px;
   border: none;
-  background: #fed7d7;
-  color: #c53030;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
   border-radius: 50%;
   font-size: 1.2rem;
   cursor: pointer;
@@ -1931,7 +1923,8 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .delete-btn:hover {
-  background: #feb2b2;
+  background: #ef4444;
+  color: white;
 }
 
 .empty-history {
@@ -1940,7 +1933,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #a0aec0;
+  color: #64748b;
   padding: 40px;
 }
 
@@ -1954,7 +1947,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   padding: 20px 25px;
   display: flex;
   gap: 10px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #334155;
 }
 
 .clear-history-btn, .export-history-btn {
@@ -1968,21 +1961,26 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 }
 
 .clear-history-btn {
-  background: #fed7d7;
-  color: #c53030;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .clear-history-btn:hover {
-  background: #feb2b2;
+  background: #ef4444;
+  color: white;
 }
 
 .export-history-btn {
-  background: #e2e8f0;
-  color: #4a5568;
+  background: #0f172a;
+  color: #cbd5e1;
+  border: 1px solid #334155;
 }
 
 .export-history-btn:hover {
-  background: #cbd5e0;
+  background: #1e293b;
+  border-color: #3b82f6;
+  color: #60a5fa;
 }
 
 /* History Toggle Button */
@@ -1991,7 +1989,7 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   top: 100px;
   right: 30px;
   padding: 12px 20px;
-  background: #4299e1;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
   border-radius: 25px;
@@ -2001,17 +1999,17 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   display: flex;
   align-items: center;
   gap: 10px;
-  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
   z-index: 999;
 }
 
 .history-toggle-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(66, 153, 225, 0.4);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
 }
 
 .history-toggle-btn.active {
-  background: #3182ce;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 }
 
 .history-icon {
@@ -2020,16 +2018,18 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 
 /* Stats Section */
 .stats-section {
-  background: white;
-  border-radius: 15px;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
   padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .stats-section h3 {
   margin: 0 0 25px 0;
-  color: #4a5568;
+  color: #f8fafc;
   font-size: 1.5rem;
 }
 
@@ -2045,30 +2045,31 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   align-items: center;
   gap: 20px;
   padding: 25px;
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
   transition: all 0.3s;
 }
 
 .stat-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border-color: #3b82f6;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
 .stat-card.success {
-  border-color: #38a169;
-  background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .stat-card.failed {
-  border-color: #e53e3e;
-  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .stat-card.warning {
-  border-color: #ed8936;
-  background: linear-gradient(135deg, #fffaf0 0%, #feebc8 100%);
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .stat-icon {
@@ -2082,13 +2083,13 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .stat-value {
   font-size: 1.8rem;
   font-weight: 700;
-  color: #2d3748;
+  color: #f8fafc;
   margin-bottom: 5px;
 }
 
 .stat-label {
   font-size: 0.9rem;
-  color: #718096;
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -2096,14 +2097,14 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
 .most-tested {
   margin-top: 30px;
   padding: 25px;
-  background: #f8fafc;
+  background: #0f172a;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
 }
 
 .most-tested h4 {
   margin: 0 0 15px 0;
-  color: #4a5568;
+  color: #cbd5e1;
   font-size: 1.2rem;
 }
 
@@ -2118,45 +2119,38 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: white;
+  background: #1e293b;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #334155;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .target-item:hover {
-  background: #f8fafc;
-  border-color: #cbd5e0;
+  background: #2d3748;
+  border-color: #3b82f6;
   transform: translateX(5px);
 }
 
 .target-name {
   font-weight: 500;
-  color: #4a5568;
+  color: #cbd5e1;
 }
 
 .target-count {
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.9rem;
-  color: #718096;
-  background: #edf2f7;
+  color: #60a5fa;
+  background: #0f172a;
   padding: 4px 10px;
   border-radius: 12px;
+  border: 1px solid #334155;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .tcp-check-container {
     padding: 10px;
-  }
-  
-  .check-header {
-    padding: 20px;
-  }
-  
-  .check-header h1 {
-    font-size: 2rem;
   }
   
   .history-sidebar {
@@ -2196,5 +2190,24 @@ ${this.result.banner ? `Banner:\n${this.result.banner}` : ''}
   .ports-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 </style>
