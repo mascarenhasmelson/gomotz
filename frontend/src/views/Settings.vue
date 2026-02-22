@@ -222,7 +222,7 @@
           </div>
 
           <!-- VLAN Sniffing Section -->
-          <div class="form-section">
+          <!-- <div class="form-section">
             <div class="section-header" @click="toggleSniffing">
               <h3>VLAN Sniffing</h3>
               <button class="toggle-btn">
@@ -277,7 +277,7 @@
                 </div>
               </div>
             </div>
-          </div>
+          </div> -->
 
           <!-- Action Buttons -->
           <div class="form-actions">

@@ -125,33 +125,11 @@ const router = createRouter({
        {
       path: '/settings',
       component: () => import('../views/Settings.vue'),
-      // children: [
-      //   {
-      //     path: 'ssh',
-      //     component: () => import('../views/remote/ssh.vue')
-      //   },
-      //   {
-      //     path: 'telnet',
-      //     component: () => import('../views/remote/telnet.vue')
-      //   },
-    
-      // ]
     },
 
   {
       path: '/block',
       component: () => import('../views/Block.vue'),
-      // children: [
-      //   {
-      //     path: 'ssh',
-      //     component: () => import('../views/remote/ssh.vue')
-      //   },
-      //   {
-      //     path: 'telnet',
-      //     component: () => import('../views/remote/telnet.vue')
-      //   },
-    
-      // ]
     }
 
   ]

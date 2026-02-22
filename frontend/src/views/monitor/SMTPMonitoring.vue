@@ -1,10 +1,13 @@
 <template>
-  <div class="tcp-monitor">
-
+  <div class="smtp-monitor">
     <!-- Monitor Configuration Form -->
     <div class="config-card">
+  
 
       <div class="config-form">
+      
+      
+
         <!-- Friendly Name -->
         <div class="form-row">
           <div class="form-group">
@@ -25,7 +28,7 @@
             <input 
               type="text" 
               v-model="config.hostname" 
-              placeholder="e.g., example.com or 192.168.1.1"
+              placeholder="e.g., smtp.gmail.com or mail.example.com"
               class="form-input"
             />
           </div>
@@ -34,27 +37,142 @@
             <input 
               type="number" 
               v-model="config.port" 
-              placeholder="161"
+              placeholder="25"
               min="1"
               max="65535"
               class="form-input"
             />
+            <span class="port-hint">Common: 25, 465, 587, 2525</span>
+          </div>
+        </div>
+
+        <!-- SMTP Security -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>SMTP Security</label>
+            <div class="security-options">
+              <label class="security-option">
+                <input 
+                  type="radio" 
+                  v-model="config.security" 
+                  value="none"
+                >
+                <span class="radio-label">None</span>
+              </label>
+              <label class="security-option">
+                <input 
+                  type="radio" 
+                  v-model="config.security" 
+                  value="ssl"
+                >
+                <span class="radio-label">SSL/TLS</span>
+              </label>
+              <label class="security-option">
+                <input 
+                  type="radio" 
+                  v-model="config.security" 
+                  value="starttls"
+                >
+                <span class="radio-label">STARTTLS</span>
+              </label>
+              <label class="security-option">
+                <input 
+                  type="radio" 
+                  v-model="config.security" 
+                  value="ignore"
+                >
+                <span class="radio-label">Ignore STARTTLS</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Authentication (Optional) -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="config.useAuth"
+              >
+              <span>Require Authentication</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Authentication Fields (shown when auth is enabled) -->
+        <div v-if="config.useAuth" class="auth-fields">
+          <div class="form-row dual">
+            <div class="form-group">
+              <label>Username</label>
+              <input 
+                type="text" 
+                v-model="config.username" 
+                placeholder="SMTP username"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input 
+                type="password" 
+                v-model="config.password" 
+                placeholder="••••••••"
+                class="form-input"
+              />
+            </div>
           </div>
         </div>
 
         <!-- Heartbeat Interval -->
         <div class="form-row">
-          <div class="form-group">
-            <label>Heartbeat Interval <span class="label-hint">(Check every 60 seconds)</span></label>
-            <div class="interval-input">
-              <input 
-                type="number" 
-                v-model="config.heartbeatInterval" 
-                min="1"
-                class="form-input interval-field"
-              />
-              <span class="interval-unit">seconds</span>
-              <span class="interval-example">1 minute</span>
+          <div class="form-group heartbeat-group">
+            <label>Heartbeat Interval</label>
+            <div class="heartbeat-interval-container">
+              <!-- Heartbeat Visualization Bar -->
+              <div class="heartbeat-visualization">
+                <div class="heartbeat-bar">
+                  <div 
+                    class="heartbeat-fill" 
+                    :style="{ width: (config.heartbeatInterval / 300) * 100 + '%' }"
+                  ></div>
+                </div>
+                <div class="heartbeat-markers">
+                  <span class="marker">1m</span>
+                  <span class="marker">5m</span>
+                  <span class="marker">10m</span>
+                  <span class="marker">30m</span>
+                  <span class="marker">1h</span>
+                </div>
+              </div>
+
+              <!-- Heartbeat Input and Display -->
+              <div class="heartbeat-input-group">
+                <div class="heartbeat-number-input">
+                  <input 
+                    type="number" 
+                    v-model="config.heartbeatInterval" 
+                    min="1"
+                    max="3600"
+                    class="heartbeat-number-field"
+                  />
+                  <span class="heartbeat-unit">minutes</span>
+                </div>
+                <div class="heartbeat-display">
+                  <span class="heartbeat-value">{{ formatHeartbeatTime(config.heartbeatInterval * 60) }}</span>
+                  <span class="heartbeat-badge" :class="getHeartbeatCategory(config.heartbeatInterval * 60)">
+                    {{ getHeartbeatCategory(config.heartbeatInterval * 60) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Heartbeat Description -->
+              <div class="heartbeat-description">
+                <span class="description-icon">⏱️</span>
+                <span class="description-text">
+                  Check every <strong>{{ config.heartbeatInterval }} minute{{ config.heartbeatInterval > 1 ? 's' : '' }}</strong>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -63,14 +181,24 @@
         <div class="form-row">
           <div class="form-group">
             <label>Retries</label>
-            <input 
-              type="number" 
-              v-model="config.retries" 
-              min="0"
-              max="10"
-              class="form-input retries-input"
-            />
-            <span class="input-hint">Maximum retries before the service is marked as down and a notification is sent</span>
+            <div class="retries-container">
+              <input 
+                type="number" 
+                v-model="config.retries" 
+                min="0"
+                max="10"
+                class="form-input retries-input"
+              />
+              <div class="retries-visualization">
+                <div 
+                  v-for="n in 5" 
+                  :key="n"
+                  class="retry-dot"
+                  :class="{ active: n <= config.retries }"
+                ></div>
+              </div>
+              <span class="input-hint">Maximum retries before marking as down</span>
+            </div>
           </div>
         </div>
 
@@ -86,6 +214,51 @@
                 class="form-input interval-field"
               />
               <span class="interval-unit">seconds</span>
+              <span class="interval-example">Retry every {{ config.retryInterval }} seconds</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resend Notification -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>Resend Notification if Down X times consecutively</label>
+            <div class="resend-container">
+              <input 
+                type="number" 
+                v-model="config.resendThreshold" 
+                min="0"
+                max="10"
+                class="form-input resend-input"
+              />
+              <span class="input-hint">{{ config.resendThreshold === 0 ? 'Resend disabled' : `Resend after ${config.resendThreshold} consecutive failures` }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Test Email (Optional) -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="config.sendTestEmail"
+              >
+              <span>Send test email on successful connection</span>
+            </label>
+          </div>
+        </div>
+
+        <div v-if="config.sendTestEmail" class="test-email-fields">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Test Recipient Email</label>
+              <input 
+                type="email" 
+                v-model="config.testRecipient" 
+                placeholder="recipient@example.com"
+                class="form-input"
+              />
             </div>
           </div>
         </div>
@@ -98,7 +271,7 @@
           </button>
           <button class="btn btn-secondary" @click="testConnection">
             <span class="btn-icon">🔍</span>
-            Test Connection
+            Test SMTP Connection
           </button>
           <button class="btn btn-danger" @click="resetForm">
             <span class="btn-icon">↺</span>
@@ -108,11 +281,11 @@
       </div>
     </div>
 
-    <!-- Active Monitors List - Scrollable with Sorting -->
+    <!-- Active SMTP Monitors List -->
     <div class="monitors-list-card">
       <div class="card-header">
         <div class="header-left">
-          <h2>Active Monitors</h2>
+          <h2>Active SMTP Monitors</h2>
           <div class="sort-controls">
             <button 
               class="sort-btn" 
@@ -123,6 +296,7 @@
               <span>Sort by Status</span>
               <span class="sort-icon">{{ getSortIcon('status') }}</span>
             </button>
+            <span class="sort-separator">|</span>
             <button 
               class="sort-btn" 
               :class="{ active: sortBy === 'name' }"
@@ -132,6 +306,7 @@
               <span>Sort by Name</span>
               <span class="sort-icon">{{ getSortIcon('name') }}</span>
             </button>
+            <span class="sort-separator">|</span>
             <button 
               class="sort-btn" 
               :class="{ active: sortBy === 'host' }"
@@ -144,11 +319,12 @@
           </div>
         </div>
         <div class="header-actions">
-          <span class="monitor-count">
-            <span class="online-count">🟢 {{ onlineCount }}</span>
-            <span class="offline-count">🔴 {{ offlineCount }}</span>
-            <span class="total-count">Total: {{ monitors.length }}</span>
-          </span>
+          <div class="monitor-stats">
+            <span class="stat-value online">{{ onlineCount }}</span>
+            <span class="stat-separator"></span>
+            <span class="stat-value offline">{{ offlineCount }}</span>
+            <span class="stat-total">Total: {{ monitors.length }}</span>
+          </div>
           <button class="btn btn-icon-only" @click="refreshMonitors" title="Refresh">
             <span>↻</span>
           </button>
@@ -172,9 +348,10 @@
                   Host:Port
                   <span class="sort-icon">{{ getSortIcon('host') }}</span>
                 </th>
-                <th>Interval</th>
+                <th>Security</th>
+                <th>Heartbeat</th>
                 <th>Retries</th>
-                <th>Last Check</th>
+                <th>Last Heartbeat</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -187,9 +364,37 @@
                 </td>
                 <td data-label="Friendly Name" class="friendly-name">{{ monitor.friendlyName }}</td>
                 <td data-label="Host:Port" class="host-port">{{ monitor.hostname }}:{{ monitor.port }}</td>
-                <td data-label="Interval">{{ monitor.interval }}s</td>
-                <td data-label="Retries">{{ monitor.retries }}</td>
-                <td data-label="Last Check" class="last-check">{{ formatLastCheck(monitor.lastCheck) }}</td>
+                <td data-label="Security">
+                  <span class="security-badge" :class="monitor.security">
+                    {{ getSecurityLabel(monitor.security) }}
+                  </span>
+                </td>
+                <td data-label="Heartbeat" class="heartbeat-cell">
+                  <div class="heartbeat-info">
+                    <span class="heartbeat-interval-badge">{{ monitor.interval }}m</span>
+                    <span class="heartbeat-interval-human">{{ formatHeartbeatTime(monitor.interval * 60) }}</span>
+                  </div>
+                  <!-- Heartbeat Timeline Visualization -->
+                  <div class="heartbeat-timeline">
+                    <div 
+                      v-for="i in 12" 
+                      :key="i"
+                      class="heartbeat-block"
+                      :class="getHeartbeatBlockClass(monitor, i)"
+                    ></div>
+                  </div>
+                </td>
+                <td data-label="Retries">
+                  <div class="retries-badge">
+                    <span class="retries-count">{{ monitor.retries }}</span>
+                    <span class="retries-max">/3</span>
+                  </div>
+                </td>
+                <td data-label="Last Heartbeat" class="last-heartbeat-cell">
+                  <span class="last-heartbeat-time">{{ formatLastHeartbeat(monitor.lastCheck) }}</span>
+                  <span class="last-heartbeat-timestamp">{{ formatTimestamp(monitor.lastCheck) }}</span>
+                  <div class="heartbeat-status-indicator" :class="monitor.status"></div>
+                </td>
                 <td data-label="Actions" class="actions">
                   <button class="action-btn" @click="editMonitor(monitor)" title="Edit">
                     ✏️
@@ -203,10 +408,10 @@
                 </td>
               </tr>
               <tr v-if="monitors.length === 0">
-                <td colspan="7" class="empty-state">
-                  <div class="empty-icon">📡</div>
-                  <p>No monitors configured yet</p>
-                  <p class="empty-hint">Create your first monitor using the form above</p>
+                <td colspan="8" class="empty-state">
+                  <div class="empty-icon">📧</div>
+                  <p>No SMTP monitors configured yet</p>
+                  <p class="empty-hint">Create your first SMTP monitor using the form above</p>
                 </td>
               </tr>
             </tbody>
@@ -219,7 +424,7 @@
     <div v-if="showTestModal" class="modal-overlay" @click.self="closeTestModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Connection Test Results</h3>
+          <h3>SMTP Connection Test Results</h3>
           <button class="close-btn" @click="closeTestModal">&times;</button>
         </div>
         <div class="modal-body">
@@ -228,20 +433,24 @@
               {{ testResult.status === 'success' ? '✅' : '❌' }}
             </div>
             <div class="result-details">
-              <h4>{{ testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed' }}</h4>
+              <h4>{{ testResult.status === 'success' ? 'SMTP Connection Successful' : 'SMTP Connection Failed' }}</h4>
               <p>{{ testResult.message }}</p>
               <div class="result-meta" v-if="testResult.details">
                 <div class="meta-item">
-                  <span class="meta-label">Host:</span>
-                  <span class="meta-value">{{ testResult.details.host }}</span>
+                  <span class="meta-label">Server:</span>
+                  <span class="meta-value">{{ testResult.details.host }}:{{ testResult.details.port }}</span>
                 </div>
                 <div class="meta-item">
-                  <span class="meta-label">Port:</span>
-                  <span class="meta-value">{{ testResult.details.port }}</span>
+                  <span class="meta-label">Security:</span>
+                  <span class="meta-value">{{ testResult.details.security }}</span>
                 </div>
                 <div class="meta-item">
                   <span class="meta-label">Response Time:</span>
                   <span class="meta-value">{{ testResult.details.responseTime }}ms</span>
+                </div>
+                <div class="meta-item" v-if="testResult.details.banner">
+                  <span class="meta-label">Server Banner:</span>
+                  <span class="meta-value">{{ testResult.details.banner }}</span>
                 </div>
               </div>
             </div>
@@ -259,30 +468,38 @@
 import { ref, reactive, computed } from 'vue'
 
 export default {
-  name: 'TCPMonitor',
+  name: 'SMTPMonitor',
   
   setup() {
     // Configuration state
     const config = reactive({
       friendlyName: 'New Monitor',
       hostname: '',
-      port: 161,
-      heartbeatInterval: 60,
+      port: 25,
+      security: 'none',
+      useAuth: false,
+      username: '',
+      password: '',
+      heartbeatInterval: 60, // in minutes
       retries: 0,
-      retryInterval: 60
+      retryInterval: 60,
+      resendThreshold: 0,
+      sendTestEmail: false,
+      testRecipient: ''
     })
 
     // Sorting state
     const sortBy = ref('status')
-    const sortDirection = ref('desc') // 'asc' or 'desc'
+    const sortDirection = ref('desc')
 
     // Monitors list with sample data
     const monitors = ref([
       {
         id: 1,
-        friendlyName: 'Production Web Server',
-        hostname: '192.168.1.100',
-        port: 80,
+        friendlyName: 'Gmail SMTP',
+        hostname: 'smtp.gmail.com',
+        port: 587,
+        security: 'starttls',
         interval: 60,
         retries: 2,
         status: 'online',
@@ -290,29 +507,32 @@ export default {
       },
       {
         id: 2,
-        friendlyName: 'Database Server',
-        hostname: '192.168.1.101',
-        port: 3306,
-        interval: 120,
+        friendlyName: 'Outlook SMTP',
+        hostname: 'smtp-mail.outlook.com',
+        port: 587,
+        security: 'starttls',
+        interval: 60,
         retries: 3,
         status: 'online',
         lastCheck: new Date(Date.now() - 45000).toISOString()
       },
       {
         id: 3,
-        friendlyName: 'Mail Server',
+        friendlyName: 'Company Mail Server',
         hostname: 'mail.example.com',
         port: 25,
-        interval: 300,
+        security: 'none',
+        interval: 120,
         retries: 1,
         status: 'offline',
-        lastCheck: new Date(Date.now() - 120000).toISOString()
+        lastCheck: new Date(Date.now() - 300000).toISOString()
       },
       {
         id: 4,
-        friendlyName: 'DNS Server',
-        hostname: '8.8.8.8',
-        port: 53,
+        friendlyName: 'Secure SMTP',
+        hostname: 'smtp.office365.com',
+        port: 587,
+        security: 'starttls',
         interval: 60,
         retries: 2,
         status: 'online',
@@ -320,27 +540,29 @@ export default {
       },
       {
         id: 5,
-        friendlyName: 'SSH Server',
-        hostname: '192.168.1.200',
-        port: 22,
-        interval: 120,
+        friendlyName: 'SSL SMTP Server',
+        hostname: 'smtp.secureserver.net',
+        port: 465,
+        security: 'ssl',
+        interval: 60,
         retries: 3,
         status: 'online',
         lastCheck: new Date(Date.now() - 60000).toISOString()
       },
       {
         id: 6,
-        friendlyName: 'Redis Cache',
-        hostname: 'cache.internal',
-        port: 6379,
-        interval: 60,
+        friendlyName: 'Legacy SMTP',
+        hostname: 'mail.oldcompany.com',
+        port: 25,
+        security: 'none',
+        interval: 300,
         retries: 2,
         status: 'offline',
-        lastCheck: new Date(Date.now() - 300000).toISOString()
+        lastCheck: new Date(Date.now() - 7200000).toISOString()
       }
     ])
 
-    // Computed properties for counts
+    // Computed properties
     const onlineCount = computed(() => {
       return monitors.value.filter(m => m.status === 'online').length
     })
@@ -349,7 +571,6 @@ export default {
       return monitors.value.filter(m => m.status === 'offline').length
     })
 
-    // Sorted monitors computed property
     const sortedMonitors = computed(() => {
       const sorted = [...monitors.value]
       
@@ -358,7 +579,6 @@ export default {
         
         switch (sortBy.value) {
           case 'status':
-            // Sort by status (online first by default)
             comparison = (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1)
             break
           case 'name':
@@ -381,23 +601,103 @@ export default {
     const showTestModal = ref(false)
     const testResult = ref({
       status: 'success',
-      message: 'Successfully connected to host:port',
+      message: 'Successfully connected to SMTP server',
       details: {
         host: '',
-        port: 161,
-        responseTime: 45
+        port: 25,
+        security: 'STARTTLS',
+        responseTime: 120,
+        banner: '220 smtp.gmail.com ESMTP'
       }
     })
+
+    // Helper Methods
+    const formatHeartbeatTime = (seconds) => {
+      if (!seconds) return '0s'
+      
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const remainingSeconds = seconds % 60
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`
+      } else if (minutes > 0) {
+        return `${minutes}m ${remainingSeconds}s`
+      } else {
+        return `${seconds}s`
+      }
+    }
+
+    const getHeartbeatCategory = (seconds) => {
+      if (seconds <= 300) return 'very-fast' // 5 min
+      if (seconds <= 900) return 'fast'      // 15 min
+      if (seconds <= 1800) return 'medium'   // 30 min
+      if (seconds <= 3600) return 'slow'     // 1 hour
+      return 'very-slow'
+    }
+
+    const getSecurityLabel = (security) => {
+      const labels = {
+        'none': 'None',
+        'ssl': 'SSL/TLS',
+        'starttls': 'STARTTLS',
+        'ignore': 'Ignore TLS'
+      }
+      return labels[security] || security
+    }
+
+    const formatTimestamp = (timestamp) => {
+      const date = new Date(timestamp)
+      return date.toLocaleTimeString()
+    }
+
+    const formatLastHeartbeat = (timestamp) => {
+      const date = new Date(timestamp)
+      const now = new Date()
+      const diffMs = now - date
+      const diffSeconds = Math.floor(diffMs / 1000)
+      const diffMinutes = Math.floor(diffSeconds / 60)
+      const diffHours = Math.floor(diffMinutes / 60)
+      const diffDays = Math.floor(diffHours / 24)
+      
+      if (diffDays > 0) {
+        return `${diffDays}d ago`
+      } else if (diffHours > 0) {
+        return `${diffHours}h ago`
+      } else if (diffMinutes > 0) {
+        return `${diffMinutes}m ago`
+      } else {
+        return 'Just now'
+      }
+    }
+
+    const getHeartbeatBlockClass = (monitor, index) => {
+      const now = Date.now()
+      const lastCheck = new Date(monitor.lastCheck).getTime()
+      const interval = monitor.interval * 60 * 1000 // Convert minutes to milliseconds
+      
+      // Simulate some recent heartbeats based on last check
+      const blockTime = lastCheck - (index * interval * 2)
+      const timeSinceBlock = now - blockTime
+      
+      if (monitor.status === 'online') {
+        if (timeSinceBlock < interval * 3) {
+          return 'success'
+        } else if (timeSinceBlock < interval * 6) {
+          return 'warning'
+        }
+      }
+      
+      return 'danger'
+    }
 
     // Methods
     const toggleSort = (field) => {
       if (sortBy.value === field) {
-        // Toggle direction if same field
         sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
       } else {
-        // New field, set to default direction
         sortBy.value = field
-        sortDirection.value = field === 'status' ? 'desc' : 'asc'
+        sortDirection.value = 'asc'
       }
     }
 
@@ -421,6 +721,7 @@ export default {
         friendlyName: config.friendlyName || 'New Monitor',
         hostname: config.hostname,
         port: config.port,
+        security: config.security,
         interval: config.heartbeatInterval,
         retries: config.retries,
         status: 'pending',
@@ -432,15 +733,25 @@ export default {
     }
 
     const testConnection = () => {
+      // Simulate SMTP connection test
+      const securityLabels = {
+        'none': 'None',
+        'ssl': 'SSL/TLS',
+        'starttls': 'STARTTLS',
+        'ignore': 'Ignoring TLS'
+      }
+
       testResult.value = {
         status: Math.random() > 0.3 ? 'success' : 'error',
         message: Math.random() > 0.3 
-          ? 'Successfully connected to host:port'
-          : 'Connection refused: Unable to establish TCP connection',
+          ? 'Successfully connected to SMTP server'
+          : 'Failed to connect to SMTP server: Connection refused',
         details: {
-          host: config.hostname || 'test.example.com',
-          port: config.port || 161,
-          responseTime: Math.floor(Math.random() * 100) + 20
+          host: config.hostname || 'smtp.example.com',
+          port: config.port || 25,
+          security: securityLabels[config.security] || 'None',
+          responseTime: Math.floor(Math.random() * 200) + 50,
+          banner: Math.random() > 0.5 ? '220 smtp.example.com ESMTP Postfix' : undefined
         }
       }
       showTestModal.value = true
@@ -449,19 +760,26 @@ export default {
     const resetForm = () => {
       config.friendlyName = 'New Monitor'
       config.hostname = ''
-      config.port = 161
+      config.port = 25
+      config.security = 'none'
+      config.useAuth = false
+      config.username = ''
+      config.password = ''
       config.heartbeatInterval = 60
       config.retries = 0
       config.retryInterval = 60
+      config.resendThreshold = 0
+      config.sendTestEmail = false
+      config.testRecipient = ''
     }
 
     const editMonitor = (monitor) => {
       config.friendlyName = monitor.friendlyName
       config.hostname = monitor.hostname
       config.port = monitor.port
+      config.security = monitor.security
       config.heartbeatInterval = monitor.interval
       config.retries = monitor.retries
-      config.retryInterval = monitor.interval
       
       document.querySelector('.config-card').scrollIntoView({ behavior: 'smooth' })
     }
@@ -487,17 +805,6 @@ export default {
       }))
     }
 
-    const formatLastCheck = (timestamp) => {
-      const date = new Date(timestamp)
-      const now = new Date()
-      const diffMs = now - date
-      const diffMins = Math.floor(diffMs / 60000)
-      
-      if (diffMins < 1) return 'Just now'
-      if (diffMins < 60) return `${diffMins}m ago`
-      return date.toLocaleTimeString()
-    }
-
     const closeTestModal = () => {
       showTestModal.value = false
     }
@@ -512,6 +819,12 @@ export default {
       testResult,
       sortBy,
       sortDirection,
+      formatHeartbeatTime,
+      getHeartbeatCategory,
+      getSecurityLabel,
+      formatTimestamp,
+      formatLastHeartbeat,
+      getHeartbeatBlockClass,
       toggleSort,
       getSortIcon,
       saveMonitor,
@@ -521,7 +834,6 @@ export default {
       pauseMonitor,
       deleteMonitor,
       refreshMonitors,
-      formatLastCheck,
       closeTestModal
     }
   }
@@ -529,7 +841,7 @@ export default {
 </script>
 
 <style scoped>
-.tcp-monitor {
+.smtp-monitor {
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
@@ -571,11 +883,12 @@ export default {
   overflow: hidden;
 }
 
+/* Updated Card Header Styles */
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(15, 23, 42, 0.4);
   flex-wrap: wrap;
@@ -585,99 +898,238 @@ export default {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 32px;
   flex-wrap: wrap;
 }
 
 .card-header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 600;
   color: #f8fafc;
+  letter-spacing: -0.02em;
+}
+
+.badge {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 /* Sort Controls */
 .sort-controls {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  padding: 4px 16px;
+  border-radius: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
 .sort-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: transparent;
+  border: none;
   color: #94a3b8;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 8px;
+  border-radius: 20px;
 }
 
 .sort-btn:hover {
-  background: #2d3748;
-  border-color: #3b82f6;
   color: #60a5fa;
 }
 
 .sort-btn.active {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: white;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .sort-icon {
   font-size: 0.9rem;
+  opacity: 0.8;
 }
 
-.sortable-header {
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
+.sort-separator {
+  color: #334155;
+  font-weight: 300;
+  font-size: 1.1rem;
 }
 
-.sortable-header:hover {
-  color: #60a5fa;
-}
-
+/* Header Actions */
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
-.monitor-count {
+.monitor-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.9rem;
+  gap: 16px;
   background: #1e293b;
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 8px 20px;
+  border-radius: 40px;
   border: 1px solid #334155;
 }
 
-.online-count {
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-value.online {
   color: #34d399;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
-.offline-count {
+.stat-value.online::before {
+  content: '🟢';
+  font-size: 1rem;
+  margin-right: 4px;
+}
+
+.stat-value.offline {
   color: #f87171;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
-.total-count {
+.stat-value.offline::before {
+  content: '🔴';
+  font-size: 1rem;
+  margin-right: 4px;
+}
+
+.stat-separator {
+  width: 1px;
+  height: 24px;
+  background: #334155;
+}
+
+.stat-total {
   color: #94a3b8;
-  padding-left: 8px;
-  border-left: 1px solid #334155;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding-left: 4px;
+}
+
+.btn-icon-only {
+  padding: 10px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 40px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  width: 42px;
+  height: 42px;
+}
+
+.btn-icon-only:hover {
+  background: #2d3748;
+  color: #60a5fa;
+  transform: rotate(90deg);
+}
+
+/* Monitor Type Display */
+.monitor-type-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.type-badge {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.type-description {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+/* Security Options */
+.security-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.security-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.security-option input[type="radio"] {
+  accent-color: #3b82f6;
+  width: 16px;
+  height: 16px;
+}
+
+.radio-label {
+  color: #e2e8f0;
+}
+
+/* Checkbox Label */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #cbd5e1;
+}
+
+.checkbox-label input[type="checkbox"] {
+  accent-color: #3b82f6;
+  width: 16px;
+  height: 16px;
+}
+
+/* Authentication Fields */
+.auth-fields {
+  margin-top: 16px;
+  padding: 16px;
+  background: #0f172a;
+  border-radius: 8px;
+  border: 1px solid #334155;
+}
+
+/* Test Email Fields */
+.test-email-fields {
+  margin-top: 16px;
+}
+
+/* Port Hint */
+.port-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 /* Form Styles */
@@ -710,12 +1162,6 @@ export default {
   gap: 8px;
 }
 
-.label-hint {
-  font-size: 0.8rem;
-  color: #64748b;
-  font-weight: 400;
-}
-
 .form-input {
   background: #0f172a;
   border: 1px solid #334155;
@@ -734,11 +1180,199 @@ export default {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-.form-input::placeholder {
-  color: #475569;
+/* Heartbeat Styles */
+.heartbeat-group {
+  gap: 8px;
 }
 
-/* Interval input */
+.heartbeat-interval-container {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.heartbeat-visualization {
+  margin-bottom: 16px;
+}
+
+.heartbeat-bar {
+  height: 8px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.heartbeat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.heartbeat-markers {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #64748b;
+  padding: 0 4px;
+}
+
+.marker {
+  position: relative;
+}
+
+.marker::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 4px;
+  background: #334155;
+}
+
+.heartbeat-input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.heartbeat-number-input {
+  display: flex;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.heartbeat-number-field {
+  width: 80px;
+  padding: 8px;
+  background: #1e293b;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.heartbeat-number-field:focus {
+  outline: none;
+}
+
+.heartbeat-unit {
+  padding: 8px;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  border-left: 1px solid #334155;
+}
+
+.heartbeat-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heartbeat-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.heartbeat-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.heartbeat-badge.very-fast {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.heartbeat-badge.fast {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.heartbeat-badge.medium {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.heartbeat-badge.slow {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.heartbeat-description {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #1e293b;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+/* Retries */
+.retries-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.retries-input {
+  width: 80px;
+  margin-bottom: 0;
+}
+
+.retries-visualization {
+  display: flex;
+  gap: 4px;
+}
+
+.retry-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 2px solid #334155;
+  transition: all 0.2s ease;
+}
+
+.retry-dot.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+/* Resend */
+.resend-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.resend-input {
+  width: 80px;
+}
+
+/* Interval */
 .interval-input {
   display: flex;
   align-items: center;
@@ -747,7 +1381,7 @@ export default {
 }
 
 .interval-field {
-  width: 100px;
+  width: 80px;
 }
 
 .interval-unit {
@@ -756,24 +1390,12 @@ export default {
 }
 
 .interval-example {
+  color: #64748b;
+  font-size: 0.85rem;
   background: #1e293b;
-  color: #94a3b8;
   padding: 4px 10px;
   border-radius: 16px;
-  font-size: 0.85rem;
   border: 1px solid #334155;
-}
-
-.retries-input {
-  width: 100px;
-  margin-bottom: 6px;
-}
-
-.input-hint {
-  font-size: 0.8rem;
-  color: #64748b;
-  line-height: 1.4;
-  max-width: 400px;
 }
 
 /* Form Actions */
@@ -832,31 +1454,7 @@ export default {
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
-.btn-icon-only {
-  padding: 8px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-icon-only:hover {
-  background: #2d3748;
-  color: #60a5fa;
-  transform: rotate(90deg);
-}
-
-.btn-icon {
-  font-size: 1.1rem;
-}
-
-/* Monitors List Card - Scrollable */
+/* Table Styles */
 .monitors-list-card {
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
@@ -870,16 +1468,12 @@ export default {
   max-height: 500px;
 }
 
-/* Table Container - Scrollable */
 .monitors-table-container {
   overflow-y: auto;
   overflow-x: auto;
   flex: 1;
-  scrollbar-width: thin;
-  scrollbar-color: #334155 #0f172a;
 }
 
-/* Custom scrollbar styling */
 .monitors-table-container::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -887,7 +1481,6 @@ export default {
 
 .monitors-table-container::-webkit-scrollbar-track {
   background: #0f172a;
-  border-radius: 4px;
 }
 
 .monitors-table-container::-webkit-scrollbar-thumb {
@@ -895,17 +1488,11 @@ export default {
   border-radius: 4px;
 }
 
-.monitors-table-container::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Ensure table takes full width */
 .monitors-table {
-  min-width: 800px;
+  min-width: 1000px;
   padding: 0 24px 24px 24px;
 }
 
-/* Keep thead sticky */
 .monitors-table table {
   width: 100%;
   border-collapse: collapse;
@@ -916,17 +1503,6 @@ export default {
   top: 0;
   background: rgba(30, 41, 59, 0.95);
   z-index: 10;
-  backdrop-filter: blur(4px);
-}
-
-.monitors-table table thead::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: rgba(148, 163, 184, 0.2);
 }
 
 .monitors-table table thead th {
@@ -950,6 +1526,7 @@ export default {
   background: rgba(59, 130, 246, 0.1);
 }
 
+/* Table Cell Styles */
 .status-badge {
   display: inline-block;
   font-size: 1.2rem;
@@ -965,9 +1542,145 @@ export default {
   color: #60a5fa;
 }
 
-.last-check {
+.security-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.security-badge.none {
+  background: rgba(107, 114, 128, 0.1);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.security-badge.ssl {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.security-badge.starttls {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.heartbeat-cell {
+  min-width: 150px;
+}
+
+.heartbeat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.heartbeat-interval-badge {
+  padding: 4px 8px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.heartbeat-interval-human {
+  font-size: 0.75rem;
   color: #94a3b8;
-  font-size: 0.9rem;
+}
+
+.heartbeat-timeline {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.heartbeat-block {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #1e293b;
+  transition: all 0.2s;
+}
+
+.heartbeat-block.success {
+  background: #10b981;
+}
+
+.heartbeat-block.warning {
+  background: #f59e0b;
+}
+
+.heartbeat-block.danger {
+  background: #ef4444;
+}
+
+.retries-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 2px 8px;
+}
+
+.retries-count {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.retries-max {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-left: 2px;
+}
+
+.last-heartbeat-cell {
+  position: relative;
+  padding-right: 20px !important;
+}
+
+.last-heartbeat-time {
+  display: block;
+  font-weight: 500;
+  color: #f8fafc;
+}
+
+.last-heartbeat-timestamp {
+  display: block;
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.heartbeat-status-indicator {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.heartbeat-status-indicator.online {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  animation: pulse 2s infinite;
+}
+
+.heartbeat-status-indicator.offline {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .actions {
@@ -997,7 +1710,6 @@ export default {
   text-align: center;
   padding: 60px 24px;
   color: #94a3b8;
-  min-width: 600px;
 }
 
 .empty-icon {
@@ -1010,16 +1722,6 @@ export default {
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
-}
-
-.empty-state p {
-  margin: 8px 0;
-  font-size: 1rem;
-}
-
-.empty-hint {
-  font-size: 0.9rem;
-  color: #64748b;
 }
 
 /* Modal */
@@ -1040,7 +1742,7 @@ export default {
 .modal-content {
   background: #1e293b;
   border-radius: 16px;
-  width: 450px;
+  width: 500px;
   max-width: 90vw;
   border: 1px solid rgba(148, 163, 184, 0.1);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
@@ -1051,12 +1753,11 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid #334155;
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 1.1rem;
   color: #f8fafc;
 }
 
@@ -1073,7 +1774,6 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  transition: all 0.2s;
 }
 
 .close-btn:hover {
@@ -1085,14 +1785,6 @@ export default {
   padding: 20px;
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 16px 20px 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-/* Test Result */
 .test-result {
   display: flex;
   gap: 16px;
@@ -1116,14 +1808,12 @@ export default {
 
 .result-details h4 {
   margin: 0 0 8px 0;
-  font-size: 1rem;
   color: #f8fafc;
 }
 
 .result-details p {
   margin: 0 0 12px 0;
   color: #94a3b8;
-  font-size: 0.9rem;
 }
 
 .result-meta {
@@ -1137,11 +1827,6 @@ export default {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
-  font-size: 0.9rem;
-}
-
-.meta-item:last-child {
-  margin-bottom: 0;
 }
 
 .meta-label {
@@ -1153,27 +1838,34 @@ export default {
   font-weight: 500;
 }
 
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #334155;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
-  .monitors-list-card {
-    max-height: 400px;
-  }
-  
   .header-left {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 16px;
+  }
+  
+  .sort-controls {
+    width: 100%;
+    justify-content: center;
   }
 }
 
 @media (max-width: 768px) {
-  .tcp-monitor {
+  .smtp-monitor {
     padding: 16px;
   }
 
   .form-row.dual {
     grid-template-columns: 1fr;
-    gap: 16px;
   }
 
   .form-actions {
@@ -1185,88 +1877,36 @@ export default {
     justify-content: center;
   }
 
-  .interval-input {
+  .security-options {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .interval-field {
-    width: 100%;
-  }
-
-  .monitors-list-card {
-    max-height: 400px;
-  }
-
-  .monitors-table-container {
-    overflow-x: auto;
   }
 
   .monitors-table {
-    min-width: 600px;
-    padding: 0 16px 16px 16px;
-  }
-
-  .monitors-table table thead {
-    position: sticky;
-    top: 0;
-  }
-
-  /* Mobile card view */
-  .monitors-table table,
-  .monitors-table table thead,
-  .monitors-table table tbody,
-  .monitors-table table tr,
-  .monitors-table table td {
-    display: block;
-  }
-
-  .monitors-table table thead {
-    display: none;
-  }
-
-  .monitor-row {
-    display: block;
-    border: 1px solid rgba(148, 163, 184, 0.1);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    padding: 12px;
-    background: rgba(15, 23, 42, 0.4);
-  }
-
-  .monitors-table table tbody td {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.05);
-    text-align: right;
-  }
-
-  .monitors-table table tbody td:last-child {
-    border-bottom: none;
-  }
-
-  .monitors-table table tbody td::before {
-    content: attr(data-label);
-    font-weight: 500;
-    color: #94a3b8;
-    text-align: left;
-  }
-
-  .actions {
-    justify-content: flex-end;
+    min-width: 800px;
   }
   
-  .monitor-count {
+  .card-header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: stretch;
   }
   
-  .total-count {
-    padding-left: 0;
-    border-left: none;
+  .header-actions {
+    justify-content: space-between;
+  }
+  
+  .monitor-stats {
+    flex: 1;
+    justify-content: space-around;
+  }
+  
+  .sort-controls {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+  
+  .sort-btn {
+    font-size: 0.85rem;
   }
 }
 </style>

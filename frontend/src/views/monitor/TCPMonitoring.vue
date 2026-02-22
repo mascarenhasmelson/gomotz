@@ -1,9 +1,12 @@
 <template>
   <div class="tcp-monitor">
-    <!-- Header -->
+ 
 
     <!-- Monitor Configuration Form -->
     <div class="config-card">
+      <div class="card-header">
+        <h2>Monitor Configuration</h2>
+      </div>
 
       <div class="config-form">
         <!-- Friendly Name -->
@@ -43,19 +46,56 @@
           </div>
         </div>
 
-        <!-- Heartbeat Interval -->
+        <!-- Heartbeat Interval - Uptime Kuma Style -->
         <div class="form-row">
-          <div class="form-group">
-            <label>Heartbeat Interval <span class="label-hint">(Check every 60 seconds)</span></label>
-            <div class="interval-input">
-              <input 
-                type="number" 
-                v-model="config.heartbeatInterval" 
-                min="1"
-                class="form-input interval-field"
-              />
-              <span class="interval-unit">seconds</span>
-              <span class="interval-example">1 minute</span>
+          <div class="form-group heartbeat-group">
+            <label>Heartbeat Interval</label>
+            <div class="heartbeat-interval-container">
+              <!-- Heartbeat Visualization Bar -->
+              <div class="heartbeat-visualization">
+                <div class="heartbeat-bar">
+                  <div 
+                    class="heartbeat-fill" 
+                    :style="{ width: (config.heartbeatInterval / 300) * 100 + '%' }"
+                  ></div>
+                </div>
+                <div class="heartbeat-markers">
+                  <span class="marker">1m</span>
+                  <span class="marker">5m</span>
+                  <span class="marker">10m</span>
+                  <span class="marker">30m</span>
+                  <span class="marker">1h</span>
+                </div>
+              </div>
+
+              <!-- Heartbeat Input and Display -->
+              <div class="heartbeat-input-group">
+                <div class="heartbeat-number-input">
+                  <input 
+                    type="number" 
+                    v-model="config.heartbeatInterval" 
+                    min="1"
+                    max="3600"
+                    class="heartbeat-number-field"
+                  />
+                  <span class="heartbeat-unit">seconds</span>
+                </div>
+                <div class="heartbeat-display">
+                  <span class="heartbeat-value">{{ formatHeartbeatTime(config.heartbeatInterval) }}</span>
+                  <span class="heartbeat-badge" :class="getHeartbeatCategory(config.heartbeatInterval)">
+                    {{ getHeartbeatCategory(config.heartbeatInterval) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Heartbeat Description -->
+              <div class="heartbeat-description">
+                <span class="description-icon">⏱️</span>
+                <span class="description-text">
+                  Check every <strong>{{ config.heartbeatInterval }} seconds</strong> 
+                  ({{ formatHeartbeatTime(config.heartbeatInterval) }})
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -64,14 +104,24 @@
         <div class="form-row">
           <div class="form-group">
             <label>Retries</label>
-            <input 
-              type="number" 
-              v-model="config.retries" 
-              min="0"
-              max="10"
-              class="form-input retries-input"
-            />
-            <span class="input-hint">Maximum retries before the service is marked as down and a notification is sent</span>
+            <div class="retries-container">
+              <input 
+                type="number" 
+                v-model="config.retries" 
+                min="0"
+                max="10"
+                class="form-input retries-input"
+              />
+              <div class="retries-visualization">
+                <div 
+                  v-for="n in 5" 
+                  :key="n"
+                  class="retry-dot"
+                  :class="{ active: n <= config.retries }"
+                ></div>
+              </div>
+              <span class="input-hint">Maximum retries before marking as down</span>
+            </div>
           </div>
         </div>
 
@@ -173,9 +223,9 @@
                   Host:Port
                   <span class="sort-icon">{{ getSortIcon('host') }}</span>
                 </th>
-                <th>Interval</th>
+                <th>Heartbeat</th>
                 <th>Retries</th>
-                <th>Last Check</th>
+                <th>Last Heartbeat</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -188,9 +238,32 @@
                 </td>
                 <td data-label="Friendly Name" class="friendly-name">{{ monitor.friendlyName }}</td>
                 <td data-label="Host:Port" class="host-port">{{ monitor.hostname }}:{{ monitor.port }}</td>
-                <td data-label="Interval">{{ monitor.interval }}s</td>
-                <td data-label="Retries">{{ monitor.retries }}</td>
-                <td data-label="Last Check" class="last-check">{{ formatLastCheck(monitor.lastCheck) }}</td>
+                <td data-label="Heartbeat" class="heartbeat-cell">
+                  <div class="heartbeat-info">
+                    <span class="heartbeat-interval-badge">{{ monitor.interval }}s</span>
+                    <span class="heartbeat-interval-human">{{ formatHeartbeatTime(monitor.interval) }}</span>
+                  </div>
+                  <!-- Heartbeat Timeline Visualization -->
+                  <div class="heartbeat-timeline">
+                    <div 
+                      v-for="i in 12" 
+                      :key="i"
+                      class="heartbeat-block"
+                      :class="getHeartbeatBlockClass(monitor, i)"
+                    ></div>
+                  </div>
+                </td>
+                <td data-label="Retries">
+                  <div class="retries-badge">
+                    <span class="retries-count">{{ monitor.retries }}</span>
+                    <span class="retries-max">/3</span>
+                  </div>
+                </td>
+                <td data-label="Last Heartbeat" class="last-heartbeat-cell">
+                  <span class="last-heartbeat-time">{{ formatLastHeartbeat(monitor.lastCheck) }}</span>
+                  <span class="last-heartbeat-timestamp">{{ formatTimestamp(monitor.lastCheck) }}</span>
+                  <div class="heartbeat-status-indicator" :class="monitor.status"></div>
+                </td>
                 <td data-label="Actions" class="actions">
                   <button class="action-btn" @click="editMonitor(monitor)" title="Edit">
                     ✏️
@@ -275,7 +348,7 @@ export default {
 
     // Sorting state
     const sortBy = ref('status')
-    const sortDirection = ref('desc') // 'asc' or 'desc'
+    const sortDirection = ref('desc')
 
     // Monitors list with sample data
     const monitors = ref([
@@ -341,7 +414,7 @@ export default {
       }
     ])
 
-    // Computed properties for counts
+    // Computed properties
     const onlineCount = computed(() => {
       return monitors.value.filter(m => m.status === 'online').length
     })
@@ -350,7 +423,6 @@ export default {
       return monitors.value.filter(m => m.status === 'offline').length
     })
 
-    // Sorted monitors computed property
     const sortedMonitors = computed(() => {
       const sorted = [...monitors.value]
       
@@ -359,7 +431,6 @@ export default {
         
         switch (sortBy.value) {
           case 'status':
-            // Sort by status (online first by default)
             comparison = (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1)
             break
           case 'name':
@@ -390,15 +461,83 @@ export default {
       }
     })
 
+    // Helper Methods
+    const formatHeartbeatTime = (seconds) => {
+      if (!seconds) return '0s'
+      
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const remainingSeconds = seconds % 60
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`
+      } else if (minutes > 0) {
+        return `${minutes}m ${remainingSeconds}s`
+      } else {
+        return `${seconds}s`
+      }
+    }
+
+    const getHeartbeatCategory = (seconds) => {
+      if (seconds <= 60) return 'very-fast'
+      if (seconds <= 300) return 'fast'
+      if (seconds <= 900) return 'medium'
+      if (seconds <= 1800) return 'slow'
+      return 'very-slow'
+    }
+
+    const formatTimestamp = (timestamp) => {
+      const date = new Date(timestamp)
+      return date.toLocaleTimeString()
+    }
+
+    const formatLastHeartbeat = (timestamp) => {
+      const date = new Date(timestamp)
+      const now = new Date()
+      const diffMs = now - date
+      const diffSeconds = Math.floor(diffMs / 1000)
+      const diffMinutes = Math.floor(diffSeconds / 60)
+      const diffHours = Math.floor(diffMinutes / 60)
+      const diffDays = Math.floor(diffHours / 24)
+      
+      if (diffDays > 0) {
+        return `${diffDays}d ago`
+      } else if (diffHours > 0) {
+        return `${diffHours}h ago`
+      } else if (diffMinutes > 0) {
+        return `${diffMinutes}m ago`
+      } else {
+        return 'Just now'
+      }
+    }
+
+    const getHeartbeatBlockClass = (monitor, index) => {
+      const now = Date.now()
+      const lastCheck = new Date(monitor.lastCheck).getTime()
+      const interval = monitor.interval * 1000
+      
+      // Simulate some recent heartbeats based on last check
+      const blockTime = lastCheck - (index * interval * 2)
+      const timeSinceBlock = now - blockTime
+      
+      if (monitor.status === 'online') {
+        if (timeSinceBlock < interval * 3) {
+          return 'success'
+        } else if (timeSinceBlock < interval * 6) {
+          return 'warning'
+        }
+      }
+      
+      return 'danger'
+    }
+
     // Methods
     const toggleSort = (field) => {
       if (sortBy.value === field) {
-        // Toggle direction if same field
         sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
       } else {
-        // New field, set to default direction
         sortBy.value = field
-        sortDirection.value = field === 'status' ? 'desc' : 'asc'
+        sortDirection.value = 'asc'
       }
     }
 
@@ -488,17 +627,6 @@ export default {
       }))
     }
 
-    const formatLastCheck = (timestamp) => {
-      const date = new Date(timestamp)
-      const now = new Date()
-      const diffMs = now - date
-      const diffMins = Math.floor(diffMs / 60000)
-      
-      if (diffMins < 1) return 'Just now'
-      if (diffMins < 60) return `${diffMins}m ago`
-      return date.toLocaleTimeString()
-    }
-
     const closeTestModal = () => {
       showTestModal.value = false
     }
@@ -513,6 +641,11 @@ export default {
       testResult,
       sortBy,
       sortDirection,
+      formatHeartbeatTime,
+      getHeartbeatCategory,
+      formatTimestamp,
+      formatLastHeartbeat,
+      getHeartbeatBlockClass,
       toggleSort,
       getSortIcon,
       saveMonitor,
@@ -522,7 +655,6 @@ export default {
       pauseMonitor,
       deleteMonitor,
       refreshMonitors,
-      formatLastCheck,
       closeTestModal
     }
   }
@@ -711,12 +843,6 @@ export default {
   gap: 8px;
 }
 
-.label-hint {
-  font-size: 0.8rem;
-  color: #64748b;
-  font-weight: 400;
-}
-
 .form-input {
   background: #0f172a;
   border: 1px solid #334155;
@@ -735,8 +861,198 @@ export default {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-.form-input::placeholder {
-  color: #475569;
+/* Uptime Kuma Style Heartbeat */
+.heartbeat-group {
+  gap: 8px;
+}
+
+.heartbeat-interval-container {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.heartbeat-visualization {
+  margin-bottom: 16px;
+}
+
+.heartbeat-bar {
+  height: 8px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.heartbeat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.heartbeat-markers {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #64748b;
+  padding: 0 4px;
+}
+
+.marker {
+  position: relative;
+}
+
+.marker::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 4px;
+  background: #334155;
+}
+
+.heartbeat-input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.heartbeat-number-input {
+  display: flex;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.heartbeat-number-field {
+  width: 80px;
+  padding: 8px;
+  background: #1e293b;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.heartbeat-number-field:focus {
+  outline: none;
+}
+
+.heartbeat-unit {
+  padding: 8px;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  border-left: 1px solid #334155;
+}
+
+.heartbeat-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heartbeat-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.heartbeat-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.heartbeat-badge.very-fast {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.heartbeat-badge.fast {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.heartbeat-badge.medium {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.heartbeat-badge.slow {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.heartbeat-description {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #1e293b;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.description-icon {
+  font-size: 1rem;
+}
+
+.description-text strong {
+  color: #f8fafc;
+}
+
+/* Retries */
+.retries-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.retries-input {
+  width: 80px;
+  margin-bottom: 0;
+}
+
+.retries-visualization {
+  display: flex;
+  gap: 4px;
+}
+
+.retry-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 2px solid #334155;
+  transition: all 0.2s ease;
+}
+
+.retry-dot.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+.input-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+  flex: 1;
 }
 
 /* Interval input */
@@ -748,33 +1064,12 @@ export default {
 }
 
 .interval-field {
-  width: 100px;
+  width: 80px;
 }
 
 .interval-unit {
   color: #94a3b8;
   font-size: 0.9rem;
-}
-
-.interval-example {
-  background: #1e293b;
-  color: #94a3b8;
-  padding: 4px 10px;
-  border-radius: 16px;
-  font-size: 0.85rem;
-  border: 1px solid #334155;
-}
-
-.retries-input {
-  width: 100px;
-  margin-bottom: 6px;
-}
-
-.input-hint {
-  font-size: 0.8rem;
-  color: #64748b;
-  line-height: 1.4;
-  max-width: 400px;
 }
 
 /* Form Actions */
@@ -853,11 +1148,7 @@ export default {
   transform: rotate(90deg);
 }
 
-.btn-icon {
-  font-size: 1.1rem;
-}
-
-/* Monitors List Card - Scrollable */
+/* Monitors List Card */
 .monitors-list-card {
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
@@ -871,16 +1162,12 @@ export default {
   max-height: 500px;
 }
 
-/* Table Container - Scrollable */
 .monitors-table-container {
   overflow-y: auto;
   overflow-x: auto;
   flex: 1;
-  scrollbar-width: thin;
-  scrollbar-color: #334155 #0f172a;
 }
 
-/* Custom scrollbar styling */
 .monitors-table-container::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -888,7 +1175,6 @@ export default {
 
 .monitors-table-container::-webkit-scrollbar-track {
   background: #0f172a;
-  border-radius: 4px;
 }
 
 .monitors-table-container::-webkit-scrollbar-thumb {
@@ -896,17 +1182,11 @@ export default {
   border-radius: 4px;
 }
 
-.monitors-table-container::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Ensure table takes full width */
 .monitors-table {
-  min-width: 800px;
+  min-width: 1000px;
   padding: 0 24px 24px 24px;
 }
 
-/* Keep thead sticky */
 .monitors-table table {
   width: 100%;
   border-collapse: collapse;
@@ -918,16 +1198,6 @@ export default {
   background: rgba(30, 41, 59, 0.95);
   z-index: 10;
   backdrop-filter: blur(4px);
-}
-
-.monitors-table table thead::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: rgba(148, 163, 184, 0.2);
 }
 
 .monitors-table table thead th {
@@ -951,26 +1221,125 @@ export default {
   background: rgba(59, 130, 246, 0.1);
 }
 
-.status-badge {
-  display: inline-block;
-  font-size: 1.2rem;
+/* Heartbeat Timeline */
+.heartbeat-cell {
+  min-width: 150px;
 }
 
-.friendly-name {
+.heartbeat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.heartbeat-interval-badge {
+  padding: 4px 8px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.heartbeat-interval-human {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.heartbeat-timeline {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.heartbeat-block {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #1e293b;
+  transition: all 0.2s;
+}
+
+.heartbeat-block.success {
+  background: #10b981;
+}
+
+.heartbeat-block.warning {
+  background: #f59e0b;
+}
+
+.heartbeat-block.danger {
+  background: #ef4444;
+}
+
+/* Retries Badge */
+.retries-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 2px 8px;
+}
+
+.retries-count {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.retries-max {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-left: 2px;
+}
+
+/* Last Heartbeat */
+.last-heartbeat-cell {
+  position: relative;
+  padding-right: 20px !important;
+}
+
+.last-heartbeat-time {
+  display: block;
   font-weight: 500;
   color: #f8fafc;
 }
 
-.host-port {
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-  color: #60a5fa;
+.last-heartbeat-timestamp {
+  display: block;
+  font-size: 0.7rem;
+  color: #64748b;
 }
 
-.last-check {
-  color: #94a3b8;
-  font-size: 0.9rem;
+.heartbeat-status-indicator {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
+.heartbeat-status-indicator.online {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  animation: pulse 2s infinite;
+}
+
+.heartbeat-status-indicator.offline {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Actions */
 .actions {
   display: flex;
   gap: 6px;
@@ -998,7 +1367,6 @@ export default {
   text-align: center;
   padding: 60px 24px;
   color: #94a3b8;
-  min-width: 600px;
 }
 
 .empty-icon {
@@ -1086,13 +1454,6 @@ export default {
   padding: 20px;
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 16px 20px 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
 /* Test Result */
 .test-result {
   display: flex;
@@ -1154,19 +1515,14 @@ export default {
   font-weight: 500;
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .monitors-list-card {
-    max-height: 400px;
-  }
-  
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+/* Responsive */
 @media (max-width: 768px) {
   .tcp-monitor {
     padding: 16px;
@@ -1174,7 +1530,6 @@ export default {
 
   .form-row.dual {
     grid-template-columns: 1fr;
-    gap: 16px;
   }
 
   .form-actions {
@@ -1186,88 +1541,31 @@ export default {
     justify-content: center;
   }
 
-  .interval-input {
+  .heartbeat-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .heartbeat-display {
+    justify-content: space-between;
+  }
+
+  .retries-container {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .interval-field {
+  .retries-visualization {
     width: 100%;
+    justify-content: space-between;
   }
 
-  .monitors-list-card {
-    max-height: 400px;
-  }
-
-  .monitors-table-container {
-    overflow-x: auto;
+  .retry-dot {
+    flex: 1;
   }
 
   .monitors-table {
-    min-width: 600px;
-    padding: 0 16px 16px 16px;
-  }
-
-  .monitors-table table thead {
-    position: sticky;
-    top: 0;
-  }
-
-  /* Mobile card view */
-  .monitors-table table,
-  .monitors-table table thead,
-  .monitors-table table tbody,
-  .monitors-table table tr,
-  .monitors-table table td {
-    display: block;
-  }
-
-  .monitors-table table thead {
-    display: none;
-  }
-
-  .monitor-row {
-    display: block;
-    border: 1px solid rgba(148, 163, 184, 0.1);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    padding: 12px;
-    background: rgba(15, 23, 42, 0.4);
-  }
-
-  .monitors-table table tbody td {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.05);
-    text-align: right;
-  }
-
-  .monitors-table table tbody td:last-child {
-    border-bottom: none;
-  }
-
-  .monitors-table table tbody td::before {
-    content: attr(data-label);
-    font-weight: 500;
-    color: #94a3b8;
-    text-align: left;
-  }
-
-  .actions {
-    justify-content: flex-end;
-  }
-  
-  .monitor-count {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .total-count {
-    padding-left: 0;
-    border-left: none;
+    min-width: 800px;
   }
 }
 </style>
