@@ -291,7 +291,7 @@ export default {
       const startTime = Date.now();
       
       try {
-        const response = await fetch(`${API_URL}/v1/services/isp`);
+        const response = await fetch(`${API_URL}/v1/api/services/isp`);
         
         if (!response.ok) {
           throw new Error("Failed to fetch ISP info");

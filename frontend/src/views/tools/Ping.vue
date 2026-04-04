@@ -312,7 +312,7 @@ const setupWebSocket = () => {
     websocket.value.close()
   }
 
-  const ws = new WebSocket('ws://localhost:8082/v1/icmp')
+  const ws = new WebSocket('ws://localhost:8082/v1/api/icmp')
   
   ws.onopen = () => {
     console.log('WebSocket connected')

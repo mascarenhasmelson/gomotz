@@ -582,12 +582,12 @@ export default {
       this.currentStep = 0
       this.progress = 0
       
-      // Start progress simulation based on timeout
+    
       const timeoutValue = this.options.customTimeout ? this.options.timeoutValue * 1000 : 5000
       this.startProgressSimulation(timeoutValue)
       
       try {
-        const response = await fetch(`${API_URL}/v1/tcpCheck`, {
+        const response = await fetch(`${API_URL}/v1/api/tcpCheck`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

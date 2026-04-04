@@ -1,6 +1,9 @@
 package utils
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Service struct {
 	ID           int        `json:"id"`
@@ -14,12 +17,12 @@ type Service struct {
 	PID          int        `json:"pid"`
 }
 
-// type Home struct {
-// 	Status      string `json:"status"`
-// 	PublicIP    string `json:"publicip"`
-// 	ISPInfo     string `json:"ispinfo"`
-// 	Interstatus string `json:"interstatus"`
-// }
+//	type Home struct {
+//		Status      string `json:"status"`
+//		PublicIP    string `json:"publicip"`
+//		ISPInfo     string `json:"ispinfo"`
+//		Interstatus string `json:"interstatus"`
+//	}
 type ScanRequest struct {
 	Target string `json:"target"`
 }
@@ -54,7 +57,7 @@ type TCPCheckResponse struct {
 
 //-----------------ending Tcpcheck-------------------------
 
-//-----------------DNS check-------------------------------
+// -----------------DNS check-------------------------------
 type Request struct {
 	Domain string `json:"domain"`
 	Type   string `json:"type"`
@@ -172,7 +175,128 @@ type HTTPSCheckResponse struct {
 	Error          string           `json:"error,omitempty"`
 }
 
-//----------------------------------------------------------
+// ----------------------------------------------------------
 type Error struct {
 	Message string
 }
+
+// ------------------------VLAN---------------------------------
+type VLANNetwork struct {
+	ID                  int       `json:"id"`
+	VLANId              int       `json:"vlan_id"`
+	VLANName            string    `json:"vlan_name"`
+	NetworkMode         string    `json:"network_mode"`
+	IPAddress           *string   `json:"ip_address,omitempty"`
+	CIDRNotation        *string   `json:"cidr_notation,omitempty"`
+	CIDRFull            *string   `json:"cidr_full,omitempty"`
+	DefaultGateway      *string   `json:"default_gateway,omitempty"`
+	MonitoringEnabled   bool      `json:"monitoring_enabled"`
+	ScanIntervalSeconds int       `json:"scan_interval_seconds"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+type DiscoveredDevice struct {
+	ID           int       `json:"id"`
+	VLANId       int       `json:"vlan_id"`
+	IPAddress    string    `json:"ip_address"`
+	MACAddress   string    `json:"mac_address"`
+	Hostname     string    `json:"hostname,omitempty"`
+	Vendor       string    `json:"vendor,omitempty"`
+	DeviceStatus string    `json:"device_status"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type DeviceNotification struct {
+	EventType  string `json:"event_type"`
+	VLANId     int    `json:"vlan_id"`
+	IPAddress  string `json:"ip_address"`
+	MACAddress string `json:"mac_address,omitempty"`
+	Hostname   string `json:"hostname,omitempty"`
+	Vendor     string `json:"vendor,omitempty"`
+	Status     string `json:"status,omitempty"`
+	OldStatus  string `json:"old_status,omitempty"`
+	NewStatus  string `json:"new_status,omitempty"`
+	FirstSeen  string `json:"first_seen,omitempty"`
+	LastSeen   string `json:"last_seen,omitempty"`
+}
+
+// last try fix
+//
+//	type DeviceNotification struct {
+//		EventType   string `json:"event_type"`
+//		VLANId      int    `json:"vlan_id"`
+//		IPAddress   string `json:"ip_address"`
+//		MACAddress  string `json:"mac_address,omitempty"`
+//		Hostname    string `json:"hostname,omitempty"`
+//		Vendor      string `json:"vendor,omitempty"`
+//		Status      string `json:"status,omitempty"`
+//		OldStatus   string `json:"old_status,omitempty"`
+//		NewStatus   string `json:"new_status,omitempty"`
+//		FirstSeen   string `json:"first_seen,omitempty"`
+//		LastSeen    string `json:"last_seen,omitempty"`
+//	}
+
+type CustomTime struct {
+	time.Time
+}
+
+// UnmarshalJSON handles both RFC3339 and PostgreSQL timestamp formats
+func (ct *CustomTime) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	// Remove quotes
+	s = s[1 : len(s)-1]
+
+	// Try different formats
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05.999999", // PostgreSQL timestamp
+		"2006-01-02T15:04:05",        // PostgreSQL timestamp without microseconds
+		"2006-01-02 15:04:05.999999", // PostgreSQL timestamp with space
+		"2006-01-02 15:04:05",        // PostgreSQL timestamp with space, no microseconds
+	}
+
+	var err error
+	for _, format := range formats {
+		ct.Time, err = time.Parse(format, s)
+		if err == nil {
+			return nil
+		}
+	}
+
+	return err
+}
+
+func (ct CustomTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ct.Time.Format(time.RFC3339))
+}
+
+type ScanLog struct {
+	ID              int        `json:"id"`
+	VLANId          int        `json:"vlan_id"`
+	ScanStartedAt   time.Time  `json:"scan_started_at"`
+	ScanCompletedAt *time.Time `json:"scan_completed_at,omitempty"`
+	TotalIPsScanned int        `json:"total_ips_scanned"`
+	DevicesFound    int        `json:"devices_found"`
+	DevicesNew      int        `json:"devices_new"`
+	DevicesOffline  int        `json:"devices_offline"`
+	ScanDurationMs  int        `json:"scan_duration_ms"`
+	ScanStatus      string     `json:"scan_status"`
+	ErrorMessage    *string    `json:"error_message,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+type MACVendor struct {
+	ID             int       `json:"id"`
+	OUI            string    `json:"oui"`
+	VendorName     string    `json:"vendor_name"`
+	FetchedFromAPI bool      `json:"fetched_from_api"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	LastSeen       time.Time `json:"last_seen"`
+}
+
+//----------------------------------VLAN END-----------------------------------

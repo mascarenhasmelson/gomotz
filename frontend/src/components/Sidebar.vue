@@ -169,7 +169,7 @@
 				</svg>
 				<span class="status-text">System Online</span>
 			</div>
-			<div class="version-info">v1.0.0</div>
+			<div class="version-info">v0.5.5</div>
 		</div>
 		
 		<!-- Mobile Overlay -->

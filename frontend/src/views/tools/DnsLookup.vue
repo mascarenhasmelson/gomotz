@@ -322,7 +322,7 @@ export default {
 
     console.log('Making DNS query:', { domain, type }) // Debug log
     //  const response = await fetch(`${API_URL}/v1/services/isp`);
-    const response = await fetch(`${API_URL}/v1/dnsCheck`, {
+    const response = await fetch(`${API_URL}/v1/api/dnsCheck`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

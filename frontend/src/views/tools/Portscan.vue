@@ -34,7 +34,7 @@
             </button>
           </div>
           
-          <!-- Loading Animation -->
+          <!-- Circular Loading Animation -->
           <div v-if="isScanning" class="loading-section">
             <div class="progress-container">
               <div class="progress-bar" :style="{ width: scanProgress + '%' }"></div>
@@ -64,93 +64,119 @@
                 </div>
               </div>
               
-              <div class="port-visualization">
-                <div class="vis-title">Scanning Progress (1-65535)</div>
-                <div class="port-range-info">
-                  <div class="range-start">Port 1</div>
-                  <div class="range-progress">
-                    <div class="range-bar">
-                      <div class="range-fill" :style="{ width: scanProgress + '%' }"></div>
+              <!-- Circular Progress Visualization -->
+              <div class="circular-progress-section">
+                <div class="circular-progress-container">
+                  <div class="circular-progress">
+                    <svg class="circular-progress-svg" viewBox="0 0 100 100">
+                      <!-- Background circle -->
+                      <circle
+                        class="circular-bg"
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        fill="none"
+                        stroke="#1e293b"
+                        stroke-width="8"
+                      />
+                      <!-- Progress circle -->
+                      <circle
+                        class="circular-fill"
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        fill="none"
+                        stroke="url(#gradient)"
+                        stroke-width="8"
+                        stroke-linecap="round"
+                        :stroke-dasharray="283"
+                        :stroke-dashoffset="283 - (283 * scanProgress / 100)"
+                        transform="rotate(-90 50 50)"
+                      />
+                      <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stop-color="#3b82f6" />
+                          <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div class="circular-progress-text">
+                      <div class="circular-percentage">{{ Math.round(scanProgress) }}%</div>
+                      <div class="circular-label">Complete</div>
                     </div>
                   </div>
-                  <div class="range-end">Port 65535</div>
-                </div>
-                <div class="current-port">
-                  <div class="current-range">
-                    Currently scanning: <strong>{{ currentPortRange }}</strong>
+                  
+                  <div class="circular-stats">
+                    <div class="circular-stat-item">
+                      <span class="stat-label">Scanned</span>
+                      <span class="stat-number">{{ scannedPortsCount.toLocaleString() }}</span>
+                    </div>
+                    <div class="circular-stat-item">
+                      <span class="stat-label">Total</span>
+                      <span class="stat-number">65,535</span>
+                    </div>
+                    <div class="circular-stat-item">
+                      <span class="stat-label">Remaining</span>
+                      <span class="stat-number">{{ (65535 - scannedPortsCount).toLocaleString() }}</span>
+                    </div>
                   </div>
-                  <div class="ports-found">
-                    Open ports found: 
-                    <span class="open-ports-list">
-                      <span 
-                        v-for="(port, index) in openPorts" 
+                </div>
+                
+                <div class="current-scan-info">
+                  <div class="info-row">
+                    <span class="info-label">Current Range:</span>
+                    <span class="info-value">{{ currentPortRange }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">Est. Time Left:</span>
+                    <span class="info-value">{{ estimatedTimeRemaining }} seconds</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Real-time open ports table during scan -->
+              <div v-if="openPorts.length > 0" class="realtime-ports-section">
+                <div class="section-header">
+                  <h3>Open Ports Found ({{ openPorts.length }})</h3>
+                  <span class="badge">{{ getPortCategories() }}</span>
+                </div>
+                <div class="table-container">
+                  <table class="ports-table">
+                    <thead>
+                      <tr>
+                        <th>Port</th>
+                        <th>Service</th>
+                        <th>Protocol</th>
+                        <th>Category</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr 
+                        v-for="port in sortedOpenPorts" 
                         :key="port.port"
-                        class="open-port-badge"
-                        :title="`Port ${port.port} - ${port.service}`"
+                        class="port-row"
+                        :class="getPortRowClass(port.port)"
                       >
-                        {{ port.port }}
-                        <span v-if="index < openPorts.length - 1">, </span>
-                      </span>
-                      <span v-if="openPorts.length === 0">None yet</span>
-                    </span>
-                  </div>
-                </div>
-                
-                <!-- Real-time port visualization -->
-                <div class="port-grid">
-                  <div 
-                    v-for="n in 100" 
-                    :key="n"
-                    class="port-block"
-                    :class="getPortBlockStatus(n)"
-                    :title="`Ports ${(n-1)*656 + 1} - ${n*656}`"
-                    @mouseover="hoverBlock = n"
-                    @mouseleave="hoverBlock = null"
-                  >
-                    <div v-if="hoverBlock === n" class="block-tooltip">
-                      Ports {{ (n-1)*656 + 1 }} - {{ n*656 }}
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="vis-legend">
-                  <div class="legend-item"><span class="dot pending"></span>Pending</div>
-                  <div class="legend-item"><span class="dot scanning"></span>Scanning</div>
-                  <div class="legend-item"><span class="dot open"></span>Open Found</div>
-                  <div class="legend-item"><span class="dot completed"></span>Completed</div>
+                        <td class="port-number-cell">{{ port.port }}</td>
+                        <td class="port-service-cell">{{ port.service }}</td>
+                        <td class="port-protocol-cell">{{ port.protocol }}</td>
+                        <td class="port-category-cell">{{ getPortCategory(port.port) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
               
-              <!-- Real-time open ports display -->
-              <div v-if="openPorts.length > 0" class="realtime-ports">
-                <h3>Open Ports Found:</h3>
-                <div class="ports-grid">
-                  <div 
-                    v-for="port in openPorts" 
-                    :key="port.port"
-                    class="port-bubble"
-                    :class="getPortBubbleClass(port.port)"
-                  >
-                    <div class="port-number">{{ port.port }}</div>
-                    <div class="port-service">{{ port.service }}</div>
-                    <div class="port-status">OPEN</div>
-                  </div>
+              <!-- Empty state when no ports found yet -->
+              <div v-else class="no-ports-yet">
+                <div class="no-ports-icon">🔍</div>
+                <p>No open ports discovered yet. Scanning in progress...</p>
+                <div class="scanning-pulse">
+                  <span class="pulse-dot"></span>
+                  <span class="pulse-dot"></span>
+                  <span class="pulse-dot"></span>
                 </div>
               </div>
-              
-              <!-- <div class="scanning-tips">
-                <div class="tip-icon">💡</div>
-                <div class="tip-content">
-                  <strong>SYN Scan in Progress</strong>
-                  <p>Sending SYN packets to all 65535 ports and listening for SYN-ACK responses.</p>
-                  <ul>
-                    <li>Ports scanned: {{ scannedPortsCount }}/65535</li>
-                    <li>Open ports found: {{ openPorts.length }}</li>
-                    <li>Estimated time remaining: {{ estimatedTimeRemaining }}s</li>
-                    <li>Packet rate: ~6,500 packets/second</li>
-                  </ul>
-                </div>
-              </div> -->
             </div>
           </div>
           
@@ -164,81 +190,123 @@
       <!-- Results Section -->
       <div v-if="showResults && !isScanning" class="results-section">
         <div class="results-header">
-          <h2>Scan Results</h2>
+          <h2>Scan Results for {{ scanTarget }}</h2>
           <div class="results-meta">
-            <span class="target-display">{{ scanTarget }}</span>
             <span class="scan-time">{{ formattedScanTime }}</span>
+            <span class="scan-duration-badge">{{ scanDuration }}s</span>
           </div>
         </div>
 
-        <!-- Port List -->
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+          <div class="summary-card">
+            <div class="summary-icon"></div>
+            <div class="summary-content">
+              <div class="summary-value">{{ scannedPortsCount.toLocaleString() }}</div>
+              <div class="summary-label">Ports Scanned</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon"></div>
+            <div class="summary-content">
+              <div class="summary-value">{{ openPorts.length }}</div>
+              <div class="summary-label">Open Ports</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon"></div>
+            <div class="summary-content">
+              <div class="summary-value">{{ scanRate }}</div>
+              <div class="summary-label">Scan Rate (ports/s)</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon"></div>
+            <div class="summary-content">
+              <div class="summary-value">{{ getWellKnownCount() }}</div>
+              <div class="summary-label">Well-Known Ports</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Port List Table -->
         <div class="port-results">
           <div v-if="openPorts.length === 0" class="no-ports">
-            <p>No open ports found on target</p>
-            <p class="scan-summary">Scanned all 65535 ports (1-65535) using SYN scan</p>
+            <div class="no-ports-icon">🔌</div>
+            <h3>No Open Ports Found</h3>
+            <p>The target {{ scanTarget }} has no open ports in the range 1-65535</p>
+            <p class="scan-summary">This could mean the host is down, firewalled, or has no services running</p>
           </div>
           
           <div v-else>
-            <div class="results-summary">
-              <h3>Found {{ openPorts.length }} open port(s) out of 65535</h3>
-              <div class="summary-stats">
-                <span>Open: {{ openPorts.length }}</span>
-                <span>Closed: {{ 65535 - openPorts.length }}</span>
-                <span>Scan Rate: {{ scanRate }} ports/sec</span>
-                <span>Duration: {{ scanDuration }}s</span>
-              </div>
+            <div class="results-table-container">
+              <table class="results-table">
+                <thead>
+                  <tr>
+                    <th>Port</th>
+                    <th>Service</th>
+                    <th>Protocol</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr 
+                    v-for="port in sortedOpenPorts" 
+                    :key="port.port"
+                    class="result-row"
+                    :class="getPortRowClass(port.port)"
+                  >
+                    <td class="port-number-cell">{{ port.port }}</td>
+                    <td class="port-service-cell">{{ port.service }}</td>
+                    <td class="port-protocol-cell">{{ port.protocol }}</td>
+                    <td class="port-category-cell">{{ getPortCategory(port.port) }}</td>
+                    <td class="port-description-cell">{{ port.description }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            
-            <div class="port-list">
-              <div 
-                v-for="(port, index) in sortedOpenPorts" 
-                :key="index" 
-                class="port-item"
-              >
-                <div class="port-number">{{ port.port }}</div>
-                <div class="port-status open">OPEN</div>
-                <div class="port-service">{{ port.service }}</div>
-                <div class="port-protocol">{{ port.protocol || 'TCP' }}</div>
-                <div class="port-description">{{ port.description }}</div>
+
+            <!-- Port Distribution -->
+            <div class="port-distribution">
+              <h4>Port Distribution</h4>
+              <div class="distribution-bars">
+                <div class="distribution-item">
+                  <span class="dist-label">Well-Known (1-1023)</span>
+                  <div class="dist-bar-container">
+                    <div class="dist-bar well-known" :style="{ width: (getWellKnownCount() / openPorts.length * 100) + '%' }"></div>
+                  </div>
+                  <span class="dist-count">{{ getWellKnownCount() }}</span>
+                </div>
+                <div class="distribution-item">
+                  <span class="dist-label">Registered (1024-49151)</span>
+                  <div class="dist-bar-container">
+                    <div class="dist-bar registered" :style="{ width: (getRegisteredCount() / openPorts.length * 100) + '%' }"></div>
+                  </div>
+                  <span class="dist-count">{{ getRegisteredCount() }}</span>
+                </div>
+                <div class="distribution-item">
+                  <span class="dist-label">Dynamic (49152-65535)</span>
+                  <div class="dist-bar-container">
+                    <div class="dist-bar dynamic" :style="{ width: (getDynamicCount() / openPorts.length * 100) + '%' }"></div>
+                  </div>
+                  <span class="dist-count">{{ getDynamicCount() }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Statistics -->
-        <div class="scan-stats">
-          <div class="stat-item">
-            <span class="stat-label">Total Ports Scanned:</span>
-            <span class="stat-value">65535</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Scan Duration:</span>
-            <span class="stat-value">{{ scanDuration }} seconds</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Open Ports Found:</span>
-            <span class="stat-value">{{ openPorts.length }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Average Scan Rate:</span>
-            <span class="stat-value">{{ scanRate }} ports/sec</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Status:</span>
-            <span class="stat-value success">Completed</span>
-          </div>
-        </div>
-        
-        <!-- Export Results -->
+        <!-- Export Actions -->
         <div class="export-section">
-          <button @click="exportResults('json')" class="export-btn">
-            Export as JSON
+          <button @click="exportResults('json')" class="export-btn json">
+            <span class="btn-icon">📋</span> Export JSON
           </button>
-          <button @click="exportResults('csv')" class="export-btn">
-            Export as CSV
+          <button @click="exportResults('csv')" class="export-btn csv">
+            <span class="btn-icon">📊</span> Export CSV
           </button>
-          <button @click="copyResults" class="export-btn">
-            Copy to Clipboard
+          <button @click="copyResults" class="export-btn copy">
+            <span class="btn-icon">📑</span> Copy to Clipboard
           </button>
         </div>
       </div>
@@ -273,8 +341,9 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-// const API_URL = import.meta.env.VITE_API_URL;
+
 const API_URL = "http://192.168.20.17:8082";
+
 export default {
   name: 'PortScan',
   data() {
@@ -291,17 +360,15 @@ export default {
       elapsedTime: 0,
       scanStatus: 'Initializing SYN scan...',
       scanInterval: null,
+      progressSimulationInterval: null,
       ws: null,
       scannedPortsCount: 0,
       currentPortRange: '1-65535',
       scanRate: 0,
       connectionStatus: '',
       connectionStatusClass: '',
-      hoverBlock: null,
-      estimatedTimeRemaining: 0,
       scanStartTimestamp: 0,
-      portsScannedLastSecond: 0,
-      rateUpdateInterval: null
+      estimatedTimeRemaining: 0
     }
   },
   computed: {
@@ -323,34 +390,38 @@ export default {
     this.cleanup();
   },
   methods: {
-    getPortBlockStatus(blockIndex) {
-      const totalBlocks = 100;
-      const blockProgress = (blockIndex / totalBlocks) * 100;
-      
-      if (this.scanProgress >= blockProgress) {
-        // Check if any ports in this block are open
-        const startPort = (blockIndex - 1) * 656 + 1;
-        const endPort = blockIndex * 656;
-        const hasOpenPort = this.openPorts.some(port => 
-          port.port >= startPort && port.port <= endPort
-        );
-        
-        if (hasOpenPort) return 'open';
-        return 'completed';
-      } else if (blockProgress - this.scanProgress <= 1) {
-        return 'scanning';
-      }
-      return 'pending';
-    },
-    
-    getPortBubbleClass(port) {
+    getPortRowClass(port) {
       if (port <= 1023) return 'well-known';
       if (port <= 49151) return 'registered';
       return 'dynamic';
     },
     
+    getPortCategory(port) {
+      if (port <= 1023) return 'Well-Known';
+      if (port <= 49151) return 'Registered';
+      return 'Dynamic';
+    },
+    
+    getPortCategories() {
+      const wellKnown = this.openPorts.filter(p => p.port <= 1023).length;
+      const registered = this.openPorts.filter(p => p.port > 1023 && p.port <= 49151).length;
+      const dynamic = this.openPorts.filter(p => p.port > 49151).length;
+      return `${wellKnown} Well-Known, ${registered} Registered, ${dynamic} Dynamic`;
+    },
+    
+    getWellKnownCount() {
+      return this.openPorts.filter(p => p.port <= 1023).length;
+    },
+    
+    getRegisteredCount() {
+      return this.openPorts.filter(p => p.port > 1023 && p.port <= 49151).length;
+    },
+    
+    getDynamicCount() {
+      return this.openPorts.filter(p => p.port > 49151).length;
+    },
+    
     getServiceByPort(port) {
-      // Common port services
       const commonPorts = {
         20: 'FTP Data',
         21: 'FTP Control',
@@ -362,43 +433,51 @@ export default {
         110: 'POP3',
         119: 'NNTP',
         123: 'NTP',
+        135: 'RPC',
+        137: 'NetBIOS-NS',
+        138: 'NetBIOS-DGM',
+        139: 'NetBIOS-SSN',
         143: 'IMAP',
         161: 'SNMP',
-        194: 'IRC',
+        162: 'SNMP Trap',
+        389: 'LDAP',
         443: 'HTTPS',
+        445: 'SMB',
         465: 'SMTPS',
+        514: 'Syslog',
+        515: 'LPD',
         587: 'SMTP Submission',
+        631: 'IPP',
         993: 'IMAPS',
         995: 'POP3S',
+        1433: 'MSSQL',
         3306: 'MySQL',
         3389: 'RDP',
         5432: 'PostgreSQL',
         5900: 'VNC',
+        6379: 'Redis',
         8080: 'HTTP Proxy',
+        8443: 'HTTPS Alt',
+        27017: 'MongoDB'
       };
-      
-      return commonPorts[port] || 'Unknown Service';
+      return commonPorts[port] || 'Unknown';
     },
     
     getPortDescription(port) {
-      if (port < 1024) return 'Well-known port (System/Privileged)';
-      if (port < 49152) return 'Registered port (User/Application)';
-      return 'Dynamic/private port (Ephemeral)';
+      if (port < 1024) return 'Well-known port (system services)';
+      if (port < 49152) return 'Registered port (user applications)';
+      return 'Dynamic/private port (ephemeral)';
     },
     
     cleanup() {
-      // Clear intervals
       if (this.scanInterval) {
         clearInterval(this.scanInterval);
         this.scanInterval = null;
       }
-      
-      if (this.rateUpdateInterval) {
-        clearInterval(this.rateUpdateInterval);
-        this.rateUpdateInterval = null;
+      if (this.progressSimulationInterval) {
+        clearInterval(this.progressSimulationInterval);
+        this.progressSimulationInterval = null;
       }
-      
-      // Close WebSocket connection
       if (this.ws) {
         this.ws.close();
         this.ws = null;
@@ -424,14 +503,12 @@ export default {
         return;
       }
 
-      // Reset state
       this.isScanning = true;
       this.error = null;
       this.openPorts = [];
       this.showResults = false;
       this.scanStartTime = new Date();
       this.scanStartTimestamp = Date.now();
-      
       this.scanProgress = 0;
       this.elapsedTime = 0;
       this.scannedPortsCount = 0;
@@ -441,34 +518,26 @@ export default {
       this.connectionStatus = 'Connecting to scanner...';
       this.connectionStatusClass = 'connecting';
       
-      // Clean up any existing connections
       this.cleanup();
-      
-      // Start WebSocket connection
       this.connectWebSocket();
       
-      // Start elapsed time counter
       this.scanInterval = setInterval(() => {
         this.elapsedTime = Math.floor((Date.now() - this.scanStartTimestamp) / 1000);
         this.updateScanRate();
       }, 1000);
       
-      // Update progress based on time (since backend doesn't send progress)
-      // Your scan takes 27-28 seconds for 65535 ports
+      // Progress simulation
       this.progressSimulationInterval = setInterval(() => {
         if (this.scanProgress < 100) {
-          // 27 seconds for full scan = ~3.7% per second
           this.scanProgress += 3.7;
           this.scannedPortsCount = Math.floor((this.scanProgress / 100) * 65535);
           
-          // Update current port range
           const currentPort = Math.floor(this.scanProgress / 100 * 65535);
           const rangeSize = 1000;
           const rangeStart = Math.floor(currentPort / rangeSize) * rangeSize + 1;
           const rangeEnd = Math.min(rangeStart + rangeSize - 1, 65535);
           this.currentPortRange = `${rangeStart}-${rangeEnd}`;
           
-          // Update status based on progress
           if (this.scanProgress < 1.5) {
             this.scanStatus = 'Resolving hostname...';
           } else if (this.scanProgress < 15) {
@@ -489,17 +558,15 @@ export default {
     },
     
     connectWebSocket() {
-      // WebSocket connection to backend
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/scan`;
+      // const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/api/scan`;
+      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/scan`;
       
       this.ws = new WebSocket(wsUrl);
       
       this.ws.onopen = () => {
         this.connectionStatus = 'Connected, starting scan...';
         this.connectionStatusClass = 'connected';
-        
-        // Send scan request
         this.ws.send(JSON.stringify({
           action: 'startScan',
           target: this.scanTarget.trim(),
@@ -516,23 +583,18 @@ export default {
             case 'openPort':
               this.handleOpenPort(data.port);
               break;
-              
             case 'progress':
-              // If backend sends progress, use it instead of simulation
               if (data.progress !== undefined) {
                 this.scanProgress = data.progress;
                 this.scannedPortsCount = data.scanned || Math.floor((data.progress / 100) * 65535);
               }
               break;
-              
             case 'status':
               this.scanStatus = data.message;
               break;
-              
             case 'complete':
               this.handleScanComplete(data);
               break;
-              
             case 'error':
               this.error = data.message;
               this.connectionStatus = 'Error: ' + data.message;
@@ -557,8 +619,6 @@ export default {
         this.connectionStatus = 'Connection closed';
         this.connectionStatusClass = 'disconnected';
         this.ws = null;
-        
-        // If still scanning, try to reconnect
         if (this.isScanning) {
           this.connectionStatus = 'Reconnecting...';
           this.connectionStatusClass = 'connecting';
@@ -568,21 +628,14 @@ export default {
     },
     
     handleOpenPort(portNumber) {
-      // Check if port already exists
       if (!this.openPorts.some(p => p.port === portNumber)) {
-        const portInfo = {
+        this.openPorts.push({
           port: portNumber,
           service: this.getServiceByPort(portNumber),
           protocol: 'TCP',
           description: this.getPortDescription(portNumber)
-        };
-        
-        this.openPorts.push(portInfo);
-        
-        // Sort ports numerically
+        });
         this.openPorts.sort((a, b) => a.port - b.port);
-        
-        // Update UI immediately
         this.$forceUpdate();
       }
     },
@@ -595,12 +648,10 @@ export default {
       this.connectionStatus = 'Scan completed';
       this.connectionStatusClass = 'completed';
       
-      // Clear simulation interval
       if (this.progressSimulationInterval) {
         clearInterval(this.progressSimulationInterval);
       }
       
-      // Add any remaining ports from complete data
       if (data.openPorts && Array.isArray(data.openPorts)) {
         data.openPorts.forEach(portNumber => {
           this.handleOpenPort(portNumber);
@@ -609,11 +660,7 @@ export default {
       
       this.showResults = true;
       this.isScanning = false;
-      
-      // Save to history
       this.saveToHistory();
-      
-      // Cleanup
       this.cleanup();
     },
     
@@ -622,19 +669,15 @@ export default {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ action: 'stopScan' }));
         }
-        
         this.isScanning = false;
         this.scanStatus = 'Scan stopped by user';
         this.connectionStatus = 'Scan stopped';
         this.connectionStatusClass = 'stopped';
-        
-        // Show partial results
         if (this.openPorts.length > 0) {
           this.scanDuration = ((Date.now() - this.scanStartTimestamp) / 1000).toFixed(2);
           this.showResults = true;
           this.saveToHistory();
         }
-        
         this.cleanup();
       }
     },
@@ -654,7 +697,6 @@ export default {
       if (this.recentScans.length > 10) {
         this.recentScans = this.recentScans.slice(0, 10);
       }
-
       localStorage.setItem('portScanHistory', JSON.stringify(this.recentScans));
     },
     
@@ -664,7 +706,11 @@ export default {
         timestamp: this.formattedScanTime,
         duration: this.scanDuration,
         totalPorts: 65535,
-        openPorts: this.openPorts,
+        openPorts: this.openPorts.map(p => ({
+          port: p.port,
+          service: p.service,
+          protocol: p.protocol
+        })),
         scanType: 'SYN Scan'
       };
       
@@ -675,11 +721,9 @@ export default {
         mimeType = 'application/json';
         filename = `portscan-${this.scanTarget.replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.json`;
       } else if (format === 'csv') {
-        const headers = ['Port', 'Service', 'Protocol', 'Description'];
+        const headers = ['Port', 'Service', 'Protocol'];
         const rows = this.openPorts.map(port => 
-          [port.port, port.service, port.protocol, port.description].map(cell => 
-            `"${cell}"`
-          ).join(',')
+          [port.port, port.service, port.protocol].join(',')
         );
         content = [headers.join(','), ...rows].join('\n');
         mimeType = 'text/csv';
@@ -698,13 +742,15 @@ export default {
     },
     
     copyResults() {
-      const text = `Port Scan Results for ${this.scanTarget}\n` +
-                   `Scanned on: ${this.formattedScanTime}\n` +
-                   `Duration: ${this.scanDuration} seconds\n` +
-                   `Open Ports (${this.openPorts.length}):\n` +
-                   this.openPorts.map(p => 
-                     `  ${p.port} - ${p.service} (${p.protocol})`
-                   ).join('\n');
+      const text = `Port Scan Results for ${this.scanTarget}
+================================
+Scan Time: ${this.formattedScanTime}
+Duration: ${this.scanDuration} seconds
+Total Ports Scanned: 65535
+Open Ports Found: ${this.openPorts.length}
+
+Open Ports:
+${this.openPorts.map(p => `  ${p.port}/tcp - ${p.service}`).join('\n')}`;
       
       navigator.clipboard.writeText(text).then(() => {
         alert('Results copied to clipboard!');
@@ -734,28 +780,28 @@ export default {
 
 <style scoped>
 .portscan-page {
-  padding: 20px;
+  padding: 24px;
   width: 100%;
   min-height: 100vh;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
   color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .portscan-container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
 }
 
 /* Scan Form */
 .scan-form {
   background: rgba(30, 41, 59, 0.8);
-  border-radius: 15px;
-  padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  margin-bottom: 30px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
   backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  margin-bottom: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .form-group label {
@@ -768,31 +814,32 @@ export default {
 
 .input-with-button {
   display: flex;
-  gap: 15px;
+  gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .target-input {
   flex: 1;
-  padding: 16px 20px;
-  border: 2px solid rgba(148, 163, 184, 0.2);
+  min-width: 300px;
+  padding: 14px 18px;
+  border: 1px solid #334155;
   border-radius: 10px;
   font-size: 1rem;
   font-family: 'Monaco', 'Courier New', monospace;
   transition: all 0.3s;
-  background: rgba(15, 23, 42, 0.7);
+  background: #0f172a;
   color: #e2e8f0;
 }
 
 .target-input::placeholder {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .target-input:focus {
   outline: none;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
-  background: rgba(15, 23, 42, 0.9);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .target-input:disabled {
@@ -800,21 +847,20 @@ export default {
   cursor: not-allowed;
 }
 
-.scan-button {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: white;
+.scan-button, .stop-button {
+  padding: 14px 28px;
   border: none;
-  padding: 16px 40px;
   border-radius: 10px;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
-  min-width: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   white-space: nowrap;
+}
+
+.scan-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
 }
 
 .scan-button:hover:not(:disabled) {
@@ -827,6 +873,16 @@ export default {
   cursor: not-allowed;
 }
 
+.stop-button {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.stop-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
 .scanning-text {
   display: flex;
   align-items: center;
@@ -836,8 +892,8 @@ export default {
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid white;
-  border-top-color: transparent;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -846,32 +902,13 @@ export default {
   to { transform: rotate(360deg); }
 }
 
-.stop-button {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  border: none;
-  padding: 16px 25px;
-  border-radius: 10px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  min-width: 120px;
-  white-space: nowrap;
-}
-
-.stop-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
-}
-
-/* Loading Animation */
+/* Loading Section */
 .loading-section {
-  margin-top: 25px;
-  padding: 25px;
-  background: rgba(15, 23, 42, 0.7);
+  margin-top: 24px;
+  padding: 24px;
+  background: #0f172a;
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid #334155;
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -881,17 +918,16 @@ export default {
 }
 
 .progress-container {
-  height: 10px;
-  background: rgba(148, 163, 184, 0.1);
-  border-radius: 5px;
+  height: 8px;
+  background: #1e293b;
+  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .progress-bar {
   height: 100%;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  border-radius: 5px;
   transition: width 0.3s ease;
   position: relative;
 }
@@ -915,17 +951,13 @@ export default {
 .loading-info {
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 24px;
 }
 
 .loading-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
-  padding: 20px;
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
 }
 
 .loading-stat {
@@ -933,9 +965,9 @@ export default {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.7);
+  background: #1e293b;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid #334155;
 }
 
 .stat-icon {
@@ -945,373 +977,319 @@ export default {
 .stat-text {
   font-weight: 500;
   color: #cbd5e1;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
-/* Port Visualization */
-.port-visualization {
-  padding: 25px;
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+/* Circular Progress Section */
+.circular-progress-section {
+  padding: 20px;
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
 }
 
-.vis-title {
-  font-weight: 600;
-  color: #e2e8f0;
-  margin-bottom: 20px;
-  text-align: center;
-  font-size: 1.1rem;
-}
-
-.port-range-info {
+.circular-progress-container {
   display: flex;
   align-items: center;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: 40px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.range-start, .range-end {
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-size: 0.9rem;
+.circular-progress {
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+
+.circular-progress-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+}
+
+.circular-bg {
+  stroke: #0f172a;
+}
+
+.circular-fill {
+  transition: stroke-dashoffset 0.3s ease;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+}
+
+.circular-progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.circular-percentage {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.circular-label {
+  font-size: 0.8rem;
   color: #94a3b8;
-  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.range-progress {
+.circular-stats {
   flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  min-width: 250px;
 }
 
-.range-bar {
-  height: 6px;
-  background: rgba(148, 163, 184, 0.1);
-  border-radius: 3px;
+.circular-stat-item {
+  text-align: center;
+  padding: 12px;
+  background: #0f172a;
+  border-radius: 8px;
+  border: 1px solid #334155;
+}
+
+.circular-stat-item .stat-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.circular-stat-item .stat-number {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.current-scan-info {
+  margin-top: 20px;
+  padding: 16px;
+  background: #0f172a;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-label {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.info-value {
+  color: #60a5fa;
+  font-weight: 600;
+  font-family: 'Monaco', 'Courier New', monospace;
+  background: #1e293b;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid #334155;
+}
+
+/* Real-time Ports Table */
+.realtime-ports-section {
+  margin-top: 20px;
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
   overflow: hidden;
 }
 
-.range-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #10b981, #0ea5e9);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.current-port {
-  text-align: center;
-  margin: 15px 0;
-  padding: 10px;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 8px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  color: #cbd5e1;
-}
-
-.open-ports-list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-left: 10px;
-}
-
-.open-port-badge {
-  padding: 4px 8px;
-  background: rgba(254, 226, 226, 0.1);
-  color: #fecaca;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  font-family: 'Monaco', 'Courier New', monospace;
-  border: 1px solid rgba(254, 202, 202, 0.2);
-}
-
-/* Port Grid */
-.port-grid {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 4px;
-  margin: 20px 0;
-  padding: 10px;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.port-block {
-  aspect-ratio: 1;
-  border-radius: 3px;
-  cursor: default;
-  position: relative;
-  transition: all 0.3s;
-}
-
-.port-block.pending {
-  background: rgba(148, 163, 184, 0.1);
-}
-
-.port-block.scanning {
-  background: linear-gradient(45deg, rgba(139, 92, 246, 0.7), rgba(99, 102, 241, 0.7));
-  animation: pulse 2s infinite;
-}
-
-.port-block.completed {
-  background: rgba(16, 185, 129, 0.3);
-}
-
-.port-block.open {
-  background: rgba(239, 68, 68, 0.3);
-  animation: highlight 1.5s infinite alternate;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-@keyframes highlight {
-  from { transform: scale(1); }
-  to { transform: scale(1.1); }
-}
-
-.block-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1e293b;
-  color: #e2e8f0;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  white-space: nowrap;
-  z-index: 1000;
-  margin-bottom: 5px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.block-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border-width: 5px;
-  border-style: solid;
-  border-color: #1e293b transparent transparent transparent;
-}
-
-.vis-legend {
+.section-header {
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-top: 20px;
-}
-
-.legend-item {
-  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: #94a3b8;
+  padding: 16px 20px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
 }
 
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.dot.pending { background: rgba(148, 163, 184, 0.3); }
-.dot.scanning { background: rgba(139, 92, 246, 0.7); }
-.dot.completed { background: rgba(16, 185, 129, 0.5); }
-.dot.open { background: rgba(239, 68, 68, 0.5); }
-
-/* Real-time Ports */
-.realtime-ports {
-  margin: 20px 0;
-  padding: 20px;
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.realtime-ports h3 {
-  margin: 0 0 15px 0;
-  color: #e2e8f0;
-  font-size: 1.2rem;
-}
-
-.ports-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.port-bubble {
-  padding: 12px 15px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 80px;
-  animation: slideIn 0.5s ease-out;
-  backdrop-filter: blur(10px);
-}
-
-.port-bubble.well-known {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.3));
-  border: 2px solid rgba(16, 185, 129, 0.4);
-}
-
-.port-bubble.registered {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.3));
-  border: 2px solid rgba(59, 130, 246, 0.4);
-}
-
-.port-bubble.dynamic {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.3));
-  border: 2px solid rgba(139, 92, 246, 0.4);
-}
-
-.port-bubble .port-number {
-  font-size: 1.4rem;
-  font-weight: 700;
-  font-family: 'Monaco', 'Courier New', monospace;
-  color: white;
-}
-
-.port-bubble .port-service {
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-align: center;
-  color: #cbd5e1;
-}
-
-.port-bubble .port-status {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #86efac;
-  border-radius: 10px;
-  backdrop-filter: blur(5px);
-}
-
-/* Scanning Tips */
-.scanning-tips {
-  display: flex;
-  gap: 20px;
-  padding: 25px;
-  background: rgba(146, 64, 14, 0.1);
-  border-radius: 10px;
-  border: 1px solid rgba(251, 191, 36, 0.2);
-  animation: slideIn 0.5s ease;
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.tip-icon {
-  font-size: 2.5rem;
-  flex-shrink: 0;
-}
-
-.tip-content {
-  flex: 1;
-}
-
-.tip-content strong {
-  display: block;
-  color: #fbbf24;
-  margin-bottom: 10px;
+.section-header h3 {
+  margin: 0;
+  color: #f8fafc;
   font-size: 1.1rem;
 }
 
-.tip-content p {
-  margin: 0 0 15px 0;
-  color: #fde68a;
-  line-height: 1.5;
-}
-
-.tip-content ul {
-  margin: 0;
-  padding-left: 20px;
-  color: #fde68a;
-}
-
-.tip-content li {
-  margin-bottom: 5px;
-  font-size: 0.9rem;
-}
-
-/* Connection Status */
-.connection-status {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.9rem;
+.badge {
+  background: #3b82f6;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
   font-weight: 500;
-  border-left: 4px solid;
 }
 
-.connection-status.connecting {
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
-  border-color: #f59e0b;
+.table-container {
+  max-height: 300px;
+  overflow-y: auto;
 }
 
-.connection-status.connected {
+.ports-table, .results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ports-table th, .results-table th {
+  position: sticky;
+  top: 0;
+  background: #0f172a;
+  padding: 12px 16px;
+  text-align: left;
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #334155;
+  z-index: 10;
+}
+
+.ports-table td, .results-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.port-row, .result-row {
+  transition: background-color 0.2s;
+}
+
+.port-row:hover, .result-row:hover {
+  background: #2d3748;
+}
+
+.port-row.well-known, .result-row.well-known {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.port-row.registered, .result-row.registered {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.port-row.dynamic, .result-row.dynamic {
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.port-number-cell {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.port-service-cell {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.port-protocol-cell {
+  color: #94a3b8;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.8rem;
+}
+
+.port-category-cell {
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.well-known .port-category-cell {
   background: rgba(16, 185, 129, 0.1);
   color: #34d399;
-  border-color: #10b981;
 }
 
-.connection-status.error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-  border-color: #ef4444;
-}
-
-.connection-status.disconnected {
-  background: rgba(148, 163, 184, 0.1);
-  color: #94a3b8;
-  border-color: #64748b;
-}
-
-.connection-status.completed {
+.registered .port-category-cell {
   background: rgba(59, 130, 246, 0.1);
-  color: #93c5fd;
-  border-color: #3b82f6;
+  color: #60a5fa;
 }
 
-.connection-status.stopped {
-  background: rgba(236, 72, 153, 0.1);
-  color: #f9a8d4;
-  border-color: #ec4899;
+.dynamic .port-category-cell {
+  background: rgba(139, 92, 246, 0.1);
+  color: #c4b5fd;
 }
 
-.error-message {
-  color: #fca5a5;
-  margin-top: 10px;
-  font-size: 0.9rem;
-  padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 6px;
-  border-left: 4px solid #ef4444;
+.port-description-cell {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.no-ports-yet {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+  background: #1e293b;
+  border-radius: 8px;
+  border: 1px dashed #334155;
+}
+
+.no-ports-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.scanning-pulse {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.pulse-dot {
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.pulse-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.pulse-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 
 /* Results Section */
 .results-section {
   background: rgba(30, 41, 59, 0.8);
-  border-radius: 15px;
-  padding: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  margin-bottom: 30px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
   backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
   animation: slideInUp 0.5s ease-out;
 }
 
@@ -1324,29 +1302,21 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid rgba(148, 163, 184, 0.2);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #334155;
 }
 
 .results-header h2 {
   margin: 0;
-  color: #e2e8f0;
-  font-size: 1.8rem;
+  color: #f8fafc;
+  font-size: 1.5rem;
 }
 
 .results-meta {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-}
-
-.target-display {
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 600;
-  color: #cbd5e1;
-  font-size: 1.1rem;
+  align-items: center;
+  gap: 16px;
 }
 
 .scan-time {
@@ -1354,204 +1324,260 @@ export default {
   font-size: 0.9rem;
 }
 
-/* Port Results */
-.port-results {
-  margin: 20px 0;
-}
-
-.no-ports {
-  text-align: center;
-  padding: 60px 40px;
-  color: #94a3b8;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 10px;
-  border: 2px dashed rgba(148, 163, 184, 0.2);
-}
-
-.no-ports p {
-  margin: 0 0 10px 0;
-  font-size: 1.2rem;
-}
-
-.scan-summary {
-  font-size: 0.9rem !important;
-  color: #64748b;
-}
-
-.results-summary {
-  margin-bottom: 30px;
-  padding: 20px;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.results-summary h3 {
-  margin: 0 0 15px 0;
-  color: #e2e8f0;
-  font-size: 1.3rem;
-}
-
-.summary-stats {
-  display: flex;
-  gap: 30px;
-  flex-wrap: wrap;
-}
-
-.summary-stats span {
-  padding: 8px 16px;
-  background: rgba(30, 41, 59, 0.8);
-  color: #cbd5e1;
-  border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  font-weight: 500;
-}
-
-.port-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-}
-
-.port-item {
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 12px;
-  padding: 25px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  border: 2px solid rgba(148, 163, 184, 0.1);
-  transition: all 0.3s;
-  text-align: center;
-  backdrop-filter: blur(10px);
-}
-
-.port-item:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  border-color: rgba(96, 165, 250, 0.3);
-}
-
-.port-number {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: white;
-  font-family: 'Monaco', 'Courier New', monospace;
-  line-height: 1;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.port-status {
-  padding: 6px 16px;
+.scan-duration-badge {
+  background: #1e293b;
+  color: #60a5fa;
+  padding: 4px 12px;
   border-radius: 20px;
   font-size: 0.9rem;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  border: 1px solid #334155;
 }
 
-.port-status.open {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.port-service {
-  color: #cbd5e1;
-  font-weight: 600;
-  font-size: 1rem;
-  margin-top: 5px;
-}
-
-.port-protocol {
-  color: #94a3b8;
-  font-size: 0.85rem;
-  padding: 4px 10px;
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 4px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.port-description {
-  color: #64748b;
-  font-size: 0.8rem;
-  margin-top: 5px;
-  font-style: italic;
-}
-
-/* Statistics */
-.scan-stats {
+/* Summary Cards */
+.summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 25px;
-  padding-top: 30px;
-  margin-top: 30px;
-  border-top: 2px solid rgba(148, 163, 184, 0.2);
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.stat-item {
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  transition: all 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+.summary-icon {
+  font-size: 2rem;
+}
+
+.summary-content {
+  flex: 1;
+}
+
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.summary-label {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Results Table */
+.results-table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  margin-bottom: 24px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th {
+  position: sticky;
+  top: 0;
+  background: #0f172a;
+  padding: 14px 16px;
+  text-align: left;
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #334155;
+  z-index: 10;
+}
+
+.results-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e293b;
+}
+
+/* Port Distribution */
+.port-distribution {
+  margin-top: 24px;
+  padding: 20px;
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px solid #334155;
+}
+
+.port-distribution h4 {
+  margin: 0 0 16px 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.distribution-bars {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 20px;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  backdrop-filter: blur(10px);
+  gap: 12px;
 }
 
-.stat-label {
-  color: #94a3b8;
+.distribution-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dist-label {
+  min-width: 120px;
+  color: #cbd5e1;
   font-size: 0.9rem;
-  font-weight: 500;
 }
 
-.stat-value {
-  font-weight: 700;
-  font-size: 1.5rem;
-  color: #e2e8f0;
+.dist-bar-container {
+  flex: 1;
+  height: 24px;
+  background: #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #334155;
 }
 
-.stat-value.success {
-  color: #34d399;
+.dist-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.dist-bar.well-known {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.dist-bar.registered {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.dist-bar.dynamic {
+  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+}
+
+.dist-count {
+  min-width: 60px;
+  color: #f8fafc;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* No Ports State */
+.no-ports {
+  text-align: center;
+  padding: 60px 40px;
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px dashed #334155;
+}
+
+.no-ports-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  opacity: 0.5;
+}
+
+.no-ports h3 {
+  color: #f8fafc;
+  margin-bottom: 10px;
+  font-size: 1.3rem;
+}
+
+.no-ports p {
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.scan-summary {
+  font-size: 0.9rem;
+  color: #64748b;
 }
 
 /* Export Section */
 .export-section {
   display: flex;
-  gap: 15px;
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
 }
 
 .export-btn {
-  padding: 10px 20px;
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 12px 20px;
+  border: none;
   border-radius: 8px;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.export-btn:hover {
-  background: rgba(148, 163, 184, 0.2);
+.export-btn.json {
+  background: #3b82f6;
+  color: white;
+}
+
+.export-btn.json:hover {
+  background: #2563eb;
   transform: translateY(-2px);
-  color: #e2e8f0;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.export-btn.csv {
+  background: #10b981;
+  color: white;
+}
+
+.export-btn.csv:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.export-btn.copy {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+}
+
+.export-btn.copy:hover {
+  background: #2d3748;
+  transform: translateY(-2px);
+}
+
+.btn-icon {
+  font-size: 1.1rem;
 }
 
 /* Recent Scans */
 .recent-scans {
   background: rgba(30, 41, 59, 0.8);
-  border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(148, 163, 184, 0.1);
   backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .recent-header {
@@ -1563,24 +1589,25 @@ export default {
 
 .recent-header h3 {
   margin: 0;
-  color: #e2e8f0;
-  font-size: 1.3rem;
+  color: #f8fafc;
+  font-size: 1.2rem;
 }
 
 .clear-history-btn {
   padding: 8px 16px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: #1e293b;
+  color: #f87171;
+  border: 1px solid #334155;
   border-radius: 6px;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
 .clear-history-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
 }
 
 .scans-list {
@@ -1593,118 +1620,151 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 20px;
-  background: rgba(15, 23, 42, 0.7);
+  padding: 16px 20px;
+  background: #0f172a;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid #334155;
   cursor: pointer;
-  transition: all 0.3s;
-  backdrop-filter: blur(10px);
+  transition: all 0.2s;
 }
 
 .scan-item:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(96, 165, 250, 0.3);
+  background: #1e293b;
+  border-color: #3b82f6;
   transform: translateX(5px);
 }
 
 .scan-info-main {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .scan-target {
   font-weight: 600;
-  color: #e2e8f0;
+  color: #f8fafc;
   font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .scan-ports {
   color: #94a3b8;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .scan-info-secondary {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 4px;
 }
 
 .scan-time {
   color: #94a3b8;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .scan-duration {
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
+  background: #1e293b;
+  color: #60a5fa;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.8rem;
   font-family: 'Monaco', 'Courier New', monospace;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid #334155;
+}
+
+/* Error and Connection Status */
+.error-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border-radius: 8px;
+  border-left: 4px solid #ef4444;
+}
+
+.connection-status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.connection-status.connecting {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.connection-status.connected {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.connection-status.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.connection-status.disconnected {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .portscan-container {
-    padding: 10px;
-  }
-  
-  .scan-form {
-    padding: 20px;
+    padding: 12px;
   }
   
   .input-with-button {
     flex-direction: column;
   }
   
-  .target-input,
-  .scan-button {
+  .target-input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .scan-button, .stop-button {
     width: 100%;
   }
   
   .results-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 15px;
+    gap: 12px;
   }
   
   .results-meta {
-    align-items: flex-start;
+    width: 100%;
+    justify-content: space-between;
   }
   
-  .port-list {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  }
-  
-  .scan-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .scan-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  
-  .scan-info-secondary {
-    align-items: flex-start;
-  }
-  
-  .loading-stats {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .scan-stats {
-    grid-template-columns: 1fr;
-  }
-  
-  .loading-stats {
+  .summary-cards {
     grid-template-columns: 1fr;
   }
   
@@ -1714,6 +1774,52 @@ export default {
   
   .export-btn {
     width: 100%;
+    justify-content: center;
+  }
+  
+  .circular-progress-container {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .circular-stats {
+    width: 100%;
+  }
+  
+  .distribution-item {
+    flex-wrap: wrap;
+  }
+  
+  .dist-label {
+    min-width: 100%;
+  }
+  
+  .scan-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .scan-info-secondary {
+    align-items: flex-start;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  
+  .current-scan-info {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .loading-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .circular-stats {
+    grid-template-columns: 1fr;
   }
 }
 </style>

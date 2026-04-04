@@ -347,7 +347,7 @@ async function fetchServices() {
   error.value = null;
 
   try {
-    const response = await fetch(`${API_URL}/services`);
+    const response = await fetch(`${API_URL}/v1/api/services`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -371,7 +371,7 @@ async function refreshService(id) {
   service.online = false;
   
   try {
-    const response = await fetch(`${API_URL}/services/${id}/check`);
+    const response = await fetch(`${API_URL}/v1/api/services/${id}/check`);
     if (response.ok) {
       const data = await response.json();
       service.online = data.online;
@@ -390,7 +390,7 @@ async function deleteService(id) {
   if (!showDeleteConfirm.value) return;
 
   try {
-    const response = await fetch(`${API_URL}/services/${id}`, {
+    const response = await fetch(`${API_URL}/v1/api/services/${id}`, {
       method: 'DELETE'
     });
     
@@ -435,7 +435,7 @@ async function saveService() {
   saving.value = true;
 
   try {
-    const response = await fetch(`${API_URL}/services`, {
+    const response = await fetch(`${API_URL}/v1/api/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

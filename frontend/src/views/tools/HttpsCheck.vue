@@ -279,7 +279,7 @@ export default {
         const cleanUrl = this.cleanUrl(this.url.trim());
         
         // Call backend API
-        const response = await fetch(`${API_URL}/v1/httpsCheck`, {
+        const response = await fetch(`${API_URL}/v1/api/httpsCheck`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

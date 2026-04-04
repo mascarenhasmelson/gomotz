@@ -66,11 +66,6 @@ const router = createRouter({
           path: 'HTTPsMonitoring',
           component: () => import('../views/monitor/HTTPsMonitoring.vue')
         },
-      
-        {
-          path: 'SMTPMonitoring',
-          component: () => import('../views/monitor/SMTPMonitoring.vue')
-        },
          {
           path: 'SNMPMonitor',
           component: () => import('../views/monitor/SNMPMonitor.vue')
@@ -83,14 +78,7 @@ const router = createRouter({
           path: 'HTTPsKeyword',
           component: () => import('../views/monitor/HTTPsKeyword.vue')
         },
-         {
-          path: 'HTTPsJSON',
-          component: () => import('../views/monitor/HTTPsJSON.vue')
-        },
-           {
-          path: 'gRPCJSON',
-          component: () => import('../views/monitor/gRPCJSON.vue')
-        },
+    
         {
           path: 'TCPMonitoring',
           component: () => import('../views/monitor/TCPMonitoring.vue')

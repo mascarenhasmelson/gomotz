@@ -238,7 +238,7 @@ export default {
     
     connectWebSocket() {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/traceroute`;
+      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/api/traceroute`;
       
       this.ws = new WebSocket(wsUrl);
       

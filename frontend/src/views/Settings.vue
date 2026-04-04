@@ -67,6 +67,51 @@
             </div>
           </div>
 
+          <!-- VLAN Sniffer Section -->
+          <div class="vlan-sniffer-section">
+            <!-- <div class="sniffer-header" @click="showSniffer = !showSniffer">
+              <h4>VLAN Sniffer</h4>
+              <button class="toggle-btn">
+                <span :class="{ 'rotated': showSniffer }">▼</span>
+              </button>
+            </div> -->
+            
+            <!-- <div v-if="showSniffer" class="sniffer-content">
+              <button 
+                class="scan-sniffer-btn" 
+                @click="scanForVLANs" 
+                :disabled="isSniffing"
+              >
+                <span class="scan-icon" :class="{ 'spinning': isSniffing }">↻</span>
+                {{ isSniffing ? 'Scanning...' : 'Scan for VLANs' }}
+              </button>
+              
+              <div v-if="sniffedVLANs.length > 0" class="sniffed-list">
+                <div 
+                  v-for="vlan in sniffedVLANs" 
+                  :key="vlan.id"
+                  class="sniffed-item"
+                  @click="selectSniffedVLAN(vlan)"
+                >
+                  <div class="sniffed-info">
+                    <span class="sniffed-id">VLAN {{ vlan.id }}</span>
+                    <span class="sniffed-name">{{ vlan.name || 'Unknown' }}</span>
+                  </div>
+                  <button class="add-sniffed-btn" @click.stop="addSniffedVLAN(vlan)">Add</button>
+                </div>
+              </div>
+              
+              <div v-else-if="!isSniffing" class="no-sniffed">
+                <p>No VLANs detected. Click "Scan for VLANs" to discover.</p>
+              </div>
+              
+              <div v-if="isSniffing" class="sniffing-progress">
+                <div class="sniffing-spinner"></div>
+                <p>Sniffing network traffic...</p>
+              </div>
+            </div> -->
+          </div>
+
           <!-- Empty State -->
           <div v-if="interfaces.length === 0 && !isLoading" class="empty-state">
             <div class="empty-icon">🔌</div>
@@ -113,7 +158,7 @@
             <h3>Create VLAN Interface</h3>
             
             <div class="form-group">
-              <label for="vlanId">VLAN ID</label>
+              <label for="vlanId">VLAN ID <span class="required">*</span></label>
               <input 
                 type="number" 
                 id="vlanId"
@@ -127,48 +172,104 @@
               <span class="input-hint">VLAN ID (1-4094)</span>
             </div>
 
+            <!-- IP Configuration Method -->
             <div class="form-group">
-              <label for="ipAddress">IP Address</label>
-              <input 
-                type="text" 
-                id="ipAddress"
-                v-model="vlanConfig.ipAddress"
-                placeholder="e.g., 192.168.10.1"
-                class="form-input"
-                :disabled="!selectedInterface"
-                @input="validateIP"
-              />
-              <span v-if="ipError" class="error-text">{{ ipError }}</span>
+              <label>IP Configuration</label>
+              <div class="config-methods">
+                <label class="method-radio">
+                  <input 
+                    type="radio" 
+                    v-model="vlanConfig.ipMethod" 
+                    value="dhcp"
+                  >
+                  <span class="radio-label">DHCP</span>
+                  <span class="method-desc">Automatically obtain IP from DHCP server</span>
+                </label>
+                
+                <label class="method-radio">
+                  <input 
+                    type="radio" 
+                    v-model="vlanConfig.ipMethod" 
+                    value="static"
+                  >
+                  <span class="radio-label">Static IP</span>
+                  <span class="method-desc">Manually configure IP address</span>
+                </label>
+              </div>
             </div>
 
-            <!-- Simplified CIDR Selection -->
-            <div class="form-group">
-              <label for="cidr">CIDR Notation</label>
-              <select 
-                id="cidr"
-                v-model="vlanConfig.cidr"
-                class="cidr-select"
-                :disabled="!selectedInterface"
-              >
-                <option value="/24">/24</option>
-                <option value="/16">/16</option>
-                <option value="/8">/8</option>
-              </select>
-              <span class="input-hint">Select CIDR notation</span>
+            <!-- Static IP Configuration (shown only when static is selected) -->
+            <div v-if="vlanConfig.ipMethod === 'static'" class="static-ip-fields">
+              <div class="form-group">
+                <label for="ipAddress">IP Address <span class="required">*</span></label>
+                <input 
+                  type="text" 
+                  id="ipAddress"
+                  v-model="vlanConfig.ipAddress"
+                  placeholder="e.g., 192.168.10.1"
+                  class="form-input"
+                  :disabled="!selectedInterface"
+                  @input="validateIP"
+                />
+                <span v-if="ipError" class="error-text">{{ ipError }}</span>
+              </div>
+
+              <div class="form-group">
+                <label for="cidr">CIDR Notation <span class="required">*</span></label>
+                <select 
+                  id="cidr"
+                  v-model="vlanConfig.cidr"
+                  class="cidr-select"
+                  :disabled="!selectedInterface"
+                >
+                  <option value="/24">/24 (255.255.255.0) - 254 hosts</option>
+                  <option value="/16">/16 (255.255.0.0) - 65,534 hosts</option>
+                  <option value="/8">/8 (255.0.0.0) - 16,777,214 hosts</option>
+                </select>
+                <span class="input-hint">Select CIDR notation</span>
+              </div>
+
+              <div class="form-group">
+                <label for="gateway">Default Gateway</label>
+                <input 
+                  type="text" 
+                  id="gateway"
+                  v-model="vlanConfig.gateway"
+                  placeholder="e.g., 192.168.10.1"
+                  class="form-input"
+                  :disabled="!selectedInterface"
+                  @input="validateGateway"
+                />
+                <span v-if="gatewayError" class="error-text">{{ gatewayError }}</span>
+                <span class="input-hint">Optional - leave empty if no gateway</span>
+              </div>
+
+              <!-- Network Preview (for static IP) -->
+              <div v-if="vlanConfig.ipAddress && vlanConfig.cidr" class="network-preview">
+                <h4>Network Preview</h4>
+                <div class="preview-grid">
+                  <div class="preview-item">
+                    <span class="preview-label">Network:</span>
+                    <span class="preview-value">{{ calculateNetworkAddress(vlanConfig) }}</span>
+                  </div>
+                  <div class="preview-item">
+                    <span class="preview-label">Broadcast:</span>
+                    <span class="preview-value">{{ calculateBroadcastAddress(vlanConfig) }}</span>
+                  </div>
+                  <div class="preview-item">
+                    <span class="preview-label">Hosts:</span>
+                    <span class="preview-value">{{ calculateUsableHosts(vlanConfig) }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="gateway">Default Gateway</label>
-              <input 
-                type="text" 
-                id="gateway"
-                v-model="vlanConfig.gateway"
-                placeholder="e.g., 192.168.10.1"
-                class="form-input"
-                :disabled="!selectedInterface"
-                @input="validateGateway"
-              />
-              <span v-if="gatewayError" class="error-text">{{ gatewayError }}</span>
+            <!-- DHCP Info (shown when DHCP is selected) -->
+            <div v-if="vlanConfig.ipMethod === 'dhcp'" class="dhcp-info">
+              <div class="info-box">
+                <span class="info-icon">ℹ️</span>
+                <span>VLAN will obtain IP configuration automatically from DHCP server</span>
+              </div>
             </div>
 
             <!-- Monitor Checkbox for VLAN -->
@@ -185,28 +286,9 @@
               </label>
             </div>
 
-            <!-- Network Preview -->
-            <div v-if="vlanConfig.ipAddress && vlanConfig.cidr" class="network-preview">
-              <h4>Network Preview</h4>
-              <div class="preview-grid">
-                <div class="preview-item">
-                  <span class="preview-label">Network:</span>
-                  <span class="preview-value">{{ calculateNetworkAddress(vlanConfig) }}</span>
-                </div>
-                <div class="preview-item">
-                  <span class="preview-label">Broadcast:</span>
-                  <span class="preview-value">{{ calculateBroadcastAddress(vlanConfig) }}</span>
-                </div>
-                <div class="preview-item">
-                  <span class="preview-label">Hosts:</span>
-                  <span class="preview-value">{{ calculateUsableHosts(vlanConfig) }}</span>
-                </div>
-              </div>
-            </div>
-
             <!-- Action Buttons -->
             <div class="form-actions">
-              <button class="btn btn-primary" @click="createVLAN" :disabled="!selectedInterface">
+              <button class="btn btn-primary" @click="createVLAN" :disabled="!selectedInterface || !vlanConfig.id || (vlanConfig.ipMethod === 'static' && !vlanConfig.ipAddress)">
                 <span class="btn-icon">➕</span>
                 Create VLAN
               </button>
@@ -223,7 +305,8 @@
               <div v-for="vlan in existingVLANs.filter(v => v.parentInterface === selectedInterface.name)" :key="vlan.id" class="vlan-compact-item">
                 <div class="vlan-compact-info">
                   <span class="vlan-compact-id">VLAN {{ vlan.id }}</span>
-                  <span class="vlan-compact-ip">{{ vlan.ipAddress }}{{ vlan.cidr }}</span>
+                  <span class="vlan-compact-ip">{{ vlan.ipAddress || 'DHCP' }}{{ vlan.cidr || '' }}</span>
+                  <span class="vlan-method-badge" :class="vlan.ipMethod">{{ vlan.ipMethod === 'dhcp' ? 'DHCP' : 'Static' }}</span>
                   <span v-if="vlan.monitorEnabled" class="monitoring-badge" title="Monitoring enabled">📊</span>
                 </div>
                 <div class="vlan-compact-actions">
@@ -268,10 +351,14 @@ export default {
     const interfaces = ref([])
     const selectedInterface = ref(null)
     const isLoading = ref(false)
+    const showSniffer = ref(false)
+    const isSniffing = ref(false)
+    const sniffedVLANs = ref([])
     
-    // VLAN Configuration - Simplified
+    // VLAN Configuration
     const vlanConfig = reactive({
       id: '',
+      ipMethod: 'dhcp', // 'dhcp' or 'static'
       ipAddress: '',
       cidr: '/24',
       gateway: '',
@@ -350,8 +437,8 @@ export default {
         console.error('Error fetching VLANs:', error)
         // For development - use sample data
         existingVLANs.value = [
-          { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true },
-          { id: 20, parentInterface: 'eth0', ipAddress: '192.168.20.1', cidr: '/24', gateway: '192.168.20.254', monitorEnabled: false }
+          { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true, ipMethod: 'static' },
+          { id: 20, parentInterface: 'eth0', ipAddress: '', cidr: '', gateway: '', monitorEnabled: false, ipMethod: 'dhcp' }
         ]
       }
     }
@@ -369,32 +456,62 @@ export default {
           isDefault: true,
           monitorEnabled: true
         },
-        { 
-          name: 'wlan0', 
-          ipAddress: '10.0.0.5', 
-          cidr: '/24',
-          gateway: '10.0.0.1', 
-          mac: 'aa:bb:cc:dd:ee:ff', 
-          status: 'up',
-          isDefault: false,
-          monitorEnabled: false
-        },
-        { 
-          name: 'docker0', 
-          ipAddress: '172.17.0.1', 
-          cidr: '/16',
-          gateway: null, 
-          mac: '00:11:22:33:44:66', 
-          status: 'up',
-          isDefault: false,
-          monitorEnabled: false
-        }
       ]
       
       existingVLANs.value = [
-        { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true },
-        { id: 20, parentInterface: 'eth0', ipAddress: '192.168.20.1', cidr: '/24', gateway: '192.168.20.254', monitorEnabled: false }
+        { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true, ipMethod: 'static' },
+        { id: 20, parentInterface: 'eth0', ipAddress: '', cidr: '', gateway: '', monitorEnabled: false, ipMethod: 'dhcp' }
       ]
+    }
+
+    // VLAN Sniffer Methods
+    const scanForVLANs = async () => {
+      isSniffing.value = true
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/network/vlans/scan`, {
+          method: 'POST'
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to scan for VLANs')
+        }
+        
+        const data = await response.json()
+        sniffedVLANs.value = data.vlans || []
+        showNotification(`Found ${sniffedVLANs.value.length} VLANs`, 'success')
+      } catch (error) {
+        console.error('Error scanning VLANs:', error)
+        
+        // Simulate found VLANs for demo
+        setTimeout(() => {
+          sniffedVLANs.value = [
+            { id: 30, name: 'Marketing' },
+            { id: 40, name: 'Engineering' },
+            { id: 50, name: 'Guest' }
+          ]
+          showNotification(`Found ${sniffedVLANs.value.length} VLANs`, 'success')
+          isSniffing.value = false
+        }, 2000)
+      } finally {
+        if (!isSniffing.value) return
+        isSniffing.value = false
+      }
+    }
+
+    const selectSniffedVLAN = (vlan) => {
+      vlanConfig.id = vlan.id
+      // Scroll to form
+      document.querySelector('.config-panel').scrollIntoView({ behavior: 'smooth' })
+    }
+
+    const addSniffedVLAN = (vlan) => {
+      vlanConfig.id = vlan.id
+      // Auto-fill name if available
+      if (vlan.name && !vlanConfig.name) {
+        // Could add name field if needed
+      }
+      showNotification(`VLAN ${vlan.id} selected for configuration`, 'success')
     }
 
     const selectInterface = (iface) => {
@@ -545,30 +662,37 @@ export default {
         return
       }
 
-      if (!vlanConfig.ipAddress) {
-        showNotification('Please enter an IP address', 'error')
-        return
-      }
-
-      if (ipError.value || gatewayError.value) {
-        showNotification('Please fix configuration errors', 'error')
-        return
+      if (vlanConfig.ipMethod === 'static') {
+        if (!vlanConfig.ipAddress) {
+          showNotification('Please enter an IP address for static configuration', 'error')
+          return
+        }
+        if (ipError.value || gatewayError.value) {
+          showNotification('Please fix configuration errors', 'error')
+          return
+        }
       }
 
       try {
+        const payload = {
+          id: vlanConfig.id,
+          parentInterface: selectedInterface.value.name,
+          ipMethod: vlanConfig.ipMethod,
+          monitorEnabled: vlanConfig.monitorEnabled
+        }
+
+        if (vlanConfig.ipMethod === 'static') {
+          payload.ipAddress = vlanConfig.ipAddress
+          payload.cidr = vlanConfig.cidr
+          payload.gateway = vlanConfig.gateway || null
+        }
+
         const response = await fetch(`${API_BASE_URL}/vlans`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            id: vlanConfig.id,
-            parentInterface: selectedInterface.value.name,
-            ipAddress: vlanConfig.ipAddress,
-            cidr: vlanConfig.cidr,
-            gateway: vlanConfig.gateway,
-            monitorEnabled: vlanConfig.monitorEnabled
-          })
+          body: JSON.stringify(payload)
         })
 
         if (!response.ok) {
@@ -591,6 +715,7 @@ export default {
 
     const resetVLANForm = () => {
       vlanConfig.id = ''
+      vlanConfig.ipMethod = 'dhcp'
       vlanConfig.ipAddress = ''
       vlanConfig.cidr = '/24'
       vlanConfig.gateway = ''
@@ -601,9 +726,10 @@ export default {
 
     const editVLAN = (vlan) => {
       vlanConfig.id = vlan.id
-      vlanConfig.ipAddress = vlan.ipAddress
-      vlanConfig.cidr = vlan.cidr
-      vlanConfig.gateway = vlan.gateway
+      vlanConfig.ipMethod = vlan.ipMethod || 'static'
+      vlanConfig.ipAddress = vlan.ipAddress || ''
+      vlanConfig.cidr = vlan.cidr || '/24'
+      vlanConfig.gateway = vlan.gateway || ''
       vlanConfig.monitorEnabled = vlan.monitorEnabled || false
       
       // Find and select the parent interface
@@ -655,6 +781,9 @@ export default {
       interfaces: interfacesWithMonitor,
       selectedInterface,
       isLoading,
+      showSniffer,
+      isSniffing,
+      sniffedVLANs,
       vlanConfig,
       existingVLANs,
       ipError,
@@ -665,6 +794,9 @@ export default {
       toggleInterfaceMonitor,
       toggleVLANMonitor,
       saveInterfaceConfig,
+      scanForVLANs,
+      selectSniffedVLAN,
+      addSniffedVLAN,
       validateIP,
       validateGateway,
       calculateNetworkAddress,
@@ -882,8 +1014,7 @@ export default {
 }
 
 .interface-item.default-route {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
+  border-left: 4px solid #f59e0b;
 }
 
 .interface-indicator {
@@ -920,7 +1051,7 @@ export default {
 }
 
 .default-badge {
-  background: #3b82f6;
+  background: #f59e0b;
   color: white;
   padding: 2px 8px;
   border-radius: 12px;
@@ -972,6 +1103,174 @@ export default {
 
 .interface-item:hover .interface-actions {
   opacity: 1;
+}
+
+/* VLAN Sniffer Section */
+.vlan-sniffer-section {
+  margin-top: 24px;
+  border-top: 1px solid #334155;
+  padding-top: 16px;
+}
+
+.sniffer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 16px;
+  background: #1e293b;
+  border-radius: 8px;
+}
+
+.sniffer-header h4 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.toggle-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+}
+
+.toggle-btn span {
+  display: inline-block;
+  transition: transform 0.3s;
+}
+
+.toggle-btn span.rotated {
+  transform: rotate(180deg);
+}
+
+.sniffer-content {
+  margin-top: 16px;
+  padding: 0 16px;
+}
+
+.scan-sniffer-btn {
+  width: 100%;
+  padding: 12px;
+  background: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.scan-sniffer-btn:hover:not(:disabled) {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.scan-sniffer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-icon {
+  display: inline-block;
+  transition: transform 0.3s;
+}
+
+.scan-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+.sniffed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.sniffed-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sniffed-item:hover {
+  background: #2d3748;
+  border-color: #3b82f6;
+}
+
+.sniffed-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sniffed-id {
+  font-weight: 600;
+  color: #60a5fa;
+  font-size: 0.9rem;
+}
+
+.sniffed-name {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.add-sniffed-btn {
+  padding: 4px 12px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-sniffed-btn:hover {
+  background: #2563eb;
+}
+
+.no-sniffed {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.sniffing-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.sniffing-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #1e293b;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+.sniffing-progress p {
+  color: #94a3b8;
+  font-size: 0.9rem;
 }
 
 /* Monitor Checkbox Styles */
@@ -1128,6 +1427,11 @@ export default {
   font-weight: 600;
 }
 
+.required {
+  color: #ef4444;
+  margin-left: 4px;
+}
+
 .form-group {
   margin-bottom: 16px;
 }
@@ -1174,6 +1478,57 @@ export default {
   margin-top: 4px;
 }
 
+/* Config Methods */
+.config-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.method-radio {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.method-radio:hover {
+  background: #2d3748;
+  border-color: #3b82f6;
+}
+
+.method-radio input[type="radio"] {
+  margin-right: 12px;
+  accent-color: #3b82f6;
+  width: 16px;
+  height: 16px;
+}
+
+.radio-label {
+  font-weight: 600;
+  color: #f8fafc;
+  margin-right: 12px;
+  min-width: 70px;
+}
+
+.method-desc {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+/* Static IP Fields */
+.static-ip-fields {
+  margin-top: 20px;
+  padding: 16px;
+  background: #1e293b;
+  border-radius: 8px;
+  border: 1px solid #334155;
+}
+
 /* CIDR Select */
 .cidr-select {
   width: 100%;
@@ -1213,6 +1568,26 @@ export default {
   color: #f87171;
   font-size: 0.8rem;
   margin-top: 4px;
+}
+
+/* DHCP Info */
+.dhcp-info {
+  margin-top: 20px;
+}
+
+.info-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  color: #94a3b8;
+}
+
+.info-icon {
+  font-size: 1.2rem;
 }
 
 /* Monitor Group */
@@ -1296,6 +1671,25 @@ export default {
 .vlan-compact-ip {
   color: #94a3b8;
   font-size: 0.85rem;
+}
+
+.vlan-method-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.vlan-method-badge.dhcp {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.vlan-method-badge.static {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .monitoring-badge {
@@ -1609,6 +2003,14 @@ export default {
   .vlan-compact-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+  
+  .config-methods {
+    flex-direction: column;
+  }
+  
+  .method-radio {
+    width: 100%;
   }
 }
 </style>

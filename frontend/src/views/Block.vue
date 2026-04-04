@@ -558,7 +558,7 @@ export default {
         devices.value[index].blocked = !device.blocked
         saveToLocalStorage()
         console.log(`${actionText}ing device:`, device.ip)
-        alert(`✅ ${actionText}ed internet for ${device.hostname || device.ip}`)
+        alert(` ${actionText}ed internet for ${device.hostname || device.ip}`)
       }
     }
     
@@ -581,7 +581,7 @@ export default {
       saveToLocalStorage()
       selectedDevices.value = []
       selectAllCheckbox.value = false
-      alert(`✅ ${action}ed internet for ${count} device${count > 1 ? 's' : ''}`)
+      alert(`${action}ed internet for ${count} device${count > 1 ? 's' : ''}`)
     }
     
     const selectAll = () => {

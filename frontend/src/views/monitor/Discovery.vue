@@ -2,15 +2,12 @@
   <div class="lan-scanner">
     <!-- Top Bar -->
     <div class="top-bar">
-      <!-- Controls Bar -->
       <div class="controls-bar">
-        <!-- VLAN Filter -->
         <div class="vlan-filter">
           <label for="vlan-select">VLAN:</label>
-          <select 
-            id="vlan-select" 
-            v-model="selectedVlan" 
-            @change="filterByVlan"
+          <select
+            id="vlan-select"
+            v-model="selectedVlan"
             class="vlan-select"
             :disabled="!connected"
           >
@@ -21,28 +18,55 @@
           </select>
         </div>
 
-        <!-- Search Bar -->
+        <div class="status-filter">
+          <label>Status:</label>
+          <div class="status-buttons">
+            <button 
+              @click="selectedStatus = 'all'" 
+              class="status-btn"
+              :class="{ active: selectedStatus === 'all' }"
+            >
+              All ({{ totalDevicesCount }})
+            </button>
+            <button 
+              @click="selectedStatus = 'online'" 
+              class="status-btn online-btn"
+              :class="{ active: selectedStatus === 'online' }"
+            >
+              🟢 Online ({{ onlineCount }})
+            </button>
+            <button 
+              @click="selectedStatus = 'offline'" 
+              class="status-btn offline-btn"
+              :class="{ active: selectedStatus === 'offline' }"
+            >
+              🔴 Offline ({{ offlineCount }})
+            </button>
+            <button 
+              @click="selectedStatus = 'conflict'" 
+              class="status-btn conflict-btn"
+              :class="{ active: selectedStatus === 'conflict' }"
+            >
+              ⚠️ Conflict ({{ conflictCount }})
+            </button>
+          </div>
+        </div>
+
         <div class="search-bar">
           <span class="search-icon">🔍</span>
-          <input 
-            v-model="searchQuery" 
-            type="text" 
+          <input
+            v-model="searchQuery"
+            type="text"
             placeholder="Search by IP, MAC, hostname, or vendor..."
             class="search-input"
           />
         </div>
-
-        <!-- Connection Status -->
-        <div class="connection-status" :class="{ connected, disconnected: !connected }">
-          {{ connected ? '🟢 Connected' : '🔴 Disconnected' }}
-        </div>
       </div>
 
-      <!-- Stats Bar -->
       <div class="stats-bar">
         <div class="stat-item">
           <span class="stat-label">Total Devices:</span>
-          <span class="stat-value">{{ filteredDevices.length }}</span>
+          <span class="stat-value">{{ totalDevicesCount }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">Online:</span>
@@ -52,72 +76,99 @@
           <span class="stat-label">Offline:</span>
           <span class="stat-value offline">{{ offlineCount }}</span>
         </div>
-        <div class="stat-item" v-if="lastUpdateTime">
-          <span class="stat-label">Last Update:</span>
-          <span class="stat-value">{{ lastUpdateTime }}</span>
+        <div class="stat-item" v-if="conflictCount > 0">
+          <span class="stat-label conflict-label">⚠️ Conflicts:</span>
+          <span class="stat-value conflict">{{ conflictCount }}</span>
         </div>
+        <div class="stat-item" v-if="displayedDevicesCount < filteredDevicesCount">
+          <span class="stat-label">Showing:</span>
+          <span class="stat-value">{{ displayedDevicesCount }} / {{ filteredDevicesCount }}</span>
+        </div>
+      </div>
+
+      <div v-if="conflictCount > 0" class="conflict-alert">
+        <div class="alert-icon">🚨</div>
+        <div class="alert-content">
+          <strong>IP Conflict Detected!</strong>
+          <span>{{ conflictCount }} device(s) have duplicate IP addresses. Please investigate immediately.</span>
+        </div>
+        <button @click="showConflictsPanel = !showConflictsPanel" class="alert-btn">
+          {{ showConflictsPanel ? 'Hide Details' : 'View Details' }}
+        </button>
       </div>
     </div>
 
-    <!-- Main Content Area - Split into two panels -->
     <div class="main-content">
-      <!-- Left Panel - Device List -->
       <div class="device-list-panel">
         <div class="panel-header">
           <h2>Network Devices</h2>
-          <span class="device-count">{{ filteredDevices.length }} devices</span>
+          <div class="header-actions">
+            <button @click="refreshConflicts" class="refresh-conflicts-btn" title="Refresh conflicts">
+              🔄
+            </button>
+            <span class="device-count">{{ filteredDevicesCount }} devices</span>
+          </div>
         </div>
 
-        <!-- Connection Error -->
         <div v-if="connectionError" class="error-message">
           <span class="error-icon">⚠️</span>
           <span>{{ connectionError }}</span>
           <button @click="reconnect" class="retry-btn">Reconnect</button>
         </div>
 
-        <!-- Loading State -->
         <div v-if="loading && devices.length === 0" class="loading">
           <div class="loading-spinner"></div>
-          <p>Connecting to server...</p>
+          <p>Loading devices...</p>
         </div>
 
-        <!-- Device List -->
-        <div v-else class="devices-list">
-          <div 
-            v-for="device in paginatedDevices" 
-            :key="device.mac" 
+        <div 
+          v-else 
+          class="devices-list"
+          ref="scrollContainer"
+          @scroll="handleScroll"
+        >
+          <div
+            v-for="device in displayedDevices"
+            :key="deviceKey(device)"
             class="device-card"
-            :class="{ 
-              online: device.status === 'online', 
-              offline: device.status === 'offline', 
+            :class="{
+              online: device.status === 'online',
+              offline: device.status === 'offline',
+              conflict: device.status === 'conflict',
               new: device.isNew,
-              selected: selectedDevice && selectedDevice.mac === device.mac
+              selected: selectedDevice && deviceKey(selectedDevice) === deviceKey(device)
             }"
             @click="selectDevice(device)"
           >
-            <!-- Status Indicator -->
             <div class="status-indicator" :class="device.status">
-              {{ device.status === 'online' ? '🟢' : '🔴' }}
+              <span v-if="device.status === 'online'">🟢</span>
+              <span v-else-if="device.status === 'offline'">🔴</span>
+              <span v-else-if="device.status === 'conflict'">⚠️</span>
+              <span v-else>❓</span>
             </div>
 
-            <!-- Device Content -->
             <div class="device-content">
               <div class="device-header">
                 <div class="device-name-section">
-                  <span class="device-name">{{ device.hostname || 'Generic' }}</span>
-                  <span v-if="device.deviceType" class="device-type">{{ device.deviceType }}</span>
+                  <span class="device-name">{{ device.hostname || 'Unknown' }}</span>
+                  <span v-if="device.vlan_id" class="device-vlan">VLAN {{ device.vlan_id }}</span>
+                  <span class="status-badge" :class="device.status">
+                    {{ device.status === 'online' ? '🟢 ONLINE' : 
+                       device.status === 'offline' ? '🔴 OFFLINE' : 
+                       device.status === 'conflict' ? '⚠️ CONFLICT' : '❓ UNKNOWN' }}
+                  </span>
+                  <span v-if="device.status === 'conflict'" class="conflict-badge">DUPLICATE IP</span>
                 </div>
-                <!-- <span class="device-vlan" v-if="device.vlan">VLAN {{ device.vlan }}</span> -->
               </div>
 
               <div class="device-details">
                 <div class="detail-row">
                   <span class="detail-label">IP:</span>
-                  <span class="detail-value ip">{{ device.ip }}</span>
+                  <span class="detail-value ip">{{ device.ip_address }}</span>
                 </div>
                 <div class="detail-row">
                   <span class="detail-label">MAC:</span>
-                  <span class="detail-value mac">{{ formatMAC(device.mac) }}</span>
+                  <span class="detail-value mac">{{ device.mac_address }}</span>
                 </div>
                 <div class="detail-row" v-if="device.vendor">
                   <span class="detail-label">Vendor:</span>
@@ -125,105 +176,97 @@
                 </div>
                 <div class="detail-row">
                   <span class="detail-label">Last Seen:</span>
-                  <span class="detail-value last-seen">{{ formatTime(device.lastSeen) }}</span>
+                  <span class="detail-value last-seen">{{ formatTime(device.last_seen) }}</span>
                 </div>
+             
               </div>
             </div>
 
-            <!-- New Badge -->
             <div v-if="device.isNew" class="new-badge">NEW</div>
+            <div v-if="device.status === 'conflict'" class="conflict-icon">⚠️</div>
           </div>
 
-          <!-- Pagination -->
-          <div v-if="filteredDevices.length > 0" class="pagination">
-            <button 
-              @click="currentPage--" 
-              :disabled="currentPage === 1"
-              class="pagination-btn"
-            >
-              ←
-            </button>
-            <span class="page-info">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-            <button 
-              @click="currentPage++" 
-              :disabled="currentPage === totalPages"
-              class="pagination-btn"
-            >
-              →
-            </button>
-            <select v-model="itemsPerPage" class="items-per-page">
-              <option :value="10">10 per page</option>
-              <option :value="25">25 per page</option>
-              <option :value="50">50 per page</option>
-            </select>
+          <div v-if="hasMore && isLoadingMore" class="loading-more">
+            <div class="loading-spinner-small"></div>
+            <span>Loading more devices...</span>
           </div>
 
-          <!-- No Devices Message -->
-          <div v-if="filteredDevices.length === 0 && !loading" class="no-devices">
+          <div v-if="!hasMore && filteredDevicesCount > 0" class="end-message">
+            <span>✨ No more devices to load</span>
+          </div>
+
+          <div v-if="filteredDevicesCount === 0 && !loading" class="no-devices">
             <div class="no-devices-icon">📡</div>
             <h3>No Devices Found</h3>
             <p v-if="searchQuery">No devices match your search criteria</p>
             <p v-else-if="selectedVlan !== 'all'">No devices in VLAN {{ selectedVlan }}</p>
+            <p v-else-if="selectedStatus !== 'all'">No {{ selectedStatus }} devices found</p>
             <p v-else>{{ connected ? 'Waiting for devices...' : 'Unable to connect to server' }}</p>
           </div>
         </div>
       </div>
 
-      <!-- Right Panel - Selected Device Details (Fixed) -->
       <div class="device-details-panel" :class="{ 'has-device': selectedDevice }">
         <div class="panel-header">
           <h2>Device Details</h2>
           <button v-if="selectedDevice" @click="clearSelection" class="clear-btn">×</button>
         </div>
 
-        <!-- Empty State -->
         <div v-if="!selectedDevice" class="no-selection">
           <div class="no-selection-icon">👆</div>
           <h3>No Device Selected</h3>
           <p>Click on any device from the list to view details</p>
         </div>
 
-        <!-- Selected Device Details -->
         <div v-else class="selected-device-details">
           <div class="device-status-banner" :class="selectedDevice.status">
-            <span class="status-icon">{{ selectedDevice.status === 'online' ? '🟢' : '🔴' }}</span>
-            <span class="status-text">{{ selectedDevice.status === 'online' ? 'Online' : 'Offline' }}</span>
+            <span class="status-icon">
+              <span v-if="selectedDevice.status === 'online'">🟢</span>
+              <span v-else-if="selectedDevice.status === 'offline'">🔴</span>
+              <span v-else-if="selectedDevice.status === 'conflict'">⚠️</span>
+            </span>
+            <span class="status-text">
+              {{ selectedDevice.status === 'online' ? 'Online' : 
+                 selectedDevice.status === 'offline' ? 'Offline' : 
+                 selectedDevice.status === 'conflict' ? 'IP CONFLICT' : 'Unknown' }}
+            </span>
           </div>
 
           <div class="details-content">
+            <div v-if="selectedDevice.status === 'conflict'" class="conflict-warning">
+              <div class="warning-icon">🚨</div>
+              <div class="warning-text">
+                <strong>IP Address Conflict Detected!</strong>
+                <p>Multiple devices are using the same IP address: {{ selectedDevice.ip_address }}</p>
+                <p>This can cause network connectivity issues and should be resolved immediately.</p>
+              </div>
+            </div>
+
             <div class="detail-section">
               <h3>Basic Information</h3>
               <div class="detail-grid">
                 <div class="detail-item">
-                  <span class="detail-label">Hostname:</span>
-                  <span class="detail-value">{{ selectedDevice.hostname || 'Generic' }}</span>
+                  <span class="detail-label">Hostname</span>
+                  <span class="detail-value">{{ selectedDevice.hostname || 'Unknown' }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">IP Address:</span>
-                  <span class="detail-value ip">{{ selectedDevice.ip }}</span>
+                  <span class="detail-label">IP Address</span>
+                  <span class="detail-value ip">{{ selectedDevice.ip_address }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">MAC Address:</span>
+                  <span class="detail-label">MAC Address</span>
                   <div class="value-with-copy">
-                    <span class="detail-value mac">{{ formatMAC(selectedDevice.mac) }}</span>
-                    <button @click="copyToClipboard(selectedDevice.mac)" class="copy-btn" title="Copy MAC">
-                      📋
-                    </button>
+                    <span class="detail-value mac">{{ selectedDevice.mac_address }}</span>
+                    <button @click="copyToClipboard(selectedDevice.mac_address)" class="copy-btn" title="Copy MAC"></button>
                   </div>
                 </div>
-                <div class="detail-item" v-if="selectedDevice.deviceType">
-                  <span class="detail-label">Device Type:</span>
-                  <span class="detail-value">{{ selectedDevice.deviceType }}</span>
-                </div>
                 <div class="detail-item" v-if="selectedDevice.vendor">
-                  <span class="detail-label">Vendor:</span>
+                  <span class="detail-label">Vendor</span>
                   <span class="detail-value">{{ selectedDevice.vendor }}</span>
                 </div>
-                <div class="detail-item" v-if="selectedDevice.vlan">
-                  <span class="detail-label">VLAN:</span>
-                  <span class="detail-value vlan-badge">VLAN {{ selectedDevice.vlan }}</span>
+                <div class="detail-item" v-if="selectedDevice.vlan_id">
+                  <span class="detail-label">VLAN</span>
+                  <span class="detail-value vlan-badge">VLAN {{ selectedDevice.vlan_id }}</span>
                 </div>
               </div>
             </div>
@@ -232,38 +275,61 @@
               <h3>Timing Information</h3>
               <div class="detail-grid">
                 <div class="detail-item">
-                  <span class="detail-label">First Seen:</span>
-                  <span class="detail-value">{{ formatFullTime(selectedDevice.firstSeen) }}</span>
+                  <span class="detail-label">First Seen</span>
+                  <span class="detail-value">{{ formatFullTime(selectedDevice.first_seen) }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Last Seen:</span>
-                  <span class="detail-value">{{ formatFullTime(selectedDevice.lastSeen) }}</span>
+                  <span class="detail-label">Last Seen</span>
+                  <span class="detail-value">{{ formatFullTime(selectedDevice.last_seen) }}</span>
                 </div>
-              </div>
-            </div>
-
-            <div class="detail-section" v-if="selectedDevice.ports && selectedDevice.ports.length">
-              <h3>Open Ports</h3>
-              <div class="ports-container">
-                <span v-for="port in selectedDevice.ports" :key="port" class="port-badge">
-                  {{ port }}
-                </span>
+                <div class="detail-item" v-if="selectedDevice.last_seen">
+                  <span class="detail-label">Last Seen (Relative)</span>
+                  <span class="detail-value">{{ formatTime(selectedDevice.last_seen) }}</span>
+                </div>
               </div>
             </div>
 
             <div class="action-buttons">
-              <button @click="copyToClipboard(selectedDevice.ip)" class="action-btn copy-ip">
-                📋 Copy IP
-              </button>
-              <button @click="copyToClipboard(selectedDevice.mac)" class="action-btn copy-mac">
-                📋 Copy MAC
-              </button>
-              <button @click="pingDevice(selectedDevice)" class="action-btn ping">
-                📡 Ping
-              </button>
-              <button @click="scanPorts(selectedDevice)" class="action-btn scan">
-                🔍 Scan Ports
-              </button>
+              <button @click="copyToClipboard(selectedDevice.ip_address)" class="action-btn copy-ip"> Copy IP</button>
+              <button @click="copyToClipboard(selectedDevice.mac_address)" class="action-btn copy-mac"> Copy MAC</button>
+              <!-- next release work -->
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping"> Ping</button>
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping"> Scan Port</button>
+              <button @click="showConflictsForIP(selectedDevice)" class="action-btn conflict-info" v-if="selectedDevice.status === 'conflict'">⚠️ View Conflicts</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showConflictsPanel" class="conflicts-panel" :class="{ open: showConflictsPanel }">
+      <div class="conflicts-panel-header">
+        <h3>⚠️ IP Conflict Details</h3>
+        <button @click="showConflictsPanel = false" class="close-panel-btn">×</button>
+      </div>
+      <div class="conflicts-panel-content">
+        <div v-if="conflictsLoading" class="loading-conflicts">
+          <div class="loading-spinner-small"></div>
+          <span>Loading conflicts...</span>
+        </div>
+        <div v-else-if="conflictsData.length === 0" class="no-conflicts">
+          <span>✅ No active IP conflicts detected</span>
+        </div>
+        <div v-else>
+          <div v-for="conflict in conflictsData" :key="`${conflict.vlan_id}:${conflict.ip_address}`" class="conflict-item">
+            <div class="conflict-header">
+              <span class="conflict-ip">🚨 {{ conflict.ip_address }}</span>
+              <span class="conflict-vlan">VLAN {{ conflict.vlan_id }}</span>
+            </div>
+            <div class="conflict-details">
+              <div>MAC: {{ conflict.mac_address }}</div>
+              <div>Hostname: {{ conflict.hostname || 'Unknown' }}</div>
+              <div>Vendor: {{ conflict.vendor || 'Unknown' }}</div>
+              <div>Last Seen: {{ formatFullTime(conflict.last_seen) }}</div>
+            </div>
+            <div class="conflict-actions">
+              <button @click="investigateConflict(conflict)" class="investigate-btn">🔍 Investigate</button>
+              <button @click="resolveConflict(conflict)" class="resolve-btn">✅ Mark Resolved</button>
             </div>
           </div>
         </div>
@@ -277,358 +343,547 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 export default {
   name: 'LanScanner',
-  
+
   setup() {
-    // State
     const devices = ref([])
     const loading = ref(true)
     const connected = ref(false)
     const connectionError = ref(null)
     const selectedVlan = ref('all')
+    const selectedStatus = ref('all')
     const searchQuery = ref('')
-    const currentPage = ref(1)
-    const itemsPerPage = ref(25)
-    const lastUpdateTime = ref(null)
     const selectedDevice = ref(null)
     const vlanList = ref([])
     
-    // WebSocket connection
+    const scrollContainer = ref(null)
+    const itemsPerLoad = ref(50)
+    const currentDisplayLimit = ref(50)
+    const isLoadingMore = ref(false)
+    const hasMore = ref(true)
+
+    const conflictsData = ref([])
+    const conflictsLoading = ref(false)
+    const showConflictsPanel = ref(false)
+
     let ws = null
+    let refreshInterval = null
     const wsReconnectAttempts = ref(0)
-    const maxReconnectAttempts = ref(10)
+    const maxReconnectAttempts = 10
+
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
     
-    // Computed properties
-    const filteredDevices = computed(() => {
-      let filtered = [...devices.value]
+    const apiUrl = (path) => {
+      const cleanPath = path.startsWith('/') ? path : `/${path}`
+      return `${API_BASE_URL}${cleanPath}`
+    }
+
+    const getWebSocketUrl = () => {
+      const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws'
+      const host = API_BASE_URL.replace(/^https?:\/\//, '')
+      return `${protocol}://${host}/ws`
+    }
+
+    const normalizeDevice = (raw) => {
+      let status = 'offline'
       
-      // Filter by VLAN
-      if (selectedVlan.value !== 'all') {
-        filtered = filtered.filter(d => d.vlan == selectedVlan.value)
+      if (raw.device_status) {
+        status = raw.device_status
+      } else if (raw.status) {
+        status = raw.status
       }
       
-      // Filter by search query
+      if (raw.mac_address === 'ff:ff:ff:ff:ff:ff') {
+        status = 'conflict'
+      }
+      
+      if (!['online', 'offline', 'conflict'].includes(status)) {
+        status = 'offline'
+      }
+      
+      return {
+        id: raw.id,
+        vlan_id: raw.vlan_id,
+        ip_address: raw.ip_address,
+        mac_address: raw.mac_address,
+        hostname: raw.hostname || '',
+        vendor: raw.vendor || '',
+        status: status,
+        first_seen: raw.first_seen,
+        last_seen: raw.last_seen,
+        created_at: raw.created_at,
+        updated_at: raw.updated_at,
+        isNew: false
+      }
+    }
+
+    const deviceKey = (d) => `${d.vlan_id}:${d.ip_address}`
+
+    const totalDevicesCount = computed(() => devices.value.length)
+    const onlineCount = computed(() => devices.value.filter(d => d.status === 'online').length)
+    const offlineCount = computed(() => devices.value.filter(d => d.status === 'offline').length)
+    const conflictCount = computed(() => devices.value.filter(d => d.status === 'conflict').length)
+
+    const filteredDevicesList = computed(() => {
+      let list = [...devices.value]
+
+      if (selectedVlan.value !== 'all') {
+        list = list.filter(d => String(d.vlan_id) === String(selectedVlan.value))
+      }
+
+      if (selectedStatus.value !== 'all') {
+        list = list.filter(d => d.status === selectedStatus.value)
+      }
+
       if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        filtered = filtered.filter(d => 
-          d.ip?.toLowerCase().includes(query) ||
-          d.mac?.toLowerCase().includes(query) ||
-          d.hostname?.toLowerCase().includes(query) ||
-          d.vendor?.toLowerCase().includes(query) ||
-          d.deviceType?.toLowerCase().includes(query)
+        const q = searchQuery.value.toLowerCase()
+        list = list.filter(d =>
+          (d.ip_address && d.ip_address.toLowerCase().includes(q)) ||
+          (d.mac_address && d.mac_address.toLowerCase().includes(q)) ||
+          (d.hostname && d.hostname.toLowerCase().includes(q)) ||
+          (d.vendor && d.vendor.toLowerCase().includes(q))
         )
       }
-      
-      // Sort by IP address
-      filtered.sort((a, b) => {
-        const ipA = a.ip.split('.').map(Number)
-        const ipB = b.ip.split('.').map(Number)
+
+      list.sort((a, b) => {
+        const pa = a.ip_address?.split('.').map(Number) ?? []
+        const pb = b.ip_address?.split('.').map(Number) ?? []
         for (let i = 0; i < 4; i++) {
-          if (ipA[i] !== ipB[i]) return ipA[i] - ipB[i]
+          if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0)
         }
         return 0
       })
-      
-      return filtered
+
+      return list
     })
-    
-    const onlineCount = computed(() => {
-      return devices.value.filter(d => d.status === 'online').length
-    })
-    
-    const offlineCount = computed(() => {
-      return devices.value.filter(d => d.status === 'offline').length
-    })
-    
-    const totalPages = computed(() => {
-      return Math.ceil(filteredDevices.value.length / itemsPerPage.value)
-    })
-    
-    const paginatedDevices = computed(() => {
-      const start = (currentPage.value - 1) * itemsPerPage.value
-      const end = start + itemsPerPage.value
-      return filteredDevices.value.slice(start, end)
-    })
-    
-    // Methods
+
+    const filteredDevicesCount = computed(() => filteredDevicesList.value.length)
+    const displayedDevices = computed(() => filteredDevicesList.value.slice(0, currentDisplayLimit.value))
+    const displayedDevicesCount = computed(() => displayedDevices.value.length)
+
+    const fetchConflicts = async () => {
+      conflictsLoading.value = true
+      try {
+        const res = await fetch(apiUrl('/v1/api/conflicts'))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        
+        if (data && data.conflicts) {
+          conflictsData.value = data.conflicts
+          conflictsData.value.forEach(conflict => {
+            const key = `${conflict.vlan_id}:${conflict.ip_address}`
+            const device = devices.value.find(d => deviceKey(d) === key)
+            if (device && device.status !== 'conflict') {
+              device.status = 'conflict'
+            }
+          })
+        }
+      } catch (err) {
+        console.error('Failed to fetch conflicts:', err)
+      } finally {
+        conflictsLoading.value = false
+      }
+    }
+
+    const refreshAllData = async () => {
+      console.log('🔄 Refreshing all data...')
+      loading.value = true
+      try {
+        await Promise.all([
+          fetchInitialDevices(),
+          fetchVLANs(),
+          fetchConflicts()
+        ])
+        console.log('✅ All data refreshed successfully')
+      } catch (err) {
+        console.error('Failed to refresh data:', err)
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const refreshConflicts = () => fetchConflicts()
+    const showConflictsForIP = (device) => { showConflictsPanel.value = true }
+
+    const investigateConflict = (conflict) => {
+      const key = `${conflict.vlan_id}:${conflict.ip_address}`
+      const device = devices.value.find(d => deviceKey(d) === key)
+      if (device) {
+        selectDevice(device)
+        showConflictsPanel.value = false
+      }
+    }
+
+    const resolveConflict = (conflict) => {
+      conflictsData.value = conflictsData.value.filter(c => 
+        !(c.vlan_id === conflict.vlan_id && c.ip_address === conflict.ip_address)
+      )
+      const key = `${conflict.vlan_id}:${conflict.ip_address}`
+      const device = devices.value.find(d => deviceKey(d) === key)
+      if (device && device.status === 'conflict') {
+        device.status = 'offline'
+      }
+    }
+
+    const resetInfiniteScroll = () => {
+      currentDisplayLimit.value = itemsPerLoad.value
+      hasMore.value = filteredDevicesCount.value > itemsPerLoad.value
+      isLoadingMore.value = false
+      if (scrollContainer.value) scrollContainer.value.scrollTop = 0
+    }
+
+    const handleScroll = async (event) => {
+      if (isLoadingMore.value || !hasMore.value) return
+      const container = event.target
+      const scrollPosition = container.scrollTop + container.clientHeight
+      const scrollHeight = container.scrollHeight
+      if (scrollHeight - scrollPosition < 200) await loadMore()
+    }
+
+    const loadMore = async () => {
+      if (isLoadingMore.value || !hasMore.value) return
+      isLoadingMore.value = true
+      await new Promise(resolve => setTimeout(resolve, 100))
+      const newLimit = Math.min(currentDisplayLimit.value + itemsPerLoad.value, filteredDevicesCount.value)
+      currentDisplayLimit.value = newLimit
+      hasMore.value = currentDisplayLimit.value < filteredDevicesCount.value
+      isLoadingMore.value = false
+    }
+
+    const fetchInitialDevices = async () => {
+      try {
+        const res = await fetch(apiUrl('/v1/api/devices'))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        
+        if (Array.isArray(data)) {
+          devices.value = data.map(d => normalizeDevice(d))
+          updateVlanList()
+          resetInfiniteScroll()
+          console.log(`📱 Loaded ${devices.value.length} devices from API`)
+        }
+        return true
+      } catch (err) {
+        console.error('Failed to fetch initial devices:', err)
+        connectionError.value = `Failed to fetch devices: ${err.message}`
+        return false
+      }
+    }
+
+    const fetchVLANs = async () => {
+      try {
+        const res = await fetch(apiUrl('/v1/api/vlans'))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          vlanList.value = data.map(v => v.vlan_id).sort((a, b) => a - b)
+        }
+      } catch (err) {
+        console.error('Failed to fetch VLANs:', err)
+      }
+    }
+
+    const updateVlanList = () => {
+      const vlans = new Set(devices.value.map(d => d.vlan_id).filter(Boolean))
+      vlanList.value = Array.from(vlans).sort((a, b) => a - b)
+    }
+
+    const upsertDevice = (incoming, isNewDevice = false) => {
+      const key = `${incoming.vlan_id}:${incoming.ip_address}`
+      const idx = devices.value.findIndex(d => deviceKey(d) === key)
+      const normalizedDevice = normalizeDevice(incoming)
+      normalizedDevice.isNew = isNewDevice
+
+      if (idx === -1) {
+        devices.value.unshift(normalizedDevice)
+        if (isNewDevice) {
+          setTimeout(() => {
+            const i = devices.value.findIndex(d => deviceKey(d) === key)
+            if (i !== -1) devices.value[i].isNew = false
+          }, 3000)
+        }
+      } else {
+        const existing = devices.value[idx]
+        let finalStatus = normalizedDevice.status
+        if (existing.status === 'conflict' && normalizedDevice.status !== 'conflict') {
+          finalStatus = 'conflict'
+        }
+        devices.value[idx] = {
+          ...existing,
+          ...normalizedDevice,
+          status: finalStatus,
+          first_seen: existing.first_seen || normalizedDevice.first_seen,
+          isNew: false,
+        }
+        if (selectedDevice.value && deviceKey(selectedDevice.value) === key) {
+          selectedDevice.value = devices.value[idx]
+        }
+      }
+      updateVlanList()
+      if (filteredDevicesCount.value !== currentDisplayLimit.value) {
+        hasMore.value = currentDisplayLimit.value < filteredDevicesCount.value
+      }
+    }
+
+    const removeDevice = (vlanId, ipAddress) => {
+      const key = `${vlanId}:${ipAddress}`
+      devices.value = devices.value.filter(d => deviceKey(d) !== key)
+      if (selectedDevice.value && deviceKey(selectedDevice.value) === key) {
+        selectedDevice.value = null
+      }
+      updateVlanList()
+      if (filteredDevicesCount.value < currentDisplayLimit.value) {
+        currentDisplayLimit.value = filteredDevicesCount.value
+        hasMore.value = false
+      }
+    }
+
     const connectWebSocket = () => {
       loading.value = true
       connectionError.value = null
+      const wsUrl = getWebSocketUrl()
+      console.log('🔌 Connecting to WebSocket:', wsUrl)
       
-      ws = new WebSocket('ws://localhost:8082/ws/lan-scanner')
-      
+      ws = new WebSocket(wsUrl)
+
       ws.onopen = () => {
-        console.log('WebSocket connected')
+        console.log('✅ WebSocket connected')
         connected.value = true
         loading.value = false
         wsReconnectAttempts.value = 0
         connectionError.value = null
+        refreshAllData()
       }
-      
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          handleWebSocketMessage(data)
-          lastUpdateTime.value = new Date().toLocaleTimeString()
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error)
+          console.log('📨 WebSocket message:', data.event_type || 'device_update')
+          handleNotification(data)
+        } catch (e) {
+          console.error('WS parse error:', e)
         }
       }
-      
+
       ws.onclose = () => {
-        console.log('WebSocket disconnected')
+        console.log('🔌 WebSocket closed')
         connected.value = false
         loading.value = false
-        
-        if (wsReconnectAttempts.value < maxReconnectAttempts.value) {
+        if (wsReconnectAttempts.value < maxReconnectAttempts) {
+          const delay = 3000
+          console.log(`🔄 Reconnecting in ${delay/1000}s... (attempt ${wsReconnectAttempts.value + 1}/${maxReconnectAttempts})`)
           setTimeout(() => {
             wsReconnectAttempts.value++
             connectWebSocket()
-          }, 3000)
+          }, delay)
         } else {
           connectionError.value = 'Maximum reconnection attempts reached'
         }
       }
-      
+
       ws.onerror = () => {
+        console.error('❌ WebSocket error')
         connectionError.value = 'Failed to connect to device server'
         connected.value = false
         loading.value = false
       }
     }
-    
-    const handleWebSocketMessage = (data) => {
-      switch (data.type) {
-        case 'device_discovered':
-          addOrUpdateDevice({ ...data.device, isNew: true })
+
+    const handleNotification = (data) => {
+      switch (data.event_type) {
+        case 'new_device':
+          upsertDevice({
+            vlan_id: data.vlan_id,
+            ip_address: data.ip_address,
+            mac_address: data.mac_address,
+            hostname: data.hostname,
+            vendor: data.vendor,
+            status: data.status || 'online',
+            first_seen: data.first_seen || new Date().toISOString(),
+            last_seen: data.last_seen || new Date().toISOString(),
+          }, true)
           break
-          
-        case 'device_update':
-          addOrUpdateDevice({ ...data.device, isUpdated: true })
+        case 'status_change':
+          upsertDevice({
+            vlan_id: data.vlan_id,
+            ip_address: data.ip_address,
+            mac_address: data.mac_address,
+            hostname: data.hostname,
+            vendor: data.vendor,
+            status: data.new_status,
+            last_seen: data.last_seen || new Date().toISOString(),
+          }, false)
           break
-          
-        case 'devices_batch':
-          if (data.devices && Array.isArray(data.devices)) {
-            devices.value = data.devices.map(device => ({
-              ...device,
-              isNew: false,
-              isUpdated: false
-            }))
+        case 'went_offline':
+          upsertDevice({
+            vlan_id: data.vlan_id,
+            ip_address: data.ip_address,
+            mac_address: data.mac_address,
+            hostname: data.hostname,
+            vendor: data.vendor,
+            status: 'offline',
+            last_seen: data.last_seen || new Date().toISOString(),
+          }, false)
+          break
+        case 'came_online':
+          upsertDevice({
+            vlan_id: data.vlan_id,
+            ip_address: data.ip_address,
+            mac_address: data.mac_address,
+            hostname: data.hostname,
+            vendor: data.vendor,
+            status: 'online',
+            last_seen: data.last_seen || new Date().toISOString(),
+          }, false)
+          break
+        case 'ip_conflict':
+          console.log('🚨 IP CONFLICT detected:', data.ip_address)
+          if (conflictCount.value === 0) showConflictsPanel.value = true
+          fetchConflicts()
+          upsertDevice({
+            vlan_id: data.vlan_id,
+            ip_address: data.ip_address,
+            mac_address: data.mac_address || 'ff:ff:ff:ff:ff:ff',
+            hostname: data.hostname,
+            vendor: data.vendor,
+            status: 'conflict',
+            last_seen: new Date().toISOString(),
+          }, false)
+          break
+        default:
+          if (data.ip_address && data.mac_address) {
+            upsertDevice({
+              vlan_id: data.vlan_id,
+              ip_address: data.ip_address,
+              mac_address: data.mac_address,
+              hostname: data.hostname,
+              vendor: data.vendor,
+              status: data.status || data.device_status || 'offline',
+              first_seen: data.first_seen,
+              last_seen: data.last_seen,
+            }, false)
           }
-          break
-          
-        case 'vlan_devices':
-          if (data.vlan && data.devices) {
-            if (selectedVlan.value == data.vlan) {
-              devices.value = data.devices.map(device => ({
-                ...device,
-                isNew: false,
-                isUpdated: false
-              }))
-            }
-          }
-          break
       }
-      
-      // Update VLAN list
-      updateVlanList()
     }
-    
-    const addOrUpdateDevice = (device) => {
-      if (!device.mac) return
-      
-      const index = devices.value.findIndex(d => d.mac === device.mac)
-      const wasSelected = selectedDevice.value && selectedDevice.value.mac === device.mac
-      
-      if (index === -1) {
-        // New device
-        device.firstSeen = device.firstSeen || new Date().toISOString()
-        device.lastSeen = new Date().toISOString()
-        devices.value.unshift(device)
+
+    // Enhanced formatTime with days, weeks, months, years
+    const formatTime = (ts) => {
+      if (!ts) return 'Never'
+      try {
+        const date = new Date(ts)
+        if (isNaN(date.getTime())) return 'Invalid date'
         
-        // Remove new flag after 3 seconds
-        setTimeout(() => {
-          const idx = devices.value.findIndex(d => d.mac === device.mac)
-          if (idx !== -1) {
-            devices.value[idx].isNew = false
-          }
-        }, 3000)
-      } else {
-        // Update existing device
-        devices.value[index] = {
-          ...devices.value[index],
-          ...device,
-          lastSeen: new Date().toISOString(),
-          firstSeen: devices.value[index].firstSeen || device.firstSeen || new Date().toISOString()
-        }
+        const now = new Date()
+        const diffMs = now - date
+        const diffSeconds = Math.floor(diffMs / 1000)
+        const diffMinutes = Math.floor(diffSeconds / 60)
+        const diffHours = Math.floor(diffMinutes / 60)
+        const diffDays = Math.floor(diffHours / 24)
+        const diffWeeks = Math.floor(diffDays / 7)
+        const diffMonths = Math.floor(diffDays / 30)
+        const diffYears = Math.floor(diffDays / 365)
         
-        // Update selected device if it's the same
-        if (wasSelected) {
-          selectedDevice.value = devices.value[index]
-        }
-        
-        // Remove updated flag after 3 seconds
-        setTimeout(() => {
-          const idx = devices.value.findIndex(d => d.mac === device.mac)
-          if (idx !== -1) {
-            devices.value[idx].isUpdated = false
-          }
-        }, 3000)
+        if (diffSeconds < 60) return 'Just now'
+        if (diffMinutes < 60) return `${diffMinutes}m ago`
+        if (diffHours < 24) return `${diffHours}h ago`
+        if (diffDays < 7) return `${diffDays}d ago`
+        if (diffDays < 30) return `${diffWeeks}w ago`
+        if (diffDays < 365) return `${diffMonths}mo ago`
+        return `${diffYears}y ago`
+      } catch (e) {
+        return 'Invalid date'
       }
-      
-      updateVlanList()
     }
-    
-    const updateVlanList = () => {
-      const vlans = new Set()
-      devices.value.forEach(device => {
-        if (device.vlan) vlans.add(device.vlan)
-      })
-      vlanList.value = Array.from(vlans).sort((a, b) => a - b)
-    }
-    
-    const filterByVlan = () => {
-      if (selectedVlan.value !== 'all' && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'get_vlan_devices',
-          vlan: parseInt(selectedVlan.value)
-        }))
-      }
-      currentPage.value = 1
-    }
-    
-    const formatMAC = (mac) => {
-      if (!mac) return 'Unknown'
-      const cleanMac = mac.replace(/[^a-fA-F0-9]/g, '')
-      if (cleanMac.length === 12) {
-        return cleanMac.match(/.{2}/g).join(':').toLowerCase()
-      }
-      return mac.toLowerCase()
-    }
-    
-    const formatTime = (timestamp) => {
-      if (!timestamp) return 'Never'
-      const date = new Date(timestamp)
-      const now = new Date()
-      const diffMs = now - date
-      const diffMins = Math.floor(diffMs / 60000)
-      
-      if (diffMins < 1) return 'Just now'
-      if (diffMins < 60) return `${diffMins}m ago`
-      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
-      return date.toLocaleDateString()
-    }
-    
-    const formatFullTime = (timestamp) => {
-      if (!timestamp) return 'Never'
-      return new Date(timestamp).toLocaleString()
-    }
-    
-    const copyToClipboard = (text) => {
-      navigator.clipboard.writeText(text)
-        .then(() => {
-          console.log('Copied to clipboard:', text)
+
+    // Full date/time for tooltip
+    const formatFullTime = (ts) => {
+      if (!ts) return 'Never'
+      try {
+        const date = new Date(ts)
+        if (isNaN(date.getTime())) return 'Invalid date'
+        return date.toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
         })
-        .catch(err => console.error('Failed to copy:', err))
+      } catch (e) {
+        return 'Invalid date'
+      }
     }
-    
-    const selectDevice = (device) => {
-      selectedDevice.value = device
+
+    const copyToClipboard = (text) => {
+      if (text) navigator.clipboard.writeText(text).catch(console.error)
     }
-    
-    const clearSelection = () => {
-      selectedDevice.value = null
-    }
-    
-    const pingDevice = (device) => {
-      console.log('Pinging device:', device.ip)
-      // Implement ping functionality
-    }
-    
-    const scanPorts = (device) => {
-      console.log('Scanning ports for device:', device.ip)
-      // Implement port scan functionality
-    }
-    
+
+    const selectDevice = (d) => { selectedDevice.value = d }
+    const clearSelection = () => { selectedDevice.value = null }
+    const pingDevice = (device) => alert(` ${device.ip_address} - Feature coming soon`)
+    // const portScanDevice = (device) => alert(`Scan Port ${device.ip_address} - Feature coming soon`)
     const reconnect = () => {
       wsReconnectAttempts.value = 0
-      if (ws) {
-        ws.close()
-      }
+      if (ws) ws.close()
       connectWebSocket()
     }
-    
-    // Watchers
-    watch(searchQuery, () => {
-      currentPage.value = 1
-    })
-    
-    watch(selectedVlan, () => {
-      currentPage.value = 1
-    })
-    
-    watch(itemsPerPage, () => {
-      currentPage.value = 1
-    })
-    
-    watch(filteredDevices, () => {
-      if (currentPage.value > totalPages.value) {
-        currentPage.value = totalPages.value || 1
-      }
-      
-      // Clear selection if selected device is no longer in filtered list
-      if (selectedDevice.value) {
-        const stillExists = filteredDevices.value.some(d => d.mac === selectedDevice.value.mac)
-        if (!stillExists) {
-          selectedDevice.value = null
+
+    const startPeriodicRefresh = () => {
+      if (refreshInterval) clearInterval(refreshInterval)
+      refreshInterval = setInterval(() => {
+        if (connected.value) {
+          console.log('🔄 Periodic refresh checking for updates...')
+          fetchInitialDevices()
+          fetchConflicts()
         }
+      }, 30000)
+    }
+
+    const stopPeriodicRefresh = () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+        refreshInterval = null
       }
-    })
-    
-    // Lifecycle
-    onMounted(() => {
+    }
+
+    watch([searchQuery, selectedVlan, selectedStatus], () => resetInfiniteScroll())
+
+    onMounted(async () => {
+      console.log('🚀 Component mounted, initializing...')
+      await fetchInitialDevices()
+      await fetchVLANs()
+      await fetchConflicts()
       connectWebSocket()
+      startPeriodicRefresh()
     })
-    
+
     onBeforeUnmount(() => {
-      if (ws) {
-        ws.close()
-      }
+      console.log('🧹 Cleaning up...')
+      stopPeriodicRefresh()
+      if (ws) ws.close()
     })
-    
+
     return {
-      devices,
-      loading,
-      connected,
-      connectionError,
-      selectedVlan,
-      searchQuery,
-      currentPage,
-      itemsPerPage,
-      lastUpdateTime,
-      selectedDevice,
-      vlanList,
-      filteredDevices,
-      onlineCount,
-      offlineCount,
-      totalPages,
-      paginatedDevices,
-      filterByVlan,
-      formatMAC,
-      formatTime,
-      formatFullTime,
-      copyToClipboard,
-      selectDevice,
-      clearSelection,
-      pingDevice,
-      scanPorts,
-      reconnect
+      devices, loading, connected, connectionError, selectedVlan, selectedStatus,
+      searchQuery, selectedDevice, vlanList, totalDevicesCount, onlineCount,
+      offlineCount, conflictCount, filteredDevicesCount, displayedDevices,
+      displayedDevicesCount, scrollContainer, hasMore, isLoadingMore,
+      conflictsData, conflictsLoading, showConflictsPanel, deviceKey,
+      formatTime, formatFullTime, copyToClipboard, selectDevice, clearSelection,
+      pingDevice, reconnect, handleScroll, refreshConflicts, showConflictsForIP,
+      investigateConflict, resolveConflict,
     }
   }
 }
 </script>
 
 <style scoped>
-/* Dark Mode Theme */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .lan-scanner {
   display: flex;
   flex-direction: column;
@@ -639,13 +894,11 @@ export default {
   overflow: hidden;
 }
 
-/* Top Bar */
 .top-bar {
   padding: 20px 20px 10px 20px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
-/* Controls Bar */
 .controls-bar {
   display: flex;
   justify-content: space-between;
@@ -682,18 +935,74 @@ export default {
   background: #0f172a;
   outline: none;
   min-width: 130px;
+  cursor: pointer;
   transition: all 0.2s;
 }
 
 .vlan-select:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
 }
 
-.vlan-select:disabled {
-  background-color: #1e293b;
-  cursor: not-allowed;
-  opacity: 0.7;
+.status-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-filter label {
+  font-size: 14px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.status-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.status-btn:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
+}
+
+.status-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.status-btn.online-btn.active {
+  background: #10b981;
+  border-color: #10b981;
+}
+
+.status-btn.offline-btn.active {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.status-btn.conflict-btn {
+  background: #f59e0b;
+  color: #1e293b;
+}
+
+.status-btn.conflict-btn.active {
+  background: #ef4444;
+  color: white;
 }
 
 .search-bar {
@@ -725,11 +1034,7 @@ export default {
 
 .search-input:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.search-input::placeholder {
-  color: #64748b;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
 }
 
 .connection-status {
@@ -743,27 +1048,26 @@ export default {
 
 .connection-status.connected {
   color: #34d399;
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16,185,129,0.1);
+  border-color: rgba(16,185,129,0.3);
 }
 
 .connection-status.disconnected {
   color: #f87171;
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239,68,68,0.1);
+  border-color: rgba(239,68,68,0.3);
 }
 
-/* Stats Bar */
 .stats-bar {
   display: flex;
   gap: 25px;
   padding: 12px 20px;
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30,41,59,0.8);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148,163,184,0.1);
   flex-wrap: wrap;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  margin-bottom: 15px;
 }
 
 .stat-item {
@@ -791,7 +1095,67 @@ export default {
   color: #f87171;
 }
 
-/* Main Content - Split Panels */
+.stat-value.conflict {
+  color: #f59e0b;
+}
+
+.conflict-label {
+  color: #f59e0b;
+}
+
+.conflict-alert {
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.alert-icon {
+  font-size: 28px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.alert-content {
+  flex: 1;
+  color: white;
+}
+
+.alert-content strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.alert-btn {
+  padding: 8px 20px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alert-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+}
+
 .main-content {
   display: flex;
   flex: 1;
@@ -801,17 +1165,16 @@ export default {
   min-height: 0;
 }
 
-/* Left Panel - Device List */
 .device-list-panel {
   flex: 1;
-  background: rgba(30, 41, 59, 0.95);
+  background: rgba(30,41,59,0.95);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148,163,184,0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   min-width: 600px;
 }
 
@@ -820,8 +1183,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(148,163,184,0.1);
+  background: rgba(15,23,42,0.6);
 }
 
 .panel-header h2 {
@@ -829,6 +1192,33 @@ export default {
   font-size: 1.4rem;
   font-weight: 600;
   color: #f8fafc;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refresh-conflicts-btn {
+  background: #334155;
+  border: none;
+  color: #94a3b8;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-conflicts-btn:hover {
+  background: #475569;
+  color: #f8fafc;
+  transform: rotate(90deg);
 }
 
 .device-count {
@@ -841,22 +1231,16 @@ export default {
   font-weight: 500;
 }
 
-/* Error Message */
 .error-message {
   margin: 20px;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.4);
   border-radius: 12px;
   padding: 18px 22px;
   display: flex;
   align-items: center;
   gap: 15px;
   color: #fca5a5;
-  font-size: 15px;
-}
-
-.error-icon {
-  font-size: 22px;
 }
 
 .retry-btn {
@@ -869,21 +1253,12 @@ export default {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
-.retry-btn:hover {
-  background: #dc2626;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-
-/* Loading State */
 .loading {
   text-align: center;
   padding: 80px 30px;
   color: #94a3b8;
-  font-size: 16px;
 }
 
 .loading-spinner {
@@ -900,41 +1275,36 @@ export default {
   to { transform: rotate(360deg); }
 }
 
-/* Device List Container */
 .devices-list {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
 }
 
-/* Device Cards */
 .device-card {
   display: flex;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(15,23,42,0.8);
+  border: 1px solid rgba(148,163,184,0.1);
   border-radius: 14px;
-  padding: 0;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
   overflow: hidden;
-  min-height: 120px;
+  min-height: 130px;
 }
 
 .device-card:hover {
   transform: translateX(4px);
-  border-color: rgba(59, 130, 246, 0.4);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(59,130,246,0.4);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .device-card.selected {
   border: 2px solid #3b82f6;
-  background: rgba(59, 130, 246, 0.15);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+  background: rgba(59,130,246,0.15);
 }
 
 .device-card.online {
@@ -943,7 +1313,12 @@ export default {
 
 .device-card.offline {
   border-left: 6px solid #ef4444;
-  opacity: 0.8;
+  opacity: 0.85;
+}
+
+.device-card.conflict {
+  border-left: 6px solid #f59e0b;
+  background: rgba(245,158,11,0.1);
 }
 
 .device-card.new {
@@ -951,22 +1326,33 @@ export default {
 }
 
 @keyframes highlight-new {
-  0% { background: rgba(16, 185, 129, 0.3); }
-  100% { background: rgba(15, 23, 42, 0.8); }
+  0% { background: rgba(16,185,129,0.3); }
+  100% { background: rgba(15,23,42,0.8); }
 }
 
-/* Status Indicator */
 .status-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 60px;
-  font-size: 24px;
-  background: rgba(0, 0, 0, 0.3);
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 28px;
+  background: rgba(0,0,0,0.3);
+  border-right: 1px solid rgba(148,163,184,0.1);
 }
 
-/* Device Content */
+.status-indicator.online {
+  background: rgba(16,185,129,0.2);
+}
+
+.status-indicator.offline {
+  background: rgba(239,68,68,0.2);
+}
+
+.status-indicator.conflict {
+  background: rgba(245,158,11,0.25);
+  animation: pulse 1s infinite;
+}
+
 .device-content {
   flex: 1;
   padding: 12px 15px;
@@ -976,7 +1362,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .device-name-section {
@@ -992,31 +1378,57 @@ export default {
   color: #f8fafc;
 }
 
-.device-type {
-  font-size: 11px;
-  color: #94a3b8;
-  background: #0f172a;
-  padding: 3px 8px;
-  border-radius: 12px;
-  border: 1px solid #334155;
-  font-weight: 500;
-}
-
 .device-vlan {
   font-size: 11px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg,#3b82f6,#8b5cf6);
   color: white;
   padding: 3px 8px;
   border-radius: 12px;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
-/* Device Details Grid */
+.status-badge.online {
+  background: rgba(16,185,129,0.2);
+  color: #10b981;
+  border: 1px solid rgba(16,185,129,0.3);
+}
+
+.status-badge.offline {
+  background: rgba(239,68,68,0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239,68,68,0.3);
+}
+
+.status-badge.conflict {
+  background: rgba(245,158,11,0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245,158,11,0.3);
+  animation: pulse 1s infinite;
+}
+
+.conflict-badge {
+  font-size: 10px;
+  background: #ef4444;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-weight: 700;
+  animation: pulse 1s infinite;
+}
+
 .device-details {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2,1fr);
   gap: 6px 8px;
   margin-top: 4px;
 }
@@ -1024,154 +1436,124 @@ export default {
 .detail-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 6px;
+  background: rgba(0,0,0,0.2);
+  padding: 6px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.05);
-  min-width: 0;
-  width: 100%;
+  border: 1px solid rgba(148,163,184,0.05);
+}
+
+.status-row {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.status-row .detail-value {
+  font-weight: 600;
+}
+
+.status-row .detail-value.online {
+  color: #10b981;
+}
+
+.status-row .detail-value.offline {
+  color: #ef4444;
+}
+
+.status-row .detail-value.conflict {
+  color: #f59e0b;
+  animation: pulse 1s infinite;
 }
 
 .detail-label {
   color: #94a3b8;
-  min-width: 35px;
+  min-width: 65px;
   font-size: 11px;
-  font-weight: 300;
+  font-weight: 500;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .detail-value {
   color: #e2e8f0;
   font-weight: 500;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
   flex: 1;
-  min-width: 0;
+  word-break: break-all;
 }
 
 .detail-value.ip {
   color: #60a5fa;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-  font-size: 11px;
+  font-family: monospace;
   font-weight: 600;
 }
 
 .detail-value.mac {
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-family: monospace;
   color: #94a3b8;
-  font-size: 11px;
-  letter-spacing: 0.2px;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: nowrap;
 }
 
 .detail-value.vendor {
   color: #c4b5fd;
-  font-size: 11px;
   font-weight: 600;
 }
 
 .detail-value.last-seen {
   color: #94a3b8;
-  font-size: 11px;
 }
 
-/* Make MAC row span both columns for better visibility */
-.detail-row.mac-row {
-  grid-column: span 2;
-  width: 100%;
-  background: rgba(15, 23, 42, 0.9);
-}
-
-/* New Badge */
 .new-badge {
   position: absolute;
   top: 12px;
   right: 12px;
   background: #10b981;
   color: white;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: 20px;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1;
 }
 
-/* Pagination */
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 15px;
-  margin-top: 20px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(15, 23, 42, 0.4);
+.conflict-icon {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 20px;
+  animation: pulse 1s infinite;
+  z-index: 1;
 }
 
-.pagination-btn {
-  background: #0f172a;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  padding: 10px 18px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 45px;
+.loading-more {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  background: #1e293b;
-  border-color: #3b82f6;
-  color: #60a5fa;
-  transform: translateY(-2px);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-info {
+  gap: 12px;
+  padding: 20px;
   color: #94a3b8;
-  font-size: 15px;
-  font-weight: 500;
 }
 
-.items-per-page {
-  padding: 10px 14px;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  font-size: 14px;
-  color: #e2e8f0;
-  background: #0f172a;
-  cursor: pointer;
-  outline: none;
-  font-weight: 500;
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #1e293b;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.items-per-page:hover {
-  border-color: #3b82f6;
+.end-message {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 13px;
+  border-top: 1px solid rgba(148,163,184,0.1);
+  margin-top: 10px;
 }
 
-/* No Devices */
 .no-devices {
   text-align: center;
   padding: 80px 30px;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15,23,42,0.6);
   border-radius: 14px;
   margin: 20px;
 }
@@ -1179,51 +1561,33 @@ export default {
 .no-devices-icon {
   font-size: 64px;
   margin-bottom: 25px;
-  opacity: 0.7;
   animation: float 3s ease-in-out infinite;
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
+  0%,100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
 
-.no-devices h3 {
-  font-size: 22px;
-  font-weight: 600;
-  color: #f8fafc;
-  margin-bottom: 15px;
-}
-
-.no-devices p {
-  color: #94a3b8;
-  font-size: 16px;
-  line-height: 1.5;
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-/* Right Panel - Device Details - COMPACT VERSION */
 .device-details-panel {
   width: 450px;
   min-width: 450px;
-  background: rgba(30, 41, 59, 0.95);
+  background: rgba(30,41,59,0.95);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148,163,184,0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   transition: all 0.3s ease;
 }
 
 .device-details-panel.has-device {
   border-color: #3b82f6;
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 30px rgba(59,130,246,0.3);
 }
 
-/* No Selection State - Compact */
 .no-selection {
   flex: 1;
   display: flex;
@@ -1237,25 +1601,14 @@ export default {
 .no-selection-icon {
   font-size: 60px;
   margin-bottom: 20px;
-  opacity: 0.7;
   animation: bounce 2s infinite;
 }
 
-.no-selection h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #f8fafc;
-  margin-bottom: 10px;
+@keyframes bounce {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
-.no-selection p {
-  color: #94a3b8;
-  font-size: 14px;
-  max-width: 250px;
-  line-height: 1.4;
-}
-
-/* Selected Device Details - Compact */
 .selected-device-details {
   flex: 1;
   overflow-y: auto;
@@ -1272,26 +1625,21 @@ export default {
 }
 
 .device-status-banner.online {
-  background: rgba(16, 185, 129, 0.2);
+  background: rgba(16,185,129,0.2);
   color: #34d399;
-  border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+  border-bottom: 1px solid rgba(16,185,129,0.3);
 }
 
 .device-status-banner.offline {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239,68,68,0.2);
   color: #f87171;
-  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+  border-bottom: 1px solid rgba(239,68,68,0.3);
 }
 
-.status-icon {
-  font-size: 20px;
-}
-
-.status-text {
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
+.device-status-banner.conflict {
+  background: rgba(245,158,11,0.2);
+  color: #f59e0b;
+  border-bottom: 1px solid rgba(245,158,11,0.3);
 }
 
 .details-content {
@@ -1301,11 +1649,36 @@ export default {
   gap: 16px;
 }
 
+.conflict-warning {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 12px;
+  padding: 15px;
+  display: flex;
+  gap: 12px;
+}
+
+.warning-icon {
+  font-size: 24px;
+}
+
+.warning-text strong {
+  color: #ef4444;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.warning-text p {
+  color: #94a3b8;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
 .detail-section {
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(15,23,42,0.8);
   border-radius: 12px;
   padding: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148,163,184,0.1);
 }
 
 .detail-section h3 {
@@ -1315,7 +1688,7 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-bottom: 1px solid rgba(148,163,184,0.2);
   padding-bottom: 6px;
 }
 
@@ -1335,7 +1708,6 @@ export default {
   font-size: 11px;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
   font-weight: 500;
 }
 
@@ -1343,21 +1715,6 @@ export default {
   font-size: 14px;
   color: #f8fafc;
   font-weight: 500;
-  line-height: 1.3;
-}
-
-.detail-item .detail-value.ip {
-  color: #60a5fa;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.detail-item .detail-value.mac {
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-  color: #94a3b8;
-  font-size: 14px;
-  letter-spacing: 0.3px;
 }
 
 .value-with-copy {
@@ -1373,7 +1730,6 @@ export default {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 14px;
   transition: all 0.2s;
 }
 
@@ -1384,49 +1740,36 @@ export default {
 
 .vlan-badge {
   display: inline-block;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg,#3b82f6,#8b5cf6);
   color: white;
   padding: 4px 12px;
   border-radius: 16px;
   font-size: 13px;
   font-weight: 600;
-  width: fit-content;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
 }
 
-/* Open Ports Section - Compact */
-.ports-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.port-badge {
-  display: inline-block;
-  background: #0f172a;
-  color: #94a3b8;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+.clear-btn {
+  background: transparent;
   border: 1px solid #334155;
-  transition: all 0.2s;
-  font-weight: 500;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  color: #94a3b8;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.port-badge:hover {
+.clear-btn:hover {
   background: #1e293b;
-  border-color: #3b82f6;
-  color: #60a5fa;
-  transform: translateY(-2px);
+  color: #f8fafc;
 }
 
-/* Action Buttons - Compact */
 .action-buttons {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2,1fr);
   gap: 10px;
   margin-top: 16px;
 }
@@ -1449,75 +1792,210 @@ export default {
 
 .action-btn:hover {
   background: #1e293b;
-  border-color: #475569;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.action-btn.copy-ip:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: #3b82f6;
-  color: #60a5fa;
+.action-btn.conflict-info {
+  background: #f59e0b;
+  color: #1e293b;
 }
 
-.action-btn.copy-mac:hover {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: #8b5cf6;
-  color: #c4b5fd;
+.action-btn.conflict-info:hover {
+  background: #ef4444;
+  color: white;
 }
 
-.action-btn.ping:hover {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: #10b981;
-  color: #34d399;
+.conflicts-panel {
+  position: fixed;
+  right: -500px;
+  top: 0;
+  width: 500px;
+  height: 100vh;
+  background: rgba(30,41,59,0.98);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(148,163,184,0.2);
+  box-shadow: -5px 0 25px rgba(0,0,0,0.3);
+  transition: right 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
 }
 
-.action-btn.scan:hover {
-  background: rgba(245, 158, 11, 0.2);
+.conflicts-panel.open {
+  right: 0;
+}
+
+.conflicts-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(148,163,184,0.1);
+  background: rgba(15,23,42,0.8);
+}
+
+.conflicts-panel-header h3 {
+  margin: 0;
+  color: #f59e0b;
+}
+
+.close-panel-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 28px;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-panel-btn:hover {
+  background: rgba(148,163,184,0.1);
+  color: #f8fafc;
+}
+
+.conflicts-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.loading-conflicts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: #94a3b8;
+}
+
+.no-conflicts {
+  text-align: center;
+  padding: 40px;
+  color: #10b981;
+}
+
+.conflict-item {
+  background: rgba(15,23,42,0.8);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: all 0.2s;
+}
+
+.conflict-item:hover {
+  transform: translateX(-4px);
   border-color: #f59e0b;
-  color: #fbbf24;
+  background: rgba(245,158,11,0.1);
 }
 
-/* Scrollbar Styling */
+.conflict-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(148,163,184,0.1);
+}
+
+.conflict-ip {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f59e0b;
+  font-family: monospace;
+}
+
+.conflict-vlan {
+  font-size: 12px;
+  background: #3b82f6;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.conflict-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148,163,184,0.1);
+}
+
+.investigate-btn, .resolve-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  flex: 1;
+}
+
+.investigate-btn {
+  background: #3b82f6;
+  color: white;
+}
+
+.investigate-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.resolve-btn {
+  background: #10b981;
+  color: white;
+}
+
+.resolve-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
 .devices-list::-webkit-scrollbar,
-.selected-device-details::-webkit-scrollbar {
+.selected-device-details::-webkit-scrollbar,
+.conflicts-panel-content::-webkit-scrollbar {
   width: 10px;
 }
 
 .devices-list::-webkit-scrollbar-track,
-.selected-device-details::-webkit-scrollbar-track {
+.selected-device-details::-webkit-scrollbar-track,
+.conflicts-panel-content::-webkit-scrollbar-track {
   background: #0f172a;
   border-radius: 5px;
 }
 
 .devices-list::-webkit-scrollbar-thumb,
-.selected-device-details::-webkit-scrollbar-thumb {
+.selected-device-details::-webkit-scrollbar-thumb,
+.conflicts-panel-content::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 5px;
-  border: 2px solid #0f172a;
 }
 
 .devices-list::-webkit-scrollbar-thumb:hover,
-.selected-device-details::-webkit-scrollbar-thumb:hover {
+.selected-device-details::-webkit-scrollbar-thumb:hover,
+.conflicts-panel-content::-webkit-scrollbar-thumb:hover {
   background: #475569;
-}
-
-/* Responsive adjustments */
-@media (max-width: 1400px) {
-  .device-list-panel {
-    min-width: 500px;
-  }
 }
 
 @media (max-width: 1200px) {
   .device-list-panel {
     min-width: 450px;
   }
-  
-  .device-name {
-    font-size: 15px;
-  }
-  
   .device-details-panel {
     width: 400px;
     min-width: 400px;
@@ -1528,20 +2006,17 @@ export default {
   .main-content {
     flex-direction: column;
   }
-  
-  .device-list-panel {
+  .device-list-panel, .device-details-panel {
     min-width: 100%;
-    height: 500px;
-  }
-  
-  .device-details-panel {
     width: 100%;
-    min-width: 100%;
     height: 500px;
   }
-  
-  .device-details {
-    grid-template-columns: repeat(2, 1fr);
+  .conflicts-panel {
+    width: 100%;
+    right: -100%;
+  }
+  .conflict-details {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1550,50 +2025,15 @@ export default {
     flex-direction: column;
     align-items: stretch;
   }
-  
   .search-bar {
     max-width: 100%;
   }
-  
-  .stats-bar {
-    gap: 15px;
+  .status-buttons {
+    flex-wrap: wrap;
   }
-  
-  .device-list-panel {
-    height: 400px;
-  }
-  
-  .device-card {
-    min-height: 100px;
-  }
-  
-  .status-indicator {
-    width: 50px;
-    font-size: 20px;
-  }
-  
   .device-details {
     grid-template-columns: 1fr;
   }
-  
-  .pagination {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  
-  .device-details-panel {
-    height: 450px;
-  }
-  
-  .detail-item .detail-value {
-    font-size: 13px;
-  }
-  
-  .detail-item .detail-value.ip,
-  .detail-item .detail-value.mac {
-    font-size: 13px;
-  }
-  
   .action-buttons {
     grid-template-columns: 1fr;
   }
