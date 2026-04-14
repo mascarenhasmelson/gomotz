@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/discovery/vlan"
 	ws "github.com/mascarenhasmelson/gomotz/discovery/vlan"
+	"github.com/mascarenhasmelson/gomotz/monitorsrv"
 	"github.com/mascarenhasmelson/gomotz/utils"
-
-	"github.com/gorilla/websocket"
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 const defaultScanIntervalSeconds = 30
@@ -28,20 +28,28 @@ type Router struct {
 	ctx         context.Context
 	pool        *pgxpool.Pool
 	db          *vlan.PostgresDB
+	monitorDB   *monitorsrv.PostgresDB
 	scanManager *vlan.VLANScanManager
+	portMonitor *monitorsrv.PortMonitorService
 	wsHub       *ws.Hub
 	mux         *http.ServeMux
 	upgrader    websocket.Upgrader
 }
+type MonitorRequest struct {
+	Name         string `json:"name"`
+	ScanInterval int    `json:"scan_interval"`
+}
 
 var wsMu sync.Mutex
 
-func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, scanManager *vlan.VLANScanManager, wsHub *ws.Hub) *http.ServeMux {
+func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, monitorDB *monitorsrv.PostgresDB, scanManager *vlan.VLANScanManager, portMonitor *monitorsrv.PortMonitorService, wsHub *ws.Hub) *http.ServeMux {
 	r := &Router{
 		ctx:         ctx,
 		pool:        pool,
 		db:          database,
+		monitorDB:   monitorDB,
 		scanManager: scanManager,
+		portMonitor: portMonitor,
 		wsHub:       wsHub,
 		mux:         http.NewServeMux(),
 		upgrader: websocket.Upgrader{
@@ -66,6 +74,10 @@ func (r *Router) routes() {
 
 	r.mux.HandleFunc("/v1/api/vlans", r.handleVLANs)
 	r.mux.HandleFunc("/v1/api/vlans/", r.handleVLANWithID)
+
+	r.mux.HandleFunc("/v1/api/interfaces", r.getInterfaces)
+	r.mux.HandleFunc("/v1/api/interfaces/", r.handleInterfaceAction)
+
 	r.mux.HandleFunc("/v1/api/devices", r.getAllDevices)
 	r.mux.HandleFunc("/v1/api/scans/", r.handleScans)
 	r.mux.HandleFunc("/v1/api/vendors", r.listVendors)
@@ -78,7 +90,866 @@ func (r *Router) routes() {
 	r.mux.HandleFunc("/v1/api/discovery/status", r.getDiscoveryStatus)
 	r.mux.HandleFunc("/v1/api/discovery/trigger", r.triggerDiscovery)
 
+	r.mux.HandleFunc("/v1/api/monitors", r.handlePortMonitors)
+	r.mux.HandleFunc("/v1/api/monitors/", r.handlePortMonitorWithID)
+	r.mux.HandleFunc("/ws/monitors", r.handleMonitorWebSocket)
+	r.mux.HandleFunc("/v1/api/monitors/test", r.testPortConnection)
+
 }
+
+func (r *Router) testPortConnection(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	if req.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var body struct {
+		Hostname string `json:"hostname"`
+		Port     int    `json:"port"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if body.Hostname == "" || body.Port == 0 {
+		respondError(w, http.StatusBadRequest, "hostname and port required")
+		return
+	}
+
+	resp := bgservices.TcpCheck(utils.TCPCheckRequest{
+		Host:    body.Hostname,
+		Port:    body.Port,
+		Timeout: 10,
+	})
+
+	if resp.Success {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success":       true,
+			"status":        resp.Status,
+			"message":       resp.Message,
+			"host":          resp.Host,
+			"port":          resp.Port,
+			"response_time": resp.ResponseTime,
+		})
+	} else {
+		respondJSON(w, http.StatusOK, map[string]interface{}{ // 200 not 4xx — let frontend decide
+			"success":       false,
+			"status":        resp.Status,
+			"message":       resp.Message,
+			"host":          resp.Host,
+			"port":          resp.Port,
+			"response_time": resp.ResponseTime,
+		})
+	}
+}
+func (r *Router) handleMonitorWebSocket(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	conn, err := r.upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		log.Printf("Monitor WebSocket upgrade error: %v", err)
+		return
+	}
+
+	// ✅ Send current state immediately on connect
+	monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) // ✅ was r.GetAllPortMonitors
+	if err == nil {
+		if monitors == nil {
+			monitors = []*utils.PortMonitor{}
+		}
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type":     "initial_state",
+			"monitors": monitors,
+		})
+		conn.WriteMessage(websocket.TextMessage, payload)
+	}
+
+	client := &vlan.Client{
+		Hub:  r.wsHub,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+
+	client.Hub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+func (r *Router) handlePortMonitors(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	switch req.Method {
+	case http.MethodGet:
+		monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) // ✅
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if monitors == nil {
+			monitors = []*utils.PortMonitor{}
+		}
+		respondJSON(w, http.StatusOK, monitors)
+
+	case http.MethodPost:
+		var body utils.CreatePortMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.FriendlyName == "" || body.Hostname == "" || body.Port == 0 {
+			respondError(w, http.StatusBadRequest,
+				"friendly_name, hostname and port required")
+			return
+		}
+		if body.HeartbeatInterval <= 0 {
+			body.HeartbeatInterval = 60
+		}
+		if body.HeartbeatRetryInterval <= 0 {
+			body.HeartbeatRetryInterval = 60
+		}
+
+		m := &utils.PortMonitor{
+			FriendlyName:           body.FriendlyName,
+			Hostname:               body.Hostname,
+			Port:                   body.Port,
+			HeartbeatInterval:      body.HeartbeatInterval,
+			Retries:                body.Retries,
+			HeartbeatRetryInterval: body.HeartbeatRetryInterval,
+		}
+		if err := r.monitorDB.CreatePortMonitor(r.ctx, m); err != nil { // ✅
+			if strings.Contains(err.Error(), "duplicate") {
+				respondError(w, http.StatusConflict,
+					"monitor for this hostname:port already exists")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.portMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type":    "monitor_created",
+			"monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusCreated, m)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/monitors/")
+	parts := strings.Split(path, "/")
+
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid monitor ID")
+		return
+	}
+
+	// GET /v1/api/monitors/1/logs
+	if len(parts) > 1 && parts[1] == "logs" {
+		limit := 50
+		if s := req.URL.Query().Get("limit"); s != "" {
+			if l, err := strconv.Atoi(s); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		logs, err := r.monitorDB.GetPortMonitorLogs(r.ctx, id, limit) // ✅
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if logs == nil {
+			logs = []*utils.PortMonitorLog{}
+		}
+		respondJSON(w, http.StatusOK, logs)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) // ✅
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodPut:
+		var body utils.CreatePortMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.HeartbeatInterval <= 0 {
+			body.HeartbeatInterval = 60
+		}
+		if body.HeartbeatRetryInterval <= 0 {
+			body.HeartbeatRetryInterval = 60
+		}
+
+		m := &utils.PortMonitor{
+			ID:                     id,
+			FriendlyName:           body.FriendlyName,
+			Hostname:               body.Hostname,
+			Port:                   body.Port,
+			HeartbeatInterval:      body.HeartbeatInterval,
+			Retries:                body.Retries,
+			HeartbeatRetryInterval: body.HeartbeatRetryInterval,
+		}
+		if err := r.monitorDB.UpdatePortMonitor(r.ctx, m); err != nil { // ✅
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.portMonitor.StopMonitor(id)
+		r.portMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type":    "monitor_updated",
+			"monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodDelete:
+		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) // ✅
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+
+		r.portMonitor.StopMonitor(id)
+
+		if err := r.monitorDB.DeletePortMonitor(r.ctx, id); err != nil { // ✅
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type":       "monitor_deleted",
+			"monitor_id": id,
+			"name":       m.FriendlyName,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":     "deleted",
+			"monitor_id": id,
+			"name":       m.FriendlyName,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/interfaces/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	interfaceName := parts[0]
+	action := parts[1]
+
+	if action != "monitor" && action != "unmonitor" {
+		http.Error(w, "Invalid action (use 'monitor' or 'unmonitor')", http.StatusBadRequest)
+		return
+	}
+
+	if req.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	detector := vlan.NewInterfaceDetector()
+	interfaces, err := detector.GetAllInterfaces()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var targetInterface *vlan.DetectedInterface
+	for _, iface := range interfaces {
+		if iface.Name == interfaceName {
+			targetInterface = &iface
+			break
+		}
+	}
+
+	if targetInterface == nil {
+		respondError(w, http.StatusNotFound, "Interface not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+	defer cancel()
+
+	if action == "monitor" {
+		// ✅ Parse optional body
+		var monitorReq MonitorRequest
+		if req.Body != nil {
+			json.NewDecoder(req.Body).Decode(&monitorReq) // all fields optional
+		}
+
+		vlanID := 0
+		if targetInterface.VLANId != nil {
+			vlanID = *targetInterface.VLANId
+		}
+
+		// ✅ Name priority: user provided > auto-generated
+		networkName := monitorReq.Name
+		if networkName == "" {
+			if targetInterface.IsVLAN {
+				networkName = fmt.Sprintf("VLAN %d (%s)", vlanID, interfaceName)
+			} else {
+				networkName = fmt.Sprintf("%s Network", interfaceName)
+			}
+		}
+
+		// ✅ Scan interval priority: user provided > default
+		scanInterval := monitorReq.ScanInterval
+		if scanInterval <= 0 {
+			scanInterval = 30
+		}
+
+		ipAddr := targetInterface.IPv4
+		cidr := fmt.Sprintf("/%d", targetInterface.CIDR)
+		cidrFull := ipAddr + cidr
+		gateway := targetInterface.DefaultGateway
+
+		vlanConfig := &utils.VLANNetwork{
+			VLANId:              vlanID,
+			InterfaceName:       interfaceName,
+			VLANName:            networkName,
+			NetworkMode:         "auto",
+			IPAddress:           &ipAddr,
+			CIDRNotation:        &cidr,
+			CIDRFull:            &cidrFull,
+			DefaultGateway:      &gateway,
+			MonitoringEnabled:   true,
+			ScanIntervalSeconds: scanInterval,
+		}
+
+		existing, _ := r.db.GetVLANNetworkByInterface(ctx, interfaceName)
+		if existing != nil {
+			existing.MonitoringEnabled = true
+			// ✅ Only override name/interval if user explicitly provided them
+			if monitorReq.Name != "" {
+				existing.VLANName = monitorReq.Name
+			}
+			if monitorReq.ScanInterval > 0 {
+				existing.ScanIntervalSeconds = monitorReq.ScanInterval
+			}
+			if err := r.db.UpdateVLANNetworkByInterface(ctx, existing, interfaceName); err != nil {
+				respondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			vlanConfig = existing
+		} else {
+			if err := r.db.CreateVLANNetworkByInterface(ctx, vlanConfig, interfaceName); err != nil {
+				respondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
+
+		log.Printf("[Monitor] Starting scan for %s with DB id=%d name=%s",
+			interfaceName, vlanConfig.ID, vlanConfig.VLANName)
+
+		if err := r.scanManager.StartVLANScan(vlanConfig); err != nil {
+			respondError(w, http.StatusInternalServerError,
+				fmt.Sprintf("Failed to start monitoring: %v", err))
+			return
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":       "monitoring_started",
+			"interface":    interfaceName,
+			"network_id":   vlanConfig.ID,       // ✅ frontend uses to fetch devices
+			"network_name": vlanConfig.VLANName, // ✅ frontend displays this
+			"interface_type": func() string {
+				if targetInterface.IsVLAN {
+					return "vlan"
+				}
+				return "physical"
+			}(),
+			"cidr":          cidrFull,
+			"scan_interval": vlanConfig.ScanIntervalSeconds,
+		})
+
+	} else if action == "unmonitor" {
+		existing, err := r.db.GetVLANNetworkByInterface(ctx, interfaceName)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "Network not found in database")
+			return
+		}
+
+		existing.MonitoringEnabled = false
+		if err := r.db.UpdateVLANNetworkByInterface(ctx, existing, interfaceName); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.scanManager.StopVLANScanByInterface(existing.InterfaceName)
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":       "monitoring_stopped",
+			"interface":    interfaceName,
+			"network_id":   existing.ID, // ✅ useful for frontend cleanup
+			"network_name": existing.VLANName,
+		})
+	}
+}
+func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	if req.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	detector := vlan.NewInterfaceDetector()
+	interfaces, err := detector.GetAllInterfaces()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Get monitored networks from database
+	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+	defer cancel()
+
+	vlans, _ := r.db.GetAllVLANs(ctx)
+
+	// ✅ Build map by interface_name instead of constructed name
+	vlanMap := make(map[string]*utils.VLANNetwork)
+	for _, v := range vlans {
+		if v.InterfaceName != "" {
+			vlanMap[v.InterfaceName] = v
+		} else if v.VLANId > 0 {
+			// Backward compatibility: construct name for old entries
+			vlanMap[fmt.Sprintf("%s.%d", r.scanManager.GetParentInterface(), v.VLANId)] = v
+		}
+	}
+
+	// Build response with monitoring status
+	type InterfaceResponse struct {
+		vlan.DetectedInterface
+		IsMonitored  bool   `json:"is_monitored"`
+		NetworkDBId  *int   `json:"network_db_id,omitempty"`
+		NetworkName  string `json:"network_name,omitempty"`
+		ScanInterval int    `json:"scan_interval,omitempty"`
+	}
+
+	var response []InterfaceResponse
+	for _, iface := range interfaces {
+		resp := InterfaceResponse{
+			DetectedInterface: iface,
+			IsMonitored:       false,
+		}
+
+		// ✅ Check by interface name
+		if v, exists := vlanMap[iface.Name]; exists && v.MonitoringEnabled {
+			resp.IsMonitored = true
+			resp.NetworkDBId = &v.ID
+			resp.NetworkName = v.VLANName
+			resp.ScanInterval = v.ScanIntervalSeconds
+		}
+
+		response = append(response, resp)
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
+// 	if EnableCORS(&w, req) {
+// 		return
+// 	}
+
+// 	if req.Method != http.MethodGet {
+// 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	detector := vlan.NewInterfaceDetector()
+// 	interfaces, err := detector.GetAllInterfaces()
+// 	if err != nil {
+// 		respondError(w, http.StatusInternalServerError, err.Error())
+// 		return
+// 	}
+
+// 	// Enrich with monitoring status from database
+// 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+// 	defer cancel()
+
+// 	vlans, _ := r.db.GetAllVLANs(ctx)
+// 	vlanMap := make(map[string]*utils.VLANNetwork)
+// 	for _, v := range vlans {
+// 		vlanMap[fmt.Sprintf("%s.%d", r.scanManager.GetParentInterface(), v.VLANId)] = v
+// 	}
+
+// 	// Build response with monitoring status
+// 	type InterfaceResponse struct {
+// 		vlan.DetectedInterface
+// 		IsMonitored bool   `json:"is_monitored"`
+// 		VLANDBId    *int   `json:"vlan_db_id,omitempty"`
+// 		VLANName    string `json:"vlan_name,omitempty"`
+// 	}
+
+// 	var response []InterfaceResponse
+// 	for _, iface := range interfaces {
+// 		resp := InterfaceResponse{
+// 			DetectedInterface: iface,
+// 			IsMonitored:       false,
+// 		}
+
+// 		// Check if this interface is being monitored
+// 		if v, exists := vlanMap[iface.Name]; exists && v.MonitoringEnabled {
+// 			resp.IsMonitored = true
+// 			resp.VLANDBId = &v.VLANId
+// 			resp.VLANName = v.VLANName
+// 		}
+
+// 		response = append(response, resp)
+// 	}
+
+// 	respondJSON(w, http.StatusOK, response)
+// }
+
+// func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request) {
+// 	if EnableCORS(&w, req) {
+// 		return
+// 	}
+
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	// Extract interface name from path
+// 	path := strings.TrimPrefix(req.URL.Path, "/v1/api/interfaces/")
+// 	parts := strings.Split(path, "/")
+// 	if len(parts) < 2 {
+// 		http.Error(w, "Invalid path", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	interfaceName := parts[0]
+// 	action := parts[1]
+
+// 	if action != "monitor" && action != "unmonitor" {
+// 		http.Error(w, "Invalid action (use 'monitor' or 'unmonitor')", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	if req.Method != http.MethodPost {
+// 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+
+// 	// Get interface details
+// 	detector := vlan.NewInterfaceDetector()
+// 	interfaces, err := detector.GetAllInterfaces()
+// 	if err != nil {
+// 		respondError(w, http.StatusInternalServerError, err.Error())
+// 		return
+// 	}
+
+// 	var targetInterface *vlan.DetectedInterface
+// 	for _, iface := range interfaces {
+// 		if iface.Name == interfaceName {
+// 			targetInterface = &iface
+// 			break
+// 		}
+// 	}
+
+// 	if targetInterface == nil {
+// 		respondError(w, http.StatusNotFound, "Interface not found")
+// 		return
+// 	}
+
+// 	if action == "monitor" {
+// 		// Start monitoring this interface
+// 		vlanID := 0
+// 		if targetInterface.VLANId != nil {
+// 			vlanID = *targetInterface.VLANId
+// 		} else {
+// 			// Auto-generate VLAN ID for non-VLAN interfaces
+// 			// Use last octet of IP or generate unique ID
+// 			respondError(w, http.StatusBadRequest, "Only VLAN interfaces can be monitored")
+// 			return
+// 		}
+
+// 		// Create VLAN config
+// 		vlanConfig := &utils.VLANNetwork{
+// 			VLANId:              vlanID,
+// 			VLANName:            fmt.Sprintf("VLAN %d (%s)", vlanID, interfaceName),
+// 			NetworkMode:         "dhcp", // Auto-detected interfaces use their existing config
+// 			MonitoringEnabled:   true,
+// 			ScanIntervalSeconds: 30,
+// 		}
+
+// 		// Check if already exists in database
+// 		ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+// 		defer cancel()
+
+// 		existing, _ := r.db.GetVLANNetwork(ctx, vlanID)
+// 		if existing != nil {
+// 			// Update to enable monitoring
+// 			existing.MonitoringEnabled = true
+// 			if err := r.db.UpdateVLANNetwork(ctx, existing); err != nil {
+// 				respondError(w, http.StatusInternalServerError, err.Error())
+// 				return
+// 			}
+// 			vlanConfig = existing
+// 		} else {
+// 			// Create new VLAN entry
+// 			ipAddr := targetInterface.IPv4
+// 			cidr := fmt.Sprintf("/%d", targetInterface.CIDR)
+// 			cidrFull := ipAddr + cidr
+// 			gateway := targetInterface.DefaultGateway
+
+// 			vlanConfig.IPAddress = &ipAddr
+// 			vlanConfig.CIDRNotation = &cidr
+// 			vlanConfig.CIDRFull = &cidrFull
+// 			vlanConfig.DefaultGateway = &gateway
+
+// 			if err := r.db.CreateVLANNetwork(ctx, vlanConfig); err != nil {
+// 				respondError(w, http.StatusInternalServerError, err.Error())
+// 				return
+// 			}
+// 		}
+
+// 		// Start scanning
+// 		if err := r.scanManager.StartVLANScan(vlanConfig); err != nil {
+// 			respondError(w, http.StatusInternalServerError,
+// 				fmt.Sprintf("Failed to start monitoring: %v", err))
+// 			return
+// 		}
+
+// 		respondJSON(w, http.StatusOK, map[string]interface{}{
+// 			"status":    "monitoring_started",
+// 			"interface": interfaceName,
+// 			"vlan_id":   vlanID,
+// 		})
+
+// 	} else if action == "unmonitor" {
+// 		// Stop monitoring
+// 		if targetInterface.VLANId == nil {
+// 			respondError(w, http.StatusBadRequest, "Not a VLAN interface")
+// 			return
+// 		}
+
+// 		vlanID := *targetInterface.VLANId
+
+// 		// Update database to disable monitoring
+// 		ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+// 		defer cancel()
+
+// 		existing, err := r.db.GetVLANNetwork(ctx, vlanID)
+// 		if err != nil {
+// 			respondError(w, http.StatusNotFound, "VLAN not found in database")
+// 			return
+// 		}
+
+// 		existing.MonitoringEnabled = false
+// 		if err := r.db.UpdateVLANNetwork(ctx, existing); err != nil {
+// 			respondError(w, http.StatusInternalServerError, err.Error())
+// 			return
+// 		}
+
+// 		// Stop scanner
+// 		r.scanManager.StopVLANScan(vlanID)
+
+//			respondJSON(w, http.StatusOK, map[string]interface{}{
+//				"status":    "monitoring_stopped",
+//				"interface": interfaceName,
+//				"vlan_id":   vlanID,
+//			})
+//		}
+//	}
+// func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request) {
+// 	if EnableCORS(&w, req) {
+// 		return
+// 	}
+
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	// Extract interface name from path
+// 	path := strings.TrimPrefix(req.URL.Path, "/v1/api/interfaces/")
+// 	parts := strings.Split(path, "/")
+// 	if len(parts) < 2 {
+// 		http.Error(w, "Invalid path", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	interfaceName := parts[0]
+// 	action := parts[1]
+
+// 	if action != "monitor" && action != "unmonitor" {
+// 		http.Error(w, "Invalid action (use 'monitor' or 'unmonitor')", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	if req.Method != http.MethodPost {
+// 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+
+// 	// Get interface details
+// 	detector := vlan.NewInterfaceDetector()
+// 	interfaces, err := detector.GetAllInterfaces()
+// 	if err != nil {
+// 		respondError(w, http.StatusInternalServerError, err.Error())
+// 		return
+// 	}
+
+// 	var targetInterface *vlan.DetectedInterface
+// 	for _, iface := range interfaces {
+// 		if iface.Name == interfaceName {
+// 			targetInterface = &iface
+// 			break
+// 		}
+// 	}
+
+// 	if targetInterface == nil {
+// 		respondError(w, http.StatusNotFound, "Interface not found")
+// 		return
+// 	}
+
+// 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+// 	defer cancel()
+
+// 	if action == "monitor" {
+// 		// ✅ Allow monitoring ANY interface type (physical or VLAN)
+
+// 		// Determine VLAN ID (0 for non-VLAN interfaces)
+// 		vlanID := 0
+// 		if targetInterface.VLANId != nil {
+// 			vlanID = *targetInterface.VLANId
+// 		}
+
+// 		// Create network config
+// 		ipAddr := targetInterface.IPv4
+// 		cidr := fmt.Sprintf("/%d", targetInterface.CIDR)
+// 		cidrFull := ipAddr + cidr
+// 		gateway := targetInterface.DefaultGateway
+
+// 		networkName := fmt.Sprintf("%s Network", interfaceName)
+// 		if targetInterface.IsVLAN {
+// 			networkName = fmt.Sprintf("VLAN %d (%s)", vlanID, interfaceName)
+// 		}
+
+// 		vlanConfig := &utils.VLANNetwork{
+// 			VLANId:              vlanID,
+// 			InterfaceName:       interfaceName, // ✅ Set interface name
+// 			VLANName:            networkName,
+// 			NetworkMode:         "auto", // Auto-detected
+// 			IPAddress:           &ipAddr,
+// 			CIDRNotation:        &cidr,
+// 			CIDRFull:            &cidrFull,
+// 			DefaultGateway:      &gateway,
+// 			MonitoringEnabled:   true,
+// 			ScanIntervalSeconds: 30,
+// 		}
+
+// 		// Check if already exists in database (by interface name)
+// 		existing, _ := r.db.GetVLANNetworkByInterface(ctx, interfaceName)
+// 		if existing != nil {
+// 			// Update to enable monitoring
+// 			existing.MonitoringEnabled = true
+// 			if err := r.db.UpdateVLANNetworkByInterface(ctx, existing, interfaceName); err != nil {
+// 				respondError(w, http.StatusInternalServerError, err.Error())
+// 				return
+// 			}
+// 			vlanConfig = existing
+// 		} else {
+// 			// Create new entry
+// 			if err := r.db.CreateVLANNetworkByInterface(ctx, vlanConfig, interfaceName); err != nil {
+// 				respondError(w, http.StatusInternalServerError, err.Error())
+// 				return
+// 			}
+// 		}
+
+// 		// Start scanning
+// 		if err := r.scanManager.StartVLANScan(vlanConfig); err != nil {
+// 			respondError(w, http.StatusInternalServerError,
+// 				fmt.Sprintf("Failed to start monitoring: %v", err))
+// 			return
+// 		}
+
+// 		respondJSON(w, http.StatusOK, map[string]interface{}{
+// 			"status":    "monitoring_started",
+// 			"interface": interfaceName,
+// 			"interface_type": func() string {
+// 				if targetInterface.IsVLAN {
+// 					return "vlan"
+// 				}
+// 				return "physical"
+// 			}(),
+// 			"vlan_id": vlanID,
+// 		})
+
+// 	} else if action == "unmonitor" {
+// 		// Stop monitoring (works for any interface type)
+// 		existing, err := r.db.GetVLANNetworkByInterface(ctx, interfaceName)
+// 		if err != nil {
+// 			respondError(w, http.StatusNotFound, "Network not found in database")
+// 			return
+// 		}
+
+// 		existing.MonitoringEnabled = false
+// 		if err := r.db.UpdateVLANNetworkByInterface(ctx, existing, interfaceName); err != nil {
+// 			respondError(w, http.StatusInternalServerError, err.Error())
+// 			return
+// 		}
+
+// 		// Stop scanner (by VLAN ID if it's a VLAN, otherwise by interface name)
+// 		if existing.VLANId > 0 {
+// 			r.scanManager.StopVLANScan(existing.VLANId)
+// 		}
+
+//			respondJSON(w, http.StatusOK, map[string]interface{}{
+//				"status":    "monitoring_stopped",
+//				"interface": interfaceName,
+//			})
+//		}
+//	}
 func (r *Router) getDetailedStatus(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
@@ -188,19 +1059,18 @@ func (r *Router) getConflicts(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	query := `
-		SELECT 
-			vlan_id,
-			host(ip_address) AS ip_address,
-			mac_address,
-			COALESCE(hostname, '') AS hostname,
-			COALESCE(vendor, '') AS vendor,
-			device_status,
-			last_seen
-		FROM discovered_devices
-		WHERE device_status = 'conflict'
-		ORDER BY last_seen DESC
-	`
-
+    SELECT 
+        network_id,
+        host(ip_address) AS ip_address,
+        mac_address,
+        COALESCE(hostname, '') AS hostname,
+        COALESCE(vendor, '') AS vendor,
+        device_status,
+        last_seen
+    FROM discovered_devices
+    WHERE device_status = 'conflict'
+    ORDER BY last_seen DESC
+`
 	rows, err := r.pool.Query(r.ctx, query)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
@@ -209,7 +1079,7 @@ func (r *Router) getConflicts(w http.ResponseWriter, req *http.Request) {
 	defer rows.Close()
 
 	type Conflict struct {
-		VLANId       int       `json:"vlan_id"`
+		NetworkId    int       `json:"network_id"`
 		IPAddress    string    `json:"ip_address"`
 		MACAddress   string    `json:"mac_address"`
 		Hostname     string    `json:"hostname"`
@@ -221,7 +1091,7 @@ func (r *Router) getConflicts(w http.ResponseWriter, req *http.Request) {
 	conflicts := []Conflict{}
 	for rows.Next() {
 		var c Conflict
-		if err := rows.Scan(&c.VLANId, &c.IPAddress, &c.MACAddress,
+		if err := rows.Scan(&c.NetworkId, &c.IPAddress, &c.MACAddress,
 			&c.Hostname, &c.Vendor, &c.DeviceStatus, &c.LastSeen); err != nil {
 			continue
 		}
@@ -252,7 +1122,7 @@ func (r *Router) handleVLANWithID(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	path := strings.TrimPrefix(req.URL.Path, "/api/vlans/")
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/vlans/")
 	parts := strings.Split(path, "/")
 
 	if len(parts) == 0 || parts[0] == "" {
@@ -293,6 +1163,9 @@ func (r *Router) handleVLANWithID(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Router) listVLANs(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	vlans, err := r.db.GetAllVLANs(r.ctx)
 	if err != nil {
@@ -302,9 +1175,12 @@ func (r *Router) listVLANs(w http.ResponseWriter, req *http.Request) {
 	respondJSON(w, http.StatusOK, vlans)
 }
 
-func (r *Router) getVLAN(w http.ResponseWriter, req *http.Request, vlanID int) {
+func (r *Router) getVLAN(w http.ResponseWriter, req *http.Request, id int) {
+	if EnableCORS(&w, req) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	v, err := r.db.GetVLANNetwork(r.ctx, vlanID)
+	v, err := r.db.GetVLANNetwork(r.ctx, id)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "VLAN not found")
 		return
@@ -382,7 +1258,7 @@ func (r *Router) createVLAN(w http.ResponseWriter, req *http.Request) {
 	respondJSON(w, http.StatusCreated, v)
 }
 
-func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, vlanID int) {
+func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, id int) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var vlanReq CreateVLANRequest
@@ -391,9 +1267,9 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, vlanID int
 		return
 	}
 
-	existing, err := r.db.GetVLANNetwork(r.ctx, vlanID)
+	existing, err := r.db.GetNetworkByID(r.ctx, id) // ✅ lookup by id
 	if err != nil {
-		respondError(w, http.StatusNotFound, "VLAN not found")
+		respondError(w, http.StatusNotFound, "Network not found")
 		return
 	}
 
@@ -405,13 +1281,10 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, vlanID int
 		}
 	}
 
-	v := &utils.VLANNetwork{
-		VLANId:              vlanID,
-		VLANName:            vlanReq.VLANName,
-		NetworkMode:         vlanReq.NetworkMode,
-		MonitoringEnabled:   vlanReq.EnableMonitoring,
-		ScanIntervalSeconds: scanInterval,
-	}
+	existing.VLANName = vlanReq.VLANName
+	existing.NetworkMode = vlanReq.NetworkMode
+	existing.MonitoringEnabled = vlanReq.EnableMonitoring
+	existing.ScanIntervalSeconds = scanInterval
 
 	if vlanReq.NetworkMode == "static" {
 		cidrFull, err := calculateCIDRFull(vlanReq.IPAddress, vlanReq.CIDRNotation)
@@ -419,47 +1292,52 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, vlanID int
 			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid IP/CIDR: %v", err))
 			return
 		}
-		v.IPAddress = &vlanReq.IPAddress
-		v.CIDRNotation = &vlanReq.CIDRNotation
-		v.CIDRFull = &cidrFull
+		existing.IPAddress = &vlanReq.IPAddress
+		existing.CIDRNotation = &vlanReq.CIDRNotation
+		existing.CIDRFull = &cidrFull
 		if vlanReq.DefaultGateway != "" {
-			v.DefaultGateway = &vlanReq.DefaultGateway
+			existing.DefaultGateway = &vlanReq.DefaultGateway
 		}
 	}
 
-	if err := r.db.UpdateVLANNetwork(r.ctx, v); err != nil {
+	if err := r.db.UpdateNetwork(r.ctx, existing); err != nil { // ✅ new UpdateNetwork
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	r.scanManager.StopVLANScan(vlanID)
+	r.scanManager.StopVLANScan(existing.VLANId)
 
-	if v.MonitoringEnabled {
-		if err := r.scanManager.StartVLANScan(v); err != nil {
-			log.Printf("[VLAN %d] Updated but failed to start: %v (will retry automatically)",
-				vlanID, err)
+	if existing.MonitoringEnabled {
+		if err := r.scanManager.StartVLANScan(existing); err != nil {
+			log.Printf("[Network %d] Updated but failed to start: %v", id, err)
 		}
 	}
 
-	respondJSON(w, http.StatusOK, v)
+	respondJSON(w, http.StatusOK, existing)
 }
 
-func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, vlanID int) {
+// ✅ deleteVLAN — use interface_name based delete
+func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, id int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	r.scanManager.StopVLANScan(vlanID)
-
-	if err := r.db.DeleteVLANNetwork(r.ctx, vlanID); err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+	existing, err := r.db.GetNetworkByID(r.ctx, id) // ✅ get first to find interface_name
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Network not found")
 		return
 	}
 
-	log.Printf("[VLAN %d] Deleted from database", vlanID)
+	r.scanManager.StopVLANScan(existing.VLANId)
+
+	if err := r.db.DeleteNetwork(r.ctx, existing.InterfaceName); // ✅ delete by interface_name
+	err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status":  "deleted",
-		"vlan_id": strconv.Itoa(vlanID),
-		"message": "VLAN deleted successfully",
+		"id":      strconv.Itoa(id),
+		"message": "Network deleted successfully",
 	})
 }
 
@@ -502,7 +1380,7 @@ func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, vlanID int
 // ============================================
 
 func (r *Router) getDevicesByVLAN(w http.ResponseWriter, req *http.Request, vlanID int) {
-	if EnableCORS(&w, req) { // FIX: was missing CORS
+	if EnableCORS(&w, req) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -660,6 +1538,9 @@ func (r *Router) getStatus(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Router) handleWebSocket(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
 	if r.wsHub == nil {
 		log.Println("WebSocket hub is nil")
 		http.Error(w, "WebSocket service not available", http.StatusServiceUnavailable)

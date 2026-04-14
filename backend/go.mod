@@ -7,6 +7,7 @@ toolchain go1.24.13
 require (
 	github.com/google/gopacket v1.1.19
 	github.com/gorilla/websocket v1.5.3
+	github.com/gosnmp/gosnmp v1.43.2
 	github.com/hashicorp/mdns v1.0.6
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
@@ -30,7 +31,7 @@ require (
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 )

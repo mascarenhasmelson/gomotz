@@ -134,7 +134,7 @@
       <div v-if="isChecking" class="progress-section">
         <div class="progress-info">
           <div class="progress-text">
-            <span class="status-icon">🔄</span>
+            <span class="status-icon">-></span>
             Testing connection to {{ host }}:{{ port }}
           </div>
           <div class="progress-time">Elapsed: {{ elapsedTime }}s</div>

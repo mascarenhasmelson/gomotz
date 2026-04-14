@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="dashboard-header">
       <h1>Network Configuration</h1>
-      <p class="subtitle">Configure network interfaces and VLANs with static IP addressing</p>
+      <p class="subtitle">Configure network interfaces and monitor networks</p>
     </div>
 
     <!-- Main Content -->
@@ -28,88 +28,44 @@
 
         <!-- Interfaces List -->
         <div class="interfaces-list" v-if="!isLoading">
-          <h4>Available Interfaces</h4>
           <div 
             v-for="iface in interfaces" 
-            :key="iface.name"
+            :key="iface.interface"
             class="interface-item"
             :class="{ 
-              'selected': selectedInterface && selectedInterface.name === iface.name,
-              'default-route': iface.isDefault 
+              'selected': selectedInterface && selectedInterface.interface === iface.interface
             }"
             @click="selectInterface(iface)"
           >
-            <div class="interface-indicator" :class="iface.status"></div>
+            <div class="interface-indicator" :class="iface.is_monitored ? 'monitored' : 'unmonitored'"></div>
             <div class="interface-info">
               <div class="interface-name">
-                <span class="name">{{ iface.name }}</span>
-                <span v-if="iface.isDefault" class="default-badge">Default Route</span>
-                <span class="status-badge" :class="iface.status">{{ iface.status }}</span>
+                <span class="name">{{ iface.interface }}</span>
+                <span v-if="iface.is_vlan" class="vlan-badge">VLAN</span>
+                <span class="status-badge" :class="iface.is_monitored ? 'monitored' : 'unmonitored'">
+                  {{ iface.is_monitored ? 'Monitored' : 'Not Monitored' }}
+                </span>
               </div>
               <div class="interface-details">
-                <span class="ip">{{ iface.ipAddress || 'No IP' }}</span>
+                <span class="ip">{{ iface.ipv4 || 'No IP' }}</span>
                 <span class="mac">{{ iface.mac }}</span>
+              </div>
+              <div class="interface-network" v-if="iface.network_name">
+                <span class="network-label">Network:</span>
+                <span class="network-name">{{ iface.network_name }}</span>
               </div>
             </div>
             <div class="interface-actions">
               <label class="monitor-checkbox" @click.stop>
                 <input 
                   type="checkbox" 
-                  v-model="iface.monitorEnabled"
+                  v-model="iface.is_monitored"
                   @change="toggleInterfaceMonitor(iface)"
                 >
                 <span class="checkmark"></span>
                 <span class="monitor-label">Monitor</span>
               </label>
-              <button class="action-btn" @click.stop="saveInterfaceConfig(iface)" title="Save Configuration">
-                💾
-              </button>
             </div>
-          </div>
-
-          <!-- VLAN Sniffer Section -->
-          <div class="vlan-sniffer-section">
-            <!-- <div class="sniffer-header" @click="showSniffer = !showSniffer">
-              <h4>VLAN Sniffer</h4>
-              <button class="toggle-btn">
-                <span :class="{ 'rotated': showSniffer }">▼</span>
-              </button>
-            </div> -->
-            
-            <!-- <div v-if="showSniffer" class="sniffer-content">
-              <button 
-                class="scan-sniffer-btn" 
-                @click="scanForVLANs" 
-                :disabled="isSniffing"
-              >
-                <span class="scan-icon" :class="{ 'spinning': isSniffing }">↻</span>
-                {{ isSniffing ? 'Scanning...' : 'Scan for VLANs' }}
-              </button>
-              
-              <div v-if="sniffedVLANs.length > 0" class="sniffed-list">
-                <div 
-                  v-for="vlan in sniffedVLANs" 
-                  :key="vlan.id"
-                  class="sniffed-item"
-                  @click="selectSniffedVLAN(vlan)"
-                >
-                  <div class="sniffed-info">
-                    <span class="sniffed-id">VLAN {{ vlan.id }}</span>
-                    <span class="sniffed-name">{{ vlan.name || 'Unknown' }}</span>
-                  </div>
-                  <button class="add-sniffed-btn" @click.stop="addSniffedVLAN(vlan)">Add</button>
-                </div>
-              </div>
-              
-              <div v-else-if="!isSniffing" class="no-sniffed">
-                <p>No VLANs detected. Click "Scan for VLANs" to discover.</p>
-              </div>
-              
-              <div v-if="isSniffing" class="sniffing-progress">
-                <div class="sniffing-spinner"></div>
-                <p>Sniffing network traffic...</p>
-              </div>
-            </div> -->
           </div>
 
           <!-- Empty State -->
@@ -121,209 +77,170 @@
         </div>
       </div>
 
-      <!-- Right Panel - VLAN Configuration -->
+      <!-- Right Panel - Interface Details -->
       <div class="config-panel">
         <div class="panel-header">
-          <h2>{{ selectedInterface ? `VLAN on ${selectedInterface.name}` : 'VLAN Configuration' }}</h2>
+          <h2>{{ selectedInterface ? `Interface Details: ${selectedInterface.interface}` : 'Interface Details' }}</h2>
           <button v-if="selectedInterface" class="close-btn" @click="selectedInterface = null">×</button>
         </div>
 
         <div class="config-form">
-          <!-- Interface Info (when selected) -->
+          <!-- Interface Details (when selected) -->
           <div v-if="selectedInterface" class="info-section">
             <div class="info-item">
               <span class="info-label">Interface</span>
-              <span class="info-value">{{ selectedInterface.name }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Status</span>
-              <span class="info-value status" :class="selectedInterface.status">{{ selectedInterface.status }}</span>
+              <span class="info-value">{{ selectedInterface.interface }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">IP Address</span>
-              <span class="info-value">{{ selectedInterface.ipAddress || 'No IP' }}</span>
+              <span class="info-value ip">{{ selectedInterface.ipv4 || 'No IP' }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Monitor</span>
+              <span class="info-label">MAC Address</span>
+              <span class="info-value mac">{{ selectedInterface.mac }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">CIDR</span>
+              <span class="info-value">{{ selectedInterface.cidr ? '/' + selectedInterface.cidr : 'N/A' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Default Gateway</span>
+              <span class="info-value">{{ selectedInterface.default_gateway || 'N/A' }}</span>
+            </div>
+            <div class="info-item" v-if="selectedInterface.network_name">
+              <span class="info-label">Network Name</span>
+              <span class="info-value network-name">{{ selectedInterface.network_name }}</span>
+            </div>
+           
+            <div class="info-item">
+              <span class="info-label">Monitor Status</span>
               <span class="info-value">
-                <span class="monitor-status" :class="{ 'enabled': selectedInterface.monitorEnabled }">
-                  {{ selectedInterface.monitorEnabled ? 'Enabled' : 'Disabled' }}
+                <span class="monitor-status" :class="{ 'enabled': selectedInterface.is_monitored }">
+                  {{ selectedInterface.is_monitored ? 'Enabled' : 'Disabled' }}
                 </span>
               </span>
             </div>
           </div>
 
-          <!-- VLAN Creation Form -->
-          <div class="form-section">
-            <h3>Create VLAN Interface</h3>
+          <div v-else class="no-selection-message">
+            <div class="message-icon">👆</div>
+            <p>Select a network interface from the left panel to view details</p>
+          </div>
+
+          <!-- Network Creation Form (shown when interface has no network) -->
+          <div v-if="selectedInterface && !selectedInterface.network_name" class="form-section">
+            <h3>Create Network on {{ selectedInterface.interface }}</h3>
             
             <div class="form-group">
-              <label for="vlanId">VLAN ID <span class="required">*</span></label>
+              <label for="networkName">Network Name <span class="required">*</span></label>
+              <input 
+                type="text" 
+                id="networkName"
+                v-model="networkConfig.name"
+                placeholder="e.g., homewifi, lan, guest"
+                class="form-input"
+              />
+              <span class="input-hint">Friendly name for this network</span>
+            </div>
+
+            <div class="form-group">
+              <label for="scanInterval">Scan Interval (seconds)</label>
               <input 
                 type="number" 
-                id="vlanId"
-                v-model="vlanConfig.id"
-                min="1"
-                max="4094"
-                placeholder="e.g., 10, 20, 100"
+                id="scanInterval"
+                v-model="networkConfig.scan_interval"
+                min="10"
+                max="3600"
+                placeholder="30"
                 class="form-input"
-                :disabled="!selectedInterface"
               />
-              <span class="input-hint">VLAN ID (1-4094)</span>
+              <span class="input-hint">How often to scan this network (10-3600 seconds)</span>
             </div>
 
-            <!-- IP Configuration Method -->
-            <div class="form-group">
-              <label>IP Configuration</label>
-              <div class="config-methods">
-                <label class="method-radio">
-                  <input 
-                    type="radio" 
-                    v-model="vlanConfig.ipMethod" 
-                    value="dhcp"
-                  >
-                  <span class="radio-label">DHCP</span>
-                  <span class="method-desc">Automatically obtain IP from DHCP server</span>
-                </label>
-                
-                <label class="method-radio">
-                  <input 
-                    type="radio" 
-                    v-model="vlanConfig.ipMethod" 
-                    value="static"
-                  >
-                  <span class="radio-label">Static IP</span>
-                  <span class="method-desc">Manually configure IP address</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Static IP Configuration (shown only when static is selected) -->
-            <div v-if="vlanConfig.ipMethod === 'static'" class="static-ip-fields">
-              <div class="form-group">
-                <label for="ipAddress">IP Address <span class="required">*</span></label>
-                <input 
-                  type="text" 
-                  id="ipAddress"
-                  v-model="vlanConfig.ipAddress"
-                  placeholder="e.g., 192.168.10.1"
-                  class="form-input"
-                  :disabled="!selectedInterface"
-                  @input="validateIP"
-                />
-                <span v-if="ipError" class="error-text">{{ ipError }}</span>
-              </div>
-
-              <div class="form-group">
-                <label for="cidr">CIDR Notation <span class="required">*</span></label>
-                <select 
-                  id="cidr"
-                  v-model="vlanConfig.cidr"
-                  class="cidr-select"
-                  :disabled="!selectedInterface"
-                >
-                  <option value="/24">/24 (255.255.255.0) - 254 hosts</option>
-                  <option value="/16">/16 (255.255.0.0) - 65,534 hosts</option>
-                  <option value="/8">/8 (255.0.0.0) - 16,777,214 hosts</option>
-                </select>
-                <span class="input-hint">Select CIDR notation</span>
-              </div>
-
-              <div class="form-group">
-                <label for="gateway">Default Gateway</label>
-                <input 
-                  type="text" 
-                  id="gateway"
-                  v-model="vlanConfig.gateway"
-                  placeholder="e.g., 192.168.10.1"
-                  class="form-input"
-                  :disabled="!selectedInterface"
-                  @input="validateGateway"
-                />
-                <span v-if="gatewayError" class="error-text">{{ gatewayError }}</span>
-                <span class="input-hint">Optional - leave empty if no gateway</span>
-              </div>
-
-              <!-- Network Preview (for static IP) -->
-              <div v-if="vlanConfig.ipAddress && vlanConfig.cidr" class="network-preview">
-                <h4>Network Preview</h4>
-                <div class="preview-grid">
-                  <div class="preview-item">
-                    <span class="preview-label">Network:</span>
-                    <span class="preview-value">{{ calculateNetworkAddress(vlanConfig) }}</span>
-                  </div>
-                  <div class="preview-item">
-                    <span class="preview-label">Broadcast:</span>
-                    <span class="preview-value">{{ calculateBroadcastAddress(vlanConfig) }}</span>
-                  </div>
-                  <div class="preview-item">
-                    <span class="preview-label">Hosts:</span>
-                    <span class="preview-value">{{ calculateUsableHosts(vlanConfig) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- DHCP Info (shown when DHCP is selected) -->
-            <div v-if="vlanConfig.ipMethod === 'dhcp'" class="dhcp-info">
-              <div class="info-box">
-                <span class="info-icon">ℹ️</span>
-                <span>VLAN will obtain IP configuration automatically from DHCP server</span>
-              </div>
-            </div>
-
-            <!-- Monitor Checkbox for VLAN -->
             <div class="form-group monitor-group">
               <label class="monitor-checkbox">
                 <input 
                   type="checkbox" 
-                  v-model="vlanConfig.monitorEnabled"
-                  :disabled="!selectedInterface"
-                  @change="toggleVLANMonitor"
+                  v-model="networkConfig.monitoring_enabled"
                 >
                 <span class="checkmark"></span>
-                <span class="monitor-label">Enable monitoring for this VLAN</span>
+                <span class="monitor-label">Enable monitoring for this network</span>
               </label>
             </div>
 
-            <!-- Action Buttons -->
             <div class="form-actions">
-              <button class="btn btn-primary" @click="createVLAN" :disabled="!selectedInterface || !vlanConfig.id || (vlanConfig.ipMethod === 'static' && !vlanConfig.ipAddress)">
+              <button class="btn btn-primary" @click="createNetwork" :disabled="!networkConfig.name || updating">
                 <span class="btn-icon">➕</span>
-                Create VLAN
+                {{ updating ? 'Creating...' : 'Create Network' }}
               </button>
-              <button class="btn btn-danger" @click="resetVLANForm">
+              <button class="btn btn-secondary" @click="resetNetworkForm">
                 Reset
               </button>
             </div>
           </div>
 
-          <!-- Existing VLANs on this Interface -->
-          <div v-if="selectedInterface && existingVLANs.filter(v => v.parentInterface === selectedInterface.name).length > 0" class="form-section">
-            <h3>Existing VLANs on {{ selectedInterface.name }}</h3>
-            <div class="vlan-list-compact">
-              <div v-for="vlan in existingVLANs.filter(v => v.parentInterface === selectedInterface.name)" :key="vlan.id" class="vlan-compact-item">
-                <div class="vlan-compact-info">
-                  <span class="vlan-compact-id">VLAN {{ vlan.id }}</span>
-                  <span class="vlan-compact-ip">{{ vlan.ipAddress || 'DHCP' }}{{ vlan.cidr || '' }}</span>
-                  <span class="vlan-method-badge" :class="vlan.ipMethod">{{ vlan.ipMethod === 'dhcp' ? 'DHCP' : 'Static' }}</span>
-                  <span v-if="vlan.monitorEnabled" class="monitoring-badge" title="Monitoring enabled">📊</span>
+          <!-- Existing Network Configuration (shown when interface has a network) -->
+          <div v-if="selectedInterface && selectedInterface.network_name" class="form-section">
+            <h3>Network Configuration</h3>
+            <div class="network-info-card">
+              <div class="network-header">
+                <span class="network-name-large">{{ selectedInterface.network_name }}</span>
+                <span class="network-status" :class="{ 'active': selectedInterface.is_monitored }">
+                  {{ selectedInterface.is_monitored ? 'Monitoring Active' : 'Monitoring Disabled' }}
+                </span>
+              </div>
+              <div class="network-details">
+                <div class="network-detail-item">
+                  <span class="detail-label">Interface:</span>
+                  <span class="detail-value">{{ selectedInterface.interface }}</span>
                 </div>
-                <div class="vlan-compact-actions">
-                  <label class="icon-checkbox" @click.stop>
-                    <input 
-                      type="checkbox" 
-                      v-model="vlan.monitorEnabled"
-                      @change="toggleVLANMonitor(vlan)"
-                    >
-                    <span class="checkmark-small"></span>
-                  </label>
-                  <button class="icon-btn" @click.stop="editVLAN(vlan)" title="Edit">✏️</button>
-                  <button class="icon-btn delete" @click.stop="deleteVLAN(vlan)" title="Delete">🗑️</button>
+                <!-- <div class="network-detail-item">
+                  <span class="detail-label">Network ID:</span>
+                  <span class="detail-value">{{ selectedInterface.network_db_id }}</span>
+                </div> -->
+                <div class="network-detail-item">
+                  <span class="detail-label">IP Range:</span>
+                  <span class="detail-value">{{ selectedInterface.ipv4 }}/{{ selectedInterface.cidr }}</span>
                 </div>
+                <div class="network-detail-item">
+                  <span class="detail-label">Gateway:</span>
+                  <span class="detail-value">{{ selectedInterface.default_gateway || 'N/A' }}</span>
+                </div>
+                <!-- <div class="network-detail-item">
+                  <span class="detail-label">Scan Interval:</span>
+                  <span class="detail-value">{{ selectedInterface.scan_interval || 30 }} seconds</span>
+                </div> -->
+              </div>
+              <div class="network-actions">
+                <button class="btn btn-warning" @click="toggleMonitoring" :disabled="updating">
+                  {{ updating ? 'Updating...' : (selectedInterface.is_monitored ? 'Stop Monitoring' : 'Start Monitoring') }}
+                </button>
+                <button class="btn btn-danger" @click="deleteNetwork" :disabled="updating">
+                  🗑️ Delete Network
+                </button>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Delete Network</h3>
+          <button class="modal-close" @click="showDeleteModal = false">×</button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete network <strong>"{{ selectedInterface?.network_name }}"</strong>?</p>
+          <p class="warning-text">This action cannot be undone. All devices in this network will no longer be monitored.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showDeleteModal = false">Cancel</button>
+          <button class="btn btn-danger" @click="confirmDeleteNetwork" :disabled="deleting">
+            {{ deleting ? 'Deleting...' : 'Delete Network' }}
+          </button>
         </div>
       </div>
     </div>
@@ -340,8 +257,7 @@
 <script>
 import { ref, reactive, computed, onMounted } from 'vue'
 
-// API Base URL - configure based on your environment
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
 
 export default {
   name: 'NetworkDashboard',
@@ -351,26 +267,16 @@ export default {
     const interfaces = ref([])
     const selectedInterface = ref(null)
     const isLoading = ref(false)
-    const showSniffer = ref(false)
-    const isSniffing = ref(false)
-    const sniffedVLANs = ref([])
+    const updating = ref(false)
+    const deleting = ref(false)
+    const showDeleteModal = ref(false)
     
-    // VLAN Configuration
-    const vlanConfig = reactive({
-      id: '',
-      ipMethod: 'dhcp', // 'dhcp' or 'static'
-      ipAddress: '',
-      cidr: '/24',
-      gateway: '',
-      monitorEnabled: false
+    // Network Configuration
+    const networkConfig = reactive({
+      name: '',
+      scan_interval: 30,
+      monitoring_enabled: true
     })
-
-    // Existing VLANs
-    const existingVLANs = ref([])
-
-    // Validation errors
-    const ipError = ref('')
-    const gatewayError = ref('')
 
     // Notification
     const notification = reactive({
@@ -379,12 +285,9 @@ export default {
       message: ''
     })
 
-    // Computed properties
-    const interfacesWithMonitor = computed(() => {
-      return interfaces.value.map(iface => ({
-        ...iface,
-        monitorEnabled: iface.monitorEnabled || false
-      }))
+    // Computed
+    const isNetworkFormValid = computed(() => {
+      return networkConfig.name && networkConfig.name.trim().length > 0
     })
 
     // API Methods
@@ -392,302 +295,93 @@ export default {
       isLoading.value = true
       
       try {
-        const response = await fetch(`${API_BASE_URL}/network/interfaces`)
+        const response = await fetch(`${API_BASE_URL}/v1/api/interfaces`)
         
         if (!response.ok) {
-          throw new Error('Failed to fetch network interfaces')
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
         
         const data = await response.json()
-        
-        interfaces.value = (data.interfaces || []).map(iface => ({
+        interfaces.value = (data || []).map(iface => ({
           ...iface,
-          monitorEnabled: iface.monitorEnabled || false
+          is_monitored: iface.is_monitored || false
         }))
         
-        // Fetch existing VLANs
-        await fetchVLANs()
-        
         showNotification('Network interfaces loaded successfully', 'success')
+        console.log('Loaded interfaces:', interfaces.value)
       } catch (error) {
         console.error('Error fetching interfaces:', error)
-        showNotification('Failed to load network interfaces', 'error')
-        
-        // For development/demo - use sample data
-        loadSampleData()
+        showNotification(`Failed to load interfaces: ${error.message}`, 'error')
+        interfaces.value = []
       } finally {
         isLoading.value = false
       }
     }
 
-    const fetchVLANs = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/vlans`)
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch VLANs')
-        }
-        
-        const data = await response.json()
-        existingVLANs.value = (data.vlans || []).map(vlan => ({
-          ...vlan,
-          monitorEnabled: vlan.monitorEnabled || false
-        }))
-      } catch (error) {
-        console.error('Error fetching VLANs:', error)
-        // For development - use sample data
-        existingVLANs.value = [
-          { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true, ipMethod: 'static' },
-          { id: 20, parentInterface: 'eth0', ipAddress: '', cidr: '', gateway: '', monitorEnabled: false, ipMethod: 'dhcp' }
-        ]
-      }
-    }
-
-    // Development sample data
-    const loadSampleData = () => {
-      interfaces.value = [
-        { 
-          name: 'eth0', 
-          ipAddress: '192.168.1.100', 
-          cidr: '/24',
-          gateway: '192.168.1.1', 
-          mac: '00:11:22:33:44:55', 
-          status: 'up',
-          isDefault: true,
-          monitorEnabled: true
-        },
-      ]
-      
-      existingVLANs.value = [
-        { id: 10, parentInterface: 'eth0', ipAddress: '192.168.10.1', cidr: '/24', gateway: '192.168.10.254', monitorEnabled: true, ipMethod: 'static' },
-        { id: 20, parentInterface: 'eth0', ipAddress: '', cidr: '', gateway: '', monitorEnabled: false, ipMethod: 'dhcp' }
-      ]
-    }
-
-    // VLAN Sniffer Methods
-    const scanForVLANs = async () => {
-      isSniffing.value = true
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/network/vlans/scan`, {
-          method: 'POST'
-        })
-        
-        if (!response.ok) {
-          throw new Error('Failed to scan for VLANs')
-        }
-        
-        const data = await response.json()
-        sniffedVLANs.value = data.vlans || []
-        showNotification(`Found ${sniffedVLANs.value.length} VLANs`, 'success')
-      } catch (error) {
-        console.error('Error scanning VLANs:', error)
-        
-        // Simulate found VLANs for demo
-        setTimeout(() => {
-          sniffedVLANs.value = [
-            { id: 30, name: 'Marketing' },
-            { id: 40, name: 'Engineering' },
-            { id: 50, name: 'Guest' }
-          ]
-          showNotification(`Found ${sniffedVLANs.value.length} VLANs`, 'success')
-          isSniffing.value = false
-        }, 2000)
-      } finally {
-        if (!isSniffing.value) return
-        isSniffing.value = false
-      }
-    }
-
-    const selectSniffedVLAN = (vlan) => {
-      vlanConfig.id = vlan.id
-      // Scroll to form
-      document.querySelector('.config-panel').scrollIntoView({ behavior: 'smooth' })
-    }
-
-    const addSniffedVLAN = (vlan) => {
-      vlanConfig.id = vlan.id
-      // Auto-fill name if available
-      if (vlan.name && !vlanConfig.name) {
-        // Could add name field if needed
-      }
-      showNotification(`VLAN ${vlan.id} selected for configuration`, 'success')
-    }
-
     const selectInterface = (iface) => {
       selectedInterface.value = iface
+      resetNetworkForm()
     }
 
     const toggleInterfaceMonitor = async (iface) => {
+      const originalState = iface.is_monitored
+      updating.value = true
+      
       try {
-        const response = await fetch(`${API_BASE_URL}/network/interfaces/${iface.name}/monitor`, {
+        const response = await fetch(`${API_BASE_URL}/v1/api/interfaces/${iface.interface}/monitor`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ enabled: iface.monitorEnabled })
+          body: JSON.stringify({ 
+            name: iface.network_name || iface.interface,
+            enabled: iface.is_monitored 
+          })
         })
         
         if (!response.ok) {
-          throw new Error('Failed to update monitoring state')
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
         
-        showNotification(`Monitoring ${iface.monitorEnabled ? 'enabled' : 'disabled'} for ${iface.name}`, 'success')
+        const result = await response.json()
+        showNotification(`Monitoring ${iface.is_monitored ? 'enabled' : 'disabled'} for ${iface.interface}`, 'success')
+        
+        // Refresh interface details
+        await fetchInterfaces()
+        if (selectedInterface.value && selectedInterface.value.interface === iface.interface) {
+          const updated = interfaces.value.find(i => i.interface === iface.interface)
+          if (updated) selectedInterface.value = updated
+        }
       } catch (error) {
         console.error('Error updating monitor state:', error)
-        // Revert checkbox state on error
-        iface.monitorEnabled = !iface.monitorEnabled
-        showNotification(`Failed to update monitoring state`, 'error')
+        iface.is_monitored = originalState
+        showNotification(`Failed to update monitoring state: ${error.message}`, 'error')
+      } finally {
+        updating.value = false
       }
     }
 
-    const toggleVLANMonitor = async (vlan = null) => {
-      const targetVLAN = vlan || { id: vlanConfig.id, monitorEnabled: vlanConfig.monitorEnabled }
-      
-      if (!targetVLAN.id) {
-        showNotification('No VLAN selected', 'error')
-        return
-      }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/vlans/${targetVLAN.id}/monitor`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ enabled: targetVLAN.monitorEnabled })
-        })
-        
-        if (!response.ok) {
-          throw new Error('Failed to update monitoring state')
-        }
-        
-        showNotification(`Monitoring ${targetVLAN.monitorEnabled ? 'enabled' : 'disabled'} for VLAN ${targetVLAN.id}`, 'success')
-      } catch (error) {
-        console.error('Error updating VLAN monitor state:', error)
-        // Revert checkbox state on error
-        targetVLAN.monitorEnabled = !targetVLAN.monitorEnabled
-        showNotification(`Failed to update monitoring state`, 'error')
-      }
-    }
-
-    const saveInterfaceConfig = async (iface) => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/network/interfaces/${iface.name}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(iface)
-        })
-        
-        if (!response.ok) {
-          throw new Error('Failed to save configuration')
-        }
-        
-        showNotification(`Configuration saved for ${iface.name}`, 'success')
-      } catch (error) {
-        console.error('Error saving interface config:', error)
-        showNotification(`Failed to save configuration for ${iface.name}`, 'error')
-      }
-    }
-
-    const validateIP = () => {
-      const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-      if (vlanConfig.ipAddress && !ipRegex.test(vlanConfig.ipAddress)) {
-        ipError.value = 'Invalid IP address format'
-      } else {
-        ipError.value = ''
-      }
-    }
-
-    const validateGateway = () => {
-      const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-      if (vlanConfig.gateway && !ipRegex.test(vlanConfig.gateway)) {
-        gatewayError.value = 'Invalid gateway address format'
-      } else {
-        gatewayError.value = ''
-      }
-    }
-
-    const calculateNetworkAddress = (config) => {
-      if (!config.ipAddress || !config.cidr) return 'N/A'
-      const mask = parseInt(config.cidr.substring(1))
-      const ipParts = config.ipAddress.split('.')
-      if (ipParts.length === 4) {
-        const networkParts = ipParts.map((part, i) => {
-          if (mask >= (i + 1) * 8) return part
-          if (mask <= i * 8) return '0'
-          const bits = mask - (i * 8)
-          const maskValue = 256 - Math.pow(2, 8 - bits)
-          return parseInt(part) & maskValue
-        })
-        return networkParts.join('.')
-      }
-      return 'N/A'
-    }
-
-    const calculateBroadcastAddress = (config) => {
-      if (!config.ipAddress || !config.cidr) return 'N/A'
-      const mask = parseInt(config.cidr.substring(1))
-      const ipParts = config.ipAddress.split('.')
-      if (ipParts.length === 4) {
-        const broadcastParts = ipParts.map((part, i) => {
-          if (mask >= (i + 1) * 8) return part
-          if (mask <= i * 8) return '255'
-          const bits = mask - (i * 8)
-          const maskValue = 256 - Math.pow(2, 8 - bits)
-          return (parseInt(part) & maskValue) + (Math.pow(2, 8 - bits) - 1)
-        })
-        return broadcastParts.join('.')
-      }
-      return 'N/A'
-    }
-
-    const calculateUsableHosts = (config) => {
-      if (!config.cidr) return 'N/A'
-      const mask = parseInt(config.cidr.substring(1))
-      if (mask === 31 || mask === 32) return '0'
-      return Math.pow(2, 32 - mask) - 2
-    }
-
-    const createVLAN = async () => {
+    const createNetwork = async () => {
       if (!selectedInterface.value) {
         showNotification('Please select an interface first', 'error')
         return
       }
       
-      if (!vlanConfig.id || vlanConfig.id < 1 || vlanConfig.id > 4094) {
-        showNotification('Please enter a valid VLAN ID (1-4094)', 'error')
+      if (!networkConfig.name) {
+        showNotification('Please enter a network name', 'error')
         return
       }
-
-      if (vlanConfig.ipMethod === 'static') {
-        if (!vlanConfig.ipAddress) {
-          showNotification('Please enter an IP address for static configuration', 'error')
-          return
-        }
-        if (ipError.value || gatewayError.value) {
-          showNotification('Please fix configuration errors', 'error')
-          return
-        }
-      }
-
+      
+      updating.value = true
+      
       try {
         const payload = {
-          id: vlanConfig.id,
-          parentInterface: selectedInterface.value.name,
-          ipMethod: vlanConfig.ipMethod,
-          monitorEnabled: vlanConfig.monitorEnabled
+          name: networkConfig.name,
+          scan_interval: networkConfig.scan_interval,
+          monitoring_enabled: networkConfig.monitoring_enabled
         }
 
-        if (vlanConfig.ipMethod === 'static') {
-          payload.ipAddress = vlanConfig.ipAddress
-          payload.cidr = vlanConfig.cidr
-          payload.gateway = vlanConfig.gateway || null
-        }
-
-        const response = await fetch(`${API_BASE_URL}/vlans`, {
+        const response = await fetch(`${API_BASE_URL}/v1/api/interfaces/${selectedInterface.value.interface}/monitor`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -696,70 +390,118 @@ export default {
         })
 
         if (!response.ok) {
-          throw new Error('Failed to create VLAN')
+          const error = await response.json()
+          throw new Error(error.message || `HTTP ${response.status}`)
         }
 
-        const newVLAN = await response.json()
+        const result = await response.json()
+        showNotification(`Network "${networkConfig.name}" created successfully on ${selectedInterface.value.interface}`, 'success')
         
-        existingVLANs.value.push({
-          ...newVLAN,
-          monitorEnabled: newVLAN.monitorEnabled || false
-        })
-        showNotification(`VLAN ${vlanConfig.id} created successfully`, 'success')
-        resetVLANForm()
+        // Refresh interfaces
+        await fetchInterfaces()
+        
+        // Update selected interface with new data
+        const updated = interfaces.value.find(i => i.interface === selectedInterface.value.interface)
+        if (updated) selectedInterface.value = updated
+        
+        resetNetworkForm()
       } catch (error) {
-        console.error('Error creating VLAN:', error)
-        showNotification('Failed to create VLAN', 'error')
+        console.error('Error creating network:', error)
+        showNotification(`Failed to create network: ${error.message}`, 'error')
+      } finally {
+        updating.value = false
       }
     }
 
-    const resetVLANForm = () => {
-      vlanConfig.id = ''
-      vlanConfig.ipMethod = 'dhcp'
-      vlanConfig.ipAddress = ''
-      vlanConfig.cidr = '/24'
-      vlanConfig.gateway = ''
-      vlanConfig.monitorEnabled = false
-      ipError.value = ''
-      gatewayError.value = ''
-    }
-
-    const editVLAN = (vlan) => {
-      vlanConfig.id = vlan.id
-      vlanConfig.ipMethod = vlan.ipMethod || 'static'
-      vlanConfig.ipAddress = vlan.ipAddress || ''
-      vlanConfig.cidr = vlan.cidr || '/24'
-      vlanConfig.gateway = vlan.gateway || ''
-      vlanConfig.monitorEnabled = vlan.monitorEnabled || false
+    const toggleMonitoring = async () => {
+      if (!selectedInterface.value) return
       
-      // Find and select the parent interface
-      const parentIface = interfaces.value.find(i => i.name === vlan.parentInterface)
-      if (parentIface) {
-        selectedInterface.value = parentIface
-      }
+      const newState = !selectedInterface.value.is_monitored
+      updating.value = true
       
-      // Scroll to form
-      document.querySelector('.config-panel').scrollIntoView({ behavior: 'smooth' })
-    }
-
-    const deleteVLAN = async (vlan) => {
-      if (!confirm(`Delete VLAN ${vlan.id}?`)) return
-
       try {
-        const response = await fetch(`${API_BASE_URL}/vlans/${vlan.id}`, {
+        const response = await fetch(`${API_BASE_URL}/v1/api/interfaces/${selectedInterface.value.interface}/monitor`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            name: selectedInterface.value.network_name,
+            enabled: newState
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        showNotification(`Monitoring ${newState ? 'enabled' : 'disabled'} for ${selectedInterface.value.interface}`, 'success')
+        
+        // Refresh interfaces
+        await fetchInterfaces()
+        
+        // Update selected interface
+        const updated = interfaces.value.find(i => i.interface === selectedInterface.value.interface)
+        if (updated) selectedInterface.value = updated
+      } catch (error) {
+        console.error('Error toggling monitoring:', error)
+        showNotification(`Failed to update monitoring: ${error.message}`, 'error')
+      } finally {
+        updating.value = false
+      }
+    }
+
+    const deleteNetwork = () => {
+      if (!selectedInterface.value || !selectedInterface.value.network_db_id) {
+        showNotification('No network found to delete', 'error')
+        return
+      }
+      showDeleteModal.value = true
+    }
+
+    const confirmDeleteNetwork = async () => {
+      if (!selectedInterface.value || !selectedInterface.value.network_db_id) return
+      
+      deleting.value = true
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/api/vlans/${selectedInterface.value.network_db_id}`, {
           method: 'DELETE'
         })
 
         if (!response.ok) {
-          throw new Error('Failed to delete VLAN')
+          const error = await response.json()
+          throw new Error(error.message || `HTTP ${response.status}`)
         }
 
-        existingVLANs.value = existingVLANs.value.filter(v => v.id !== vlan.id)
-        showNotification(`VLAN ${vlan.id} deleted`, 'success')
+        const result = await response.json()
+        showNotification(`Network "${selectedInterface.value.network_name}" deleted successfully`, 'success')
+        
+        // Close modal
+        showDeleteModal.value = false
+        
+        // Refresh interfaces
+        await fetchInterfaces()
+        
+        // Clear selected interface if it was deleted
+        const updated = interfaces.value.find(i => i.interface === selectedInterface.value.interface)
+        if (updated) {
+          selectedInterface.value = updated
+        } else {
+          selectedInterface.value = null
+        }
       } catch (error) {
-        console.error('Error deleting VLAN:', error)
-        showNotification('Failed to delete VLAN', 'error')
+        console.error('Error deleting network:', error)
+        showNotification(`Failed to delete network: ${error.message}`, 'error')
+      } finally {
+        deleting.value = false
       }
+    }
+
+    const resetNetworkForm = () => {
+      networkConfig.name = ''
+      networkConfig.scan_interval = 30
+      networkConfig.monitoring_enabled = true
     }
 
     const showNotification = (message, type = 'success') => {
@@ -769,7 +511,7 @@ export default {
       
       setTimeout(() => {
         notification.show = false
-      }, 3000)
+      }, 4000)
     }
 
     // Initialize
@@ -778,41 +520,35 @@ export default {
     })
 
     return {
-      interfaces: interfacesWithMonitor,
+      interfaces,
       selectedInterface,
       isLoading,
-      showSniffer,
-      isSniffing,
-      sniffedVLANs,
-      vlanConfig,
-      existingVLANs,
-      ipError,
-      gatewayError,
+      updating,
+      deleting,
+      showDeleteModal,
+      networkConfig,
       notification,
+      isNetworkFormValid,
       fetchInterfaces,
       selectInterface,
       toggleInterfaceMonitor,
-      toggleVLANMonitor,
-      saveInterfaceConfig,
-      scanForVLANs,
-      selectSniffedVLAN,
-      addSniffedVLAN,
-      validateIP,
-      validateGateway,
-      calculateNetworkAddress,
-      calculateBroadcastAddress,
-      calculateUsableHosts,
-      createVLAN,
-      resetVLANForm,
-      editVLAN,
-      deleteVLAN
+      createNetwork,
+      toggleMonitoring,
+      deleteNetwork,
+      confirmDeleteNetwork,
+      resetNetworkForm
     }
   }
 }
 </script>
 
 <style scoped>
-/* Dark Mode Theme */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 .network-dashboard {
   min-height: 100vh;
   width: 100%;
@@ -825,7 +561,6 @@ export default {
 
 .dashboard-header {
   margin-bottom: 24px;
-  width: 100%;
 }
 
 .dashboard-header h1 {
@@ -835,6 +570,7 @@ export default {
   background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .subtitle {
@@ -847,7 +583,6 @@ export default {
   display: flex;
   gap: 24px;
   height: calc(100vh - 120px);
-  width: 100%;
 }
 
 /* Panels */
@@ -865,13 +600,13 @@ export default {
 
 .interfaces-list-panel {
   flex: 1;
-  min-width: 400px;
-  max-width: 500px;
+  min-width: 380px;
+  max-width: 480px;
 }
 
 .config-panel {
   flex: 2;
-  min-width: 500px;
+  min-width: 520px;
 }
 
 .panel-header {
@@ -981,14 +716,6 @@ export default {
   padding: 16px;
 }
 
-.interfaces-list h4 {
-  margin: 0 0 12px 16px;
-  color: #94a3b8;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
 .interface-item {
   display: flex;
   align-items: center;
@@ -1013,10 +740,6 @@ export default {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
-.interface-item.default-route {
-  border-left: 4px solid #f59e0b;
-}
-
 .interface-indicator {
   width: 8px;
   height: 8px;
@@ -1024,13 +747,13 @@ export default {
   margin-right: 16px;
 }
 
-.interface-indicator.up {
+.interface-indicator.monitored {
   background: #10b981;
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
-.interface-indicator.down {
-  background: #ef4444;
+.interface-indicator.unmonitored {
+  background: #64748b;
 }
 
 .interface-info {
@@ -1050,13 +773,13 @@ export default {
   color: #f8fafc;
 }
 
-.default-badge {
-  background: #f59e0b;
+.vlan-badge {
+  background: #8b5cf6;
   color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
 }
 
 .status-badge {
@@ -1066,16 +789,16 @@ export default {
   text-transform: uppercase;
 }
 
-.status-badge.up {
+.status-badge.monitored {
   background: rgba(16, 185, 129, 0.1);
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.status-badge.down {
-  background: rgba(239, 68, 68, 0.1);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+.status-badge.unmonitored {
+  background: rgba(107, 114, 128, 0.1);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
 }
 
 .interface-details {
@@ -1090,7 +813,23 @@ export default {
 }
 
 .interface-details .mac {
-  font-family: 'Monaco', 'Courier New', monospace;
+  font-family: monospace;
+}
+
+.interface-network {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.network-label {
+  color: #64748b;
+  margin-right: 6px;
+}
+
+.network-name {
+  color: #60a5fa;
+  font-weight: 500;
 }
 
 .interface-actions {
@@ -1105,175 +844,7 @@ export default {
   opacity: 1;
 }
 
-/* VLAN Sniffer Section */
-.vlan-sniffer-section {
-  margin-top: 24px;
-  border-top: 1px solid #334155;
-  padding-top: 16px;
-}
-
-.sniffer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  padding: 8px 16px;
-  background: #1e293b;
-  border-radius: 8px;
-}
-
-.sniffer-header h4 {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 1rem;
-}
-
-.toggle-btn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 4px;
-}
-
-.toggle-btn span {
-  display: inline-block;
-  transition: transform 0.3s;
-}
-
-.toggle-btn span.rotated {
-  transform: rotate(180deg);
-}
-
-.sniffer-content {
-  margin-top: 16px;
-  padding: 0 16px;
-}
-
-.scan-sniffer-btn {
-  width: 100%;
-  padding: 12px;
-  background: #4f46e5;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.scan-sniffer-btn:hover:not(:disabled) {
-  background: #4338ca;
-  transform: translateY(-1px);
-}
-
-.scan-sniffer-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.scan-icon {
-  display: inline-block;
-  transition: transform 0.3s;
-}
-
-.scan-icon.spinning {
-  animation: spin 1s linear infinite;
-}
-
-.sniffed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.sniffed-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.sniffed-item:hover {
-  background: #2d3748;
-  border-color: #3b82f6;
-}
-
-.sniffed-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.sniffed-id {
-  font-weight: 600;
-  color: #60a5fa;
-  font-size: 0.9rem;
-}
-
-.sniffed-name {
-  color: #94a3b8;
-  font-size: 0.8rem;
-}
-
-.add-sniffed-btn {
-  padding: 4px 12px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.add-sniffed-btn:hover {
-  background: #2563eb;
-}
-
-.no-sniffed {
-  text-align: center;
-  padding: 20px;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.sniffing-progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px;
-}
-
-.sniffing-spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid #1e293b;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 12px;
-}
-
-.sniffing-progress p {
-  color: #94a3b8;
-  font-size: 0.9rem;
-}
-
-/* Monitor Checkbox Styles */
+/* Monitor Checkbox */
 .monitor-checkbox {
   display: flex;
   align-items: center;
@@ -1335,23 +906,6 @@ export default {
   color: #cbd5e1;
 }
 
-.action-btn {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 1.1rem;
-  transition: all 0.2s;
-}
-
-.action-btn:hover {
-  background: #1e293b;
-  color: #60a5fa;
-  transform: scale(1.1);
-}
-
 /* Config Form */
 .config-form {
   flex: 1;
@@ -1384,13 +938,24 @@ export default {
 }
 
 .info-value {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #f8fafc;
 }
 
-.info-value.status.up {
+.info-value.ip {
+  color: #60a5fa;
+  font-family: monospace;
+}
+
+.info-value.mac {
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+.info-value.network-name {
   color: #34d399;
+  font-weight: 600;
 }
 
 .monitor-status {
@@ -1410,6 +975,32 @@ export default {
   background: rgba(107, 114, 128, 0.1);
   color: #9ca3af;
   border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.no-selection-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.message-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.no-selection-message p {
+  font-size: 0.95rem;
 }
 
 .form-section {
@@ -1462,132 +1053,15 @@ export default {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-.form-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .form-input::placeholder {
   color: #64748b;
 }
 
 .input-hint {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748b;
   margin-top: 4px;
-}
-
-/* Config Methods */
-.config-methods {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.method-radio {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.method-radio:hover {
-  background: #2d3748;
-  border-color: #3b82f6;
-}
-
-.method-radio input[type="radio"] {
-  margin-right: 12px;
-  accent-color: #3b82f6;
-  width: 16px;
-  height: 16px;
-}
-
-.radio-label {
-  font-weight: 600;
-  color: #f8fafc;
-  margin-right: 12px;
-  min-width: 70px;
-}
-
-.method-desc {
-  color: #94a3b8;
-  font-size: 0.9rem;
-}
-
-/* Static IP Fields */
-.static-ip-fields {
-  margin-top: 20px;
-  padding: 16px;
-  background: #1e293b;
-  border-radius: 8px;
-  border: 1px solid #334155;
-}
-
-/* CIDR Select */
-.cidr-select {
-  width: 100%;
-  padding: 10px 14px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  color: #e2e8f0;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 40px;
-}
-
-.cidr-select:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.cidr-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.cidr-select option {
-  background: #1e293b;
-  color: #e2e8f0;
-}
-
-.error-text {
-  display: block;
-  color: #f87171;
-  font-size: 0.8rem;
-  margin-top: 4px;
-}
-
-/* DHCP Info */
-.dhcp-info {
-  margin-top: 20px;
-}
-
-.info-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: #1e293b;
-  border: 1px solid #3b82f6;
-  border-radius: 8px;
-  color: #94a3b8;
-}
-
-.info-icon {
-  font-size: 1.2rem;
 }
 
 /* Monitor Group */
@@ -1599,199 +1073,17 @@ export default {
   border: 1px solid #334155;
 }
 
-/* Network Preview */
-.network-preview {
-  margin-top: 20px;
-  padding: 16px;
-  background: #1e293b;
-  border-radius: 8px;
-  border: 1px solid #334155;
-}
-
-.network-preview h4 {
-  margin: 0 0 12px 0;
-  color: #cbd5e1;
-  font-size: 0.9rem;
-}
-
-.preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.preview-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.preview-label {
-  font-size: 0.8rem;
-  color: #94a3b8;
-}
-
-.preview-value {
-  font-size: 0.95rem;
-  color: #60a5fa;
-  font-family: 'Monaco', 'Courier New', monospace;
-  word-break: break-word;
-}
-
-/* VLAN Compact List */
-.vlan-list-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.vlan-compact-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  background: #1e293b;
-  border-radius: 8px;
-  border: 1px solid #334155;
-}
-
-.vlan-compact-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.vlan-compact-id {
-  font-weight: 600;
-  color: #60a5fa;
-  font-size: 0.9rem;
-}
-
-.vlan-compact-ip {
-  color: #94a3b8;
-  font-size: 0.85rem;
-}
-
-.vlan-method-badge {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 500;
-}
-
-.vlan-method-badge.dhcp {
-  background: rgba(16, 185, 129, 0.1);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.vlan-method-badge.static {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.monitoring-badge {
-  font-size: 1rem;
-  color: #34d399;
-}
-
-.vlan-compact-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Small checkbox for VLAN items */
-.icon-checkbox {
-  position: relative;
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-}
-
-.icon-checkbox input {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
-
-.checkmark-small {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 18px;
-  width: 18px;
-  background: #1e293b;
-  border: 2px solid #334155;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.icon-checkbox:hover input ~ .checkmark-small {
-  background: #2d3748;
-  border-color: #3b82f6;
-}
-
-.icon-checkbox input:checked ~ .checkmark-small {
-  background: #3b82f6;
-  border-color: #3b82f6;
-}
-
-.checkmark-small:after {
-  content: "";
-  position: absolute;
-  display: none;
-  left: 4px;
-  top: 1px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.icon-checkbox input:checked ~ .checkmark-small:after {
-  display: block;
-}
-
-.icon-btn {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 1rem;
-  transition: all 0.2s;
-}
-
-.icon-btn:hover {
-  background: #2d3748;
-  color: #60a5fa;
-}
-
-.icon-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-}
-
 /* Form Actions */
 .form-actions {
   display: flex;
   gap: 12px;
   margin-top: 24px;
-  flex-wrap: wrap;
 }
 
 .btn {
-  padding: 12px 20px;
+  padding: 10px 20px;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -1804,15 +1096,43 @@ export default {
 .btn-primary {
   background: #3b82f6;
   color: white;
+  flex: 1;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: #2563eb;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #334155;
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.btn-secondary:hover {
+  background: #475569;
+  transform: translateY(-1px);
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #1e293b;
+  flex: 1;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+  transform: translateY(-1px);
+}
+
+.btn-warning:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1824,15 +1144,248 @@ export default {
 
 .btn-danger:hover:not(:disabled) {
   background: #dc2626;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-icon {
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
-/* Empty States */
+/* Network Info Card */
+.network-info-card {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #334155;
+}
+
+.network-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #334155;
+}
+
+.network-name-large {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.network-status {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.network-status.active {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.network-status:not(.active) {
+  background: rgba(107, 114, 128, 0.1);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.network-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.network-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.network-detail-item .detail-label {
+  color: #94a3b8;
+  min-width: 100px;
+}
+
+.network-detail-item .detail-value {
+  color: #e2e8f0;
+  font-family: monospace;
+}
+
+.network-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #334155;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: #1e293b;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 450px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1.2rem;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 24px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #f8fafc;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-body p {
+  color: #e2e8f0;
+  margin-bottom: 12px;
+}
+
+.warning-text {
+  color: #f87171 !important;
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* Notifications */
+.notification {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease;
+  z-index: 1000;
+  max-width: 420px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.notification.success {
+  background: rgba(16, 185, 129, 0.95);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: white;
+}
+
+.notification.error {
+  background: rgba(239, 68, 68, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: white;
+}
+
+.notification.info {
+  background: rgba(59, 130, 246, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: white;
+}
+
+.notification-icon {
+  font-size: 1.2rem;
+}
+
+.notification-message {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.notification-close {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  border-radius: 4px;
+}
+
+.notification-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Empty State */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
@@ -1855,78 +1408,6 @@ export default {
   color: #f8fafc;
   margin-bottom: 8px;
   font-size: 1.1rem;
-}
-
-.empty-state p {
-  font-size: 0.9rem;
-}
-
-/* Notifications */
-.notification {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  padding: 16px 20px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  animation: slideIn 0.3s ease;
-  z-index: 1000;
-  max-width: 400px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-}
-
-.notification.success {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
-}
-
-.notification.error {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
-}
-
-.notification-icon {
-  font-size: 1.2rem;
-}
-
-.notification-message {
-  flex: 1;
-  font-size: 0.95rem;
-}
-
-.notification-close {
-  background: transparent;
-  border: none;
-  color: currentColor;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-
-.notification-close:hover {
-  opacity: 1;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 /* Scrollbar */
@@ -1994,23 +1475,24 @@ export default {
     justify-content: center;
   }
   
-  .vlan-compact-item {
+  .network-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .network-detail-item {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 4px;
   }
   
-  .vlan-compact-actions {
-    width: 100%;
-    justify-content: flex-end;
+  .network-detail-item .detail-label {
+    min-width: auto;
   }
   
-  .config-methods {
+  .network-actions {
     flex-direction: column;
-  }
-  
-  .method-radio {
-    width: 100%;
   }
 }
 </style>

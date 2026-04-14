@@ -167,9 +167,7 @@ func (s *ARPScanner) Stop() {
 
 func (s *ARPScanner) sender() {
 	defer s.wg.Done()
-
-	// ── Phase 1: initial full sweep ──────────────────────────────────────────
-	log.Printf("[ARP] Phase 1 — initial full subnet sweep: %s", s.subnet)
+	log.Printf("ARP 1 initial full subnet sweep: %s", s.subnet)
 	s.fullSubnetSweep()
 
 	targetedTicker := time.NewTicker(s.scanInterval)
@@ -187,7 +185,7 @@ func (s *ARPScanner) sender() {
 			s.targetedScan()
 
 		case <-fullSweepTicker.C:
-			log.Printf("[ARP] Phase 3 — periodic full sweep (new device discovery): %s", s.subnet)
+			log.Printf("ARP 3  periodic full sweep (new device discovery): %s", s.subnet)
 			s.fullSubnetSweep()
 		case <-dupCheckTicker.C:
 			s.duplicateIPSweep()
@@ -261,7 +259,6 @@ func (s *ARPScanner) checkOfflineByFlag() {
 			continue
 		}
 		if isBroadcastMAC(host.MAC) {
-			// C code: if(strcmp(stringmac, "ff:ff:ff:ff:ff:ff")!=0)
 			continue
 		}
 		oldHost := copyHost(host)
@@ -323,12 +320,10 @@ func (s *ARPScanner) evaluateDuplicates() {
 		if len(unique) < 2 {
 			continue
 		}
-
 		log.Printf("[ARP] DUPLICATE IP DETECTED: %s is claimed by %d devices:", ipStr, len(unique))
 		for _, mac := range unique {
 			log.Printf("         MAC: %s", mac)
 		}
-
 		s.HostMutex.Lock()
 		existing, exists := s.HostMap[ipStr]
 		if exists {
@@ -418,7 +413,7 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 		return
 	}
 
-	isGratuitous := senderIP.Equal(targetIP)
+	isGarp := senderIP.Equal(targetIP)
 
 	s.HostMutex.Lock()
 	defer s.HostMutex.Unlock()
@@ -464,7 +459,7 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 	macUnchanged := existing.MAC.String() == senderMAC.String()
 
 	if macUnchanged {
-		if isGratuitous {
+		if isGarp {
 			if existing.Status == StatusOnline {
 				// Device re-announcing itself — already online.
 				if s.OnARPEvent != nil {
@@ -488,11 +483,9 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 				go s.OnARPEvent(EventCameOnline2, copyHost(existing), oldHost)
 			}
 		}
-		// else: still online, nothing to do.
 		return
 	}
 
-	// ── MAC HAS CHANGED for this IP — conflict or takeover ──────────────────
 	oldIP := s.removeMACFromOtherIP(senderMAC, ipStr)
 
 	if existing.Status == StatusOnline {

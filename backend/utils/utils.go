@@ -193,12 +193,13 @@ type VLANNetwork struct {
 	MonitoringEnabled   bool      `json:"monitoring_enabled"`
 	ScanIntervalSeconds int       `json:"scan_interval_seconds"`
 	CreatedAt           time.Time `json:"created_at"`
+	InterfaceName       string    `json:"interface_name"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 type DiscoveredDevice struct {
 	ID           int       `json:"id"`
-	VLANId       int       `json:"vlan_id"`
+	NetworkId    int       `json:"network_id"`
 	IPAddress    string    `json:"ip_address"`
 	MACAddress   string    `json:"mac_address"`
 	Hostname     string    `json:"hostname,omitempty"`
@@ -212,16 +213,18 @@ type DiscoveredDevice struct {
 
 type DeviceNotification struct {
 	EventType  string `json:"event_type"`
-	VLANId     int    `json:"vlan_id"`
+	NetworkId  int    `json:"network_id"`
 	IPAddress  string `json:"ip_address"`
-	MACAddress string `json:"mac_address,omitempty"`
-	Hostname   string `json:"hostname,omitempty"`
-	Vendor     string `json:"vendor,omitempty"`
-	Status     string `json:"status,omitempty"`
+	MACAddress string `json:"mac_address"`
+	Hostname   string `json:"hostname"`
+	Vendor     string `json:"vendor"`
 	OldStatus  string `json:"old_status,omitempty"`
 	NewStatus  string `json:"new_status,omitempty"`
-	FirstSeen  string `json:"first_seen,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Severity   string `json:"severity"`
+	Message    string `json:"message,omitempty"`
 	LastSeen   string `json:"last_seen,omitempty"`
+	FirstSeen  string `json:"first_seen,omitempty"`
 }
 
 // last try fix
@@ -277,7 +280,7 @@ func (ct CustomTime) MarshalJSON() ([]byte, error) {
 
 type ScanLog struct {
 	ID              int        `json:"id"`
-	VLANId          int        `json:"vlan_id"`
+	NetworkId       int        `json:"network_id"`
 	ScanStartedAt   time.Time  `json:"scan_started_at"`
 	ScanCompletedAt *time.Time `json:"scan_completed_at,omitempty"`
 	TotalIPsScanned int        `json:"total_ips_scanned"`
@@ -300,3 +303,85 @@ type MACVendor struct {
 }
 
 //----------------------------------VLAN END-----------------------------------
+
+//---------------------------------TCP monitoring----------------------------------
+
+type PortMonitor struct {
+	ID                     int        `json:"id"`
+	FriendlyName           string     `json:"friendly_name"`
+	Hostname               string     `json:"hostname"`
+	Port                   int        `json:"port"`
+	HeartbeatInterval      int        `json:"heartbeat_interval"`
+	Retries                int        `json:"retries"`
+	HeartbeatRetryInterval int        `json:"heartbeat_retry_interval"`
+	Status                 string     `json:"status"`
+	LastTCPStatus          *string    `json:"last_tcp_status,omitempty"`
+	LastCheckedAt          *time.Time `json:"last_checked_at,omitempty"`
+	LastResponseMs         *int       `json:"last_response_ms,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
+type PortMonitorLog struct {
+	ID           int       `json:"id"`
+	MonitorID    int       `json:"monitor_id"`
+	Status       string    `json:"status"`
+	ResponseMs   *int      `json:"response_ms,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	CheckedAt    time.Time `json:"checked_at"`
+}
+
+type CreatePortMonitorRequest struct {
+	FriendlyName           string `json:"friendly_name"`
+	Hostname               string `json:"hostname"`
+	Port                   int    `json:"port"`
+	HeartbeatInterval      int    `json:"heartbeat_interval"`
+	Retries                int    `json:"retries"`
+	HeartbeatRetryInterval int    `json:"heartbeat_retry_interval"`
+}
+
+//-------------------------snmp
+
+type SNMPMonitor struct {
+	ID                int        `json:"id"`
+	FriendlyName      string     `json:"friendly_name"`
+	Hostname          string     `json:"hostname"`
+	Port              int        `json:"port"`
+	CommunityString   string     `json:"community_string"`
+	OID               string     `json:"oid"`
+	SNMPVersion       string     `json:"snmp_version"`
+	PollingInterval   int        `json:"polling_interval"`
+	Timeout           int        `json:"timeout"`
+	Retries           int        `json:"retries"`
+	ExpectedValueType string     `json:"expected_value_type"`
+	Status            string     `json:"status"`
+	LastValue         *string    `json:"last_value,omitempty"`
+	LastCheckedAt     *time.Time `json:"last_checked_at,omitempty"`
+	LastResponseMs    *int       `json:"last_response_ms,omitempty"`
+	ErrorMessage      *string    `json:"error_message,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type SNMPMonitorLog struct {
+	ID           int       `json:"id"`
+	MonitorID    int       `json:"monitor_id"`
+	Status       string    `json:"status"`
+	Value        *string   `json:"value,omitempty"`
+	ResponseMs   *int      `json:"response_ms,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	CheckedAt    time.Time `json:"checked_at"`
+}
+
+type CreateSNMPMonitorRequest struct {
+	FriendlyName      string `json:"friendly_name"`
+	Hostname          string `json:"hostname"`
+	Port              int    `json:"port"`
+	CommunityString   string `json:"community_string"`
+	OID               string `json:"oid"`
+	SNMPVersion       string `json:"snmp_version"`
+	PollingInterval   int    `json:"polling_interval"`
+	Timeout           int    `json:"timeout"`
+	Retries           int    `json:"retries"`
+	ExpectedValueType string `json:"expected_value_type"`
+}

@@ -4,16 +4,16 @@
     <div class="top-bar">
       <div class="controls-bar">
         <div class="vlan-filter">
-          <label for="vlan-select">VLAN:</label>
+          <label for="network-select">Network:</label>
           <select
-            id="vlan-select"
-            v-model="selectedVlan"
+            id="network-select"
+            v-model="selectedNetworkId"
             class="vlan-select"
             :disabled="!connected"
           >
-            <option value="all">All VLANs</option>
-            <option v-for="vlan in vlanList" :key="vlan" :value="vlan">
-              VLAN {{ vlan }}
+            <option value="all">All Networks</option>
+            <option v-for="network in networkList" :key="network.id" :value="network.id">
+              {{ network.vlan_name }} ({{ network.interface_name }})
             </option>
           </select>
         </div>
@@ -61,6 +61,10 @@
             class="search-input"
           />
         </div>
+
+        <div class="connection-status" :class="{ connected, disconnected: !connected }">
+          {{ connected ? '🟢 Connected' : '🔴 Disconnected' }}
+        </div>
       </div>
 
       <div class="stats-bar">
@@ -103,7 +107,7 @@
         <div class="panel-header">
           <h2>Network Devices</h2>
           <div class="header-actions">
-            <button @click="refreshConflicts" class="refresh-conflicts-btn" title="Refresh conflicts">
+            <button @click="refreshData" class="refresh-btn" title="Refresh devices">
               🔄
             </button>
             <span class="device-count">{{ filteredDevicesCount }} devices</span>
@@ -151,7 +155,7 @@
               <div class="device-header">
                 <div class="device-name-section">
                   <span class="device-name">{{ device.hostname || 'Unknown' }}</span>
-                  <span v-if="device.vlan_id" class="device-vlan">VLAN {{ device.vlan_id }}</span>
+                  <span v-if="device.network_name" class="device-vlan">{{ device.network_name }}</span>
                   <span class="status-badge" :class="device.status">
                     {{ device.status === 'online' ? '🟢 ONLINE' : 
                        device.status === 'offline' ? '🔴 OFFLINE' : 
@@ -178,7 +182,6 @@
                   <span class="detail-label">Last Seen:</span>
                   <span class="detail-value last-seen">{{ formatTime(device.last_seen) }}</span>
                 </div>
-             
               </div>
             </div>
 
@@ -199,7 +202,7 @@
             <div class="no-devices-icon">📡</div>
             <h3>No Devices Found</h3>
             <p v-if="searchQuery">No devices match your search criteria</p>
-            <p v-else-if="selectedVlan !== 'all'">No devices in VLAN {{ selectedVlan }}</p>
+            <p v-else-if="selectedNetworkId !== 'all'">No devices in selected network</p>
             <p v-else-if="selectedStatus !== 'all'">No {{ selectedStatus }} devices found</p>
             <p v-else>{{ connected ? 'Waiting for devices...' : 'Unable to connect to server' }}</p>
           </div>
@@ -257,16 +260,20 @@
                   <span class="detail-label">MAC Address</span>
                   <div class="value-with-copy">
                     <span class="detail-value mac">{{ selectedDevice.mac_address }}</span>
-                    <button @click="copyToClipboard(selectedDevice.mac_address)" class="copy-btn" title="Copy MAC"></button>
+                    <button @click="copyToClipboard(selectedDevice.mac_address)" class="copy-btn" title="Copy MAC">📋</button>
                   </div>
                 </div>
                 <div class="detail-item" v-if="selectedDevice.vendor">
                   <span class="detail-label">Vendor</span>
                   <span class="detail-value">{{ selectedDevice.vendor }}</span>
                 </div>
-                <div class="detail-item" v-if="selectedDevice.vlan_id">
-                  <span class="detail-label">VLAN</span>
-                  <span class="detail-value vlan-badge">VLAN {{ selectedDevice.vlan_id }}</span>
+                <div class="detail-item" v-if="selectedDevice.network_name">
+                  <span class="detail-label">Network</span>
+                  <span class="detail-value vlan-badge">{{ selectedDevice.network_name }}</span>
+                </div>
+                <div class="detail-item" v-if="selectedDevice.interface_name">
+                  <span class="detail-label">Interface</span>
+                  <span class="detail-value">{{ selectedDevice.interface_name }}</span>
                 </div>
               </div>
             </div>
@@ -290,11 +297,9 @@
             </div>
 
             <div class="action-buttons">
-              <button @click="copyToClipboard(selectedDevice.ip_address)" class="action-btn copy-ip"> Copy IP</button>
-              <button @click="copyToClipboard(selectedDevice.mac_address)" class="action-btn copy-mac"> Copy MAC</button>
-              <!-- next release work -->
-              <button @click="pingDevice(selectedDevice)" class="action-btn ping"> Ping</button>
-              <button @click="pingDevice(selectedDevice)" class="action-btn ping"> Scan Port</button>
+              <button @click="copyToClipboard(selectedDevice.ip_address)" class="action-btn copy-ip">📋 Copy IP</button>
+              <button @click="copyToClipboard(selectedDevice.mac_address)" class="action-btn copy-mac">📋 Copy MAC</button>
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping">📡 Ping</button>
               <button @click="showConflictsForIP(selectedDevice)" class="action-btn conflict-info" v-if="selectedDevice.status === 'conflict'">⚠️ View Conflicts</button>
             </div>
           </div>
@@ -316,10 +321,10 @@
           <span>✅ No active IP conflicts detected</span>
         </div>
         <div v-else>
-          <div v-for="conflict in conflictsData" :key="`${conflict.vlan_id}:${conflict.ip_address}`" class="conflict-item">
+          <div v-for="conflict in conflictsData" :key="`${conflict.network_id}:${conflict.ip_address}`" class="conflict-item">
             <div class="conflict-header">
               <span class="conflict-ip">🚨 {{ conflict.ip_address }}</span>
-              <span class="conflict-vlan">VLAN {{ conflict.vlan_id }}</span>
+              <span class="conflict-vlan">{{ conflict.network_name || `Network ${conflict.network_id}` }}</span>
             </div>
             <div class="conflict-details">
               <div>MAC: {{ conflict.mac_address }}</div>
@@ -341,19 +346,118 @@
 <script>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
+// WebSocket Singleton
+class WebSocketManager {
+  constructor() {
+    this.ws = null
+    this.isConnected = false
+    this.isConnecting = false
+    this.reconnectAttempts = 0
+    this.maxReconnectAttempts = 10
+    this.messageHandlers = []
+  }
+
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new WebSocketManager()
+    }
+    return this.instance
+  }
+
+  connect(url) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected')
+      return
+    }
+
+    if (this.isConnecting) {
+      console.log('WebSocket already connecting...')
+      return
+    }
+
+    this.isConnecting = true
+    this.ws = new WebSocket(url)
+
+    this.ws.onopen = () => {
+      console.log('✅ WebSocket connected')
+      this.isConnected = true
+      this.isConnecting = false
+      this.reconnectAttempts = 0
+    }
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        this.messageHandlers.forEach(handler => handler(data))
+      } catch (e) {
+        console.error('WebSocket message parse error:', e)
+      }
+    }
+
+    this.ws.onclose = () => {
+      console.log('🔌 WebSocket closed')
+      this.isConnected = false
+      this.isConnecting = false
+      this.reconnect()
+    }
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+  }
+
+  reconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('Max reconnection attempts reached')
+      return
+    }
+
+    const delay = Math.min(3000 * Math.pow(2, this.reconnectAttempts), 30000)
+    console.log(`Reconnecting in ${delay/1000}s... (attempt ${this.reconnectAttempts + 1})`)
+    
+    setTimeout(() => {
+      this.reconnectAttempts++
+      if (this.ws) {
+        this.ws.close()
+      }
+      this.connect(this.ws?.url)
+    }, delay)
+  }
+
+  disconnect() {
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
+    this.isConnected = false
+    this.isConnecting = false
+  }
+
+  onMessage(handler) {
+    this.messageHandlers.push(handler)
+  }
+
+  offMessage(handler) {
+    const index = this.messageHandlers.indexOf(handler)
+    if (index > -1) {
+      this.messageHandlers.splice(index, 1)
+    }
+  }
+}
+
 export default {
   name: 'LanScanner',
 
   setup() {
     const devices = ref([])
+    const networks = ref([])
     const loading = ref(true)
     const connected = ref(false)
     const connectionError = ref(null)
-    const selectedVlan = ref('all')
+    const selectedNetworkId = ref('all')
     const selectedStatus = ref('all')
     const searchQuery = ref('')
     const selectedDevice = ref(null)
-    const vlanList = ref([])
     
     const scrollContainer = ref(null)
     const itemsPerLoad = ref(50)
@@ -365,10 +469,8 @@ export default {
     const conflictsLoading = ref(false)
     const showConflictsPanel = ref(false)
 
-    let ws = null
     let refreshInterval = null
-    const wsReconnectAttempts = ref(0)
-    const maxReconnectAttempts = 10
+    let messageHandler = null
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
     
@@ -383,7 +485,11 @@ export default {
       return `${protocol}://${host}/ws`
     }
 
-    const normalizeDevice = (raw) => {
+    const wsManager = WebSocketManager.getInstance()
+
+    const networkList = computed(() => networks.value)
+
+    const normalizeDevice = (raw, networkInfo = null) => {
       let status = 'offline'
       
       if (raw.device_status) {
@@ -392,17 +498,15 @@ export default {
         status = raw.status
       }
       
-      if (raw.mac_address === 'ff:ff:ff:ff:ff:ff') {
-        status = 'conflict'
-      }
-      
       if (!['online', 'offline', 'conflict'].includes(status)) {
         status = 'offline'
       }
       
       return {
         id: raw.id,
-        vlan_id: raw.vlan_id,
+        network_id: raw.network_id,
+        network_name: networkInfo?.vlan_name || null,
+        interface_name: networkInfo?.interface_name || null,
         ip_address: raw.ip_address,
         mac_address: raw.mac_address,
         hostname: raw.hostname || '',
@@ -416,7 +520,7 @@ export default {
       }
     }
 
-    const deviceKey = (d) => `${d.vlan_id}:${d.ip_address}`
+    const deviceKey = (d) => `${d.network_id}:${d.ip_address}`
 
     const totalDevicesCount = computed(() => devices.value.length)
     const onlineCount = computed(() => devices.value.filter(d => d.status === 'online').length)
@@ -426,8 +530,8 @@ export default {
     const filteredDevicesList = computed(() => {
       let list = [...devices.value]
 
-      if (selectedVlan.value !== 'all') {
-        list = list.filter(d => String(d.vlan_id) === String(selectedVlan.value))
+      if (selectedNetworkId.value !== 'all') {
+        list = list.filter(d => String(d.network_id) === String(selectedNetworkId.value))
       }
 
       if (selectedStatus.value !== 'all') {
@@ -460,6 +564,68 @@ export default {
     const displayedDevices = computed(() => filteredDevicesList.value.slice(0, currentDisplayLimit.value))
     const displayedDevicesCount = computed(() => displayedDevices.value.length)
 
+    // Fetch all networks
+    const fetchNetworks = async () => {
+      try {
+        const res = await fetch(apiUrl('/v1/api/vlans'))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          networks.value = data
+          console.log(`📡 Loaded ${networks.value.length} networks:`, networks.value.map(n => n.vlan_name))
+        }
+        return true
+      } catch (err) {
+        console.error('Failed to fetch networks:', err)
+        return false
+      }
+    }
+
+    // Fetch devices for a specific network by network ID
+    const fetchDevicesForNetwork = async (network) => {
+      try {
+        const res = await fetch(apiUrl(`/v1/api/vlans/${network.id}/devices`))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          return data.map(device => normalizeDevice(device, network))
+        }
+        return []
+      } catch (err) {
+        console.error(`Failed to fetch devices for network ${network.id} (${network.vlan_name}):`, err)
+        return []
+      }
+    }
+
+    // Fetch all devices from all networks
+    const fetchAllDevices = async () => {
+      loading.value = true
+      try {
+        // First fetch networks
+        const networksLoaded = await fetchNetworks()
+        if (!networksLoaded || networks.value.length === 0) {
+          console.log('No networks found')
+          devices.value = []
+          return
+        }
+
+        // Then fetch devices for each network in parallel
+        const devicePromises = networks.value.map(network => fetchDevicesForNetwork(network))
+        const devicesArrays = await Promise.all(devicePromises)
+        
+        // Flatten all devices into a single array
+        const allDevices = devicesArrays.flat()
+        devices.value = allDevices
+        resetInfiniteScroll()
+        console.log(`📱 Loaded ${devices.value.length} devices from ${networks.value.length} networks`)
+      } catch (err) {
+        console.error('Failed to fetch all devices:', err)
+        connectionError.value = `Failed to fetch devices: ${err.message}`
+      } finally {
+        loading.value = false
+      }
+    }
+
     const fetchConflicts = async () => {
       conflictsLoading.value = true
       try {
@@ -469,11 +635,11 @@ export default {
         
         if (data && data.conflicts) {
           conflictsData.value = data.conflicts
+          // Add network names to conflicts
           conflictsData.value.forEach(conflict => {
-            const key = `${conflict.vlan_id}:${conflict.ip_address}`
-            const device = devices.value.find(d => deviceKey(d) === key)
-            if (device && device.status !== 'conflict') {
-              device.status = 'conflict'
+            const network = networks.value.find(n => n.id === conflict.network_id)
+            if (network) {
+              conflict.network_name = network.vlan_name
             }
           })
         }
@@ -484,28 +650,17 @@ export default {
       }
     }
 
-    const refreshAllData = async () => {
+    const refreshData = async () => {
       console.log('🔄 Refreshing all data...')
-      loading.value = true
-      try {
-        await Promise.all([
-          fetchInitialDevices(),
-          fetchVLANs(),
-          fetchConflicts()
-        ])
-        console.log('✅ All data refreshed successfully')
-      } catch (err) {
-        console.error('Failed to refresh data:', err)
-      } finally {
-        loading.value = false
-      }
+      await fetchAllDevices()
+      await fetchConflicts()
     }
 
     const refreshConflicts = () => fetchConflicts()
     const showConflictsForIP = (device) => { showConflictsPanel.value = true }
 
     const investigateConflict = (conflict) => {
-      const key = `${conflict.vlan_id}:${conflict.ip_address}`
+      const key = `${conflict.network_id}:${conflict.ip_address}`
       const device = devices.value.find(d => deviceKey(d) === key)
       if (device) {
         selectDevice(device)
@@ -515,9 +670,9 @@ export default {
 
     const resolveConflict = (conflict) => {
       conflictsData.value = conflictsData.value.filter(c => 
-        !(c.vlan_id === conflict.vlan_id && c.ip_address === conflict.ip_address)
+        !(c.network_id === conflict.network_id && c.ip_address === conflict.ip_address)
       )
-      const key = `${conflict.vlan_id}:${conflict.ip_address}`
+      const key = `${conflict.network_id}:${conflict.ip_address}`
       const device = devices.value.find(d => deviceKey(d) === key)
       if (device && device.status === 'conflict') {
         device.status = 'offline'
@@ -549,48 +704,13 @@ export default {
       isLoadingMore.value = false
     }
 
-    const fetchInitialDevices = async () => {
-      try {
-        const res = await fetch(apiUrl('/v1/api/devices'))
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        
-        if (Array.isArray(data)) {
-          devices.value = data.map(d => normalizeDevice(d))
-          updateVlanList()
-          resetInfiniteScroll()
-          console.log(`📱 Loaded ${devices.value.length} devices from API`)
-        }
-        return true
-      } catch (err) {
-        console.error('Failed to fetch initial devices:', err)
-        connectionError.value = `Failed to fetch devices: ${err.message}`
-        return false
-      }
-    }
-
-    const fetchVLANs = async () => {
-      try {
-        const res = await fetch(apiUrl('/v1/api/vlans'))
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        if (Array.isArray(data)) {
-          vlanList.value = data.map(v => v.vlan_id).sort((a, b) => a - b)
-        }
-      } catch (err) {
-        console.error('Failed to fetch VLANs:', err)
-      }
-    }
-
-    const updateVlanList = () => {
-      const vlans = new Set(devices.value.map(d => d.vlan_id).filter(Boolean))
-      vlanList.value = Array.from(vlans).sort((a, b) => a - b)
-    }
-
     const upsertDevice = (incoming, isNewDevice = false) => {
-      const key = `${incoming.vlan_id}:${incoming.ip_address}`
+      const key = `${incoming.network_id}:${incoming.ip_address}`
       const idx = devices.value.findIndex(d => deviceKey(d) === key)
-      const normalizedDevice = normalizeDevice(incoming)
+      const normalizedDevice = normalizeDevice(incoming, {
+        vlan_name: incoming.network_name,
+        interface_name: incoming.interface_name
+      })
       normalizedDevice.isNew = isNewDevice
 
       if (idx === -1) {
@@ -618,81 +738,31 @@ export default {
           selectedDevice.value = devices.value[idx]
         }
       }
-      updateVlanList()
       if (filteredDevicesCount.value !== currentDisplayLimit.value) {
         hasMore.value = currentDisplayLimit.value < filteredDevicesCount.value
       }
     }
 
-    const removeDevice = (vlanId, ipAddress) => {
-      const key = `${vlanId}:${ipAddress}`
-      devices.value = devices.value.filter(d => deviceKey(d) !== key)
-      if (selectedDevice.value && deviceKey(selectedDevice.value) === key) {
-        selectedDevice.value = null
-      }
-      updateVlanList()
-      if (filteredDevicesCount.value < currentDisplayLimit.value) {
-        currentDisplayLimit.value = filteredDevicesCount.value
-        hasMore.value = false
-      }
-    }
-
-    const connectWebSocket = () => {
-      loading.value = true
-      connectionError.value = null
-      const wsUrl = getWebSocketUrl()
-      console.log('🔌 Connecting to WebSocket:', wsUrl)
+    const handleWebSocketMessage = (data) => {
+      console.log('📨 WebSocket message:', data.event_type || 'device_update')
       
-      ws = new WebSocket(wsUrl)
-
-      ws.onopen = () => {
-        console.log('✅ WebSocket connected')
-        connected.value = true
-        loading.value = false
-        wsReconnectAttempts.value = 0
-        connectionError.value = null
-        refreshAllData()
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          console.log('📨 WebSocket message:', data.event_type || 'device_update')
-          handleNotification(data)
-        } catch (e) {
-          console.error('WS parse error:', e)
+      // Find network name if available
+      let networkName = null
+      let interfaceName = null
+      if (data.network_id) {
+        const network = networks.value.find(n => n.id === data.network_id)
+        if (network) {
+          networkName = network.vlan_name
+          interfaceName = network.interface_name
         }
       }
-
-      ws.onclose = () => {
-        console.log('🔌 WebSocket closed')
-        connected.value = false
-        loading.value = false
-        if (wsReconnectAttempts.value < maxReconnectAttempts) {
-          const delay = 3000
-          console.log(`🔄 Reconnecting in ${delay/1000}s... (attempt ${wsReconnectAttempts.value + 1}/${maxReconnectAttempts})`)
-          setTimeout(() => {
-            wsReconnectAttempts.value++
-            connectWebSocket()
-          }, delay)
-        } else {
-          connectionError.value = 'Maximum reconnection attempts reached'
-        }
-      }
-
-      ws.onerror = () => {
-        console.error('❌ WebSocket error')
-        connectionError.value = 'Failed to connect to device server'
-        connected.value = false
-        loading.value = false
-      }
-    }
-
-    const handleNotification = (data) => {
+      
       switch (data.event_type) {
         case 'new_device':
           upsertDevice({
-            vlan_id: data.vlan_id,
+            network_id: data.network_id,
+            network_name: networkName || data.network_name,
+            interface_name: interfaceName,
             ip_address: data.ip_address,
             mac_address: data.mac_address,
             hostname: data.hostname,
@@ -704,7 +774,9 @@ export default {
           break
         case 'status_change':
           upsertDevice({
-            vlan_id: data.vlan_id,
+            network_id: data.network_id,
+            network_name: networkName || data.network_name,
+            interface_name: interfaceName,
             ip_address: data.ip_address,
             mac_address: data.mac_address,
             hostname: data.hostname,
@@ -715,7 +787,9 @@ export default {
           break
         case 'went_offline':
           upsertDevice({
-            vlan_id: data.vlan_id,
+            network_id: data.network_id,
+            network_name: networkName || data.network_name,
+            interface_name: interfaceName,
             ip_address: data.ip_address,
             mac_address: data.mac_address,
             hostname: data.hostname,
@@ -726,7 +800,9 @@ export default {
           break
         case 'came_online':
           upsertDevice({
-            vlan_id: data.vlan_id,
+            network_id: data.network_id,
+            network_name: networkName || data.network_name,
+            interface_name: interfaceName,
             ip_address: data.ip_address,
             mac_address: data.mac_address,
             hostname: data.hostname,
@@ -740,7 +816,9 @@ export default {
           if (conflictCount.value === 0) showConflictsPanel.value = true
           fetchConflicts()
           upsertDevice({
-            vlan_id: data.vlan_id,
+            network_id: data.network_id,
+            network_name: networkName || data.network_name,
+            interface_name: interfaceName,
             ip_address: data.ip_address,
             mac_address: data.mac_address || 'ff:ff:ff:ff:ff:ff',
             hostname: data.hostname,
@@ -752,7 +830,9 @@ export default {
         default:
           if (data.ip_address && data.mac_address) {
             upsertDevice({
-              vlan_id: data.vlan_id,
+              network_id: data.network_id,
+              network_name: networkName || data.network_name,
+              interface_name: interfaceName,
               ip_address: data.ip_address,
               mac_address: data.mac_address,
               hostname: data.hostname,
@@ -765,7 +845,6 @@ export default {
       }
     }
 
-    // Enhanced formatTime with days, weeks, months, years
     const formatTime = (ts) => {
       if (!ts) return 'Never'
       try {
@@ -794,7 +873,6 @@ export default {
       }
     }
 
-    // Full date/time for tooltip
     const formatFullTime = (ts) => {
       if (!ts) return 'Never'
       try {
@@ -820,12 +898,13 @@ export default {
 
     const selectDevice = (d) => { selectedDevice.value = d }
     const clearSelection = () => { selectedDevice.value = null }
-    const pingDevice = (device) => alert(` ${device.ip_address} - Feature coming soon`)
-    // const portScanDevice = (device) => alert(`Scan Port ${device.ip_address} - Feature coming soon`)
+    const pingDevice = (device) => alert(`Ping ${device.ip_address} - Feature coming soon`)
     const reconnect = () => {
-      wsReconnectAttempts.value = 0
-      if (ws) ws.close()
-      connectWebSocket()
+      wsManager.disconnect()
+      setTimeout(() => {
+        wsManager.connect(getWebSocketUrl())
+        refreshData()
+      }, 100)
     }
 
     const startPeriodicRefresh = () => {
@@ -833,8 +912,7 @@ export default {
       refreshInterval = setInterval(() => {
         if (connected.value) {
           console.log('🔄 Periodic refresh checking for updates...')
-          fetchInitialDevices()
-          fetchConflicts()
+          refreshData()
         }
       }, 30000)
     }
@@ -846,36 +924,84 @@ export default {
       }
     }
 
-    watch([searchQuery, selectedVlan, selectedStatus], () => resetInfiniteScroll())
+    // Update connection status periodically
+    const connectionInterval = setInterval(() => {
+      connected.value = wsManager.isConnected
+    }, 1000)
+
+    watch([searchQuery, selectedNetworkId, selectedStatus], () => resetInfiniteScroll())
 
     onMounted(async () => {
       console.log('🚀 Component mounted, initializing...')
-      await fetchInitialDevices()
-      await fetchVLANs()
-      await fetchConflicts()
-      connectWebSocket()
+      
+      // Register message handler
+      messageHandler = handleWebSocketMessage
+      wsManager.onMessage(messageHandler)
+      
+      // Connect WebSocket
+      wsManager.connect(getWebSocketUrl())
+      
+      // Initial data fetch
+      await refreshData()
+      
       startPeriodicRefresh()
     })
 
     onBeforeUnmount(() => {
       console.log('🧹 Cleaning up...')
       stopPeriodicRefresh()
-      if (ws) ws.close()
+      clearInterval(connectionInterval)
+      
+      // Remove message handler
+      if (messageHandler) {
+        wsManager.offMessage(messageHandler)
+      }
     })
 
     return {
-      devices, loading, connected, connectionError, selectedVlan, selectedStatus,
-      searchQuery, selectedDevice, vlanList, totalDevicesCount, onlineCount,
-      offlineCount, conflictCount, filteredDevicesCount, displayedDevices,
-      displayedDevicesCount, scrollContainer, hasMore, isLoadingMore,
-      conflictsData, conflictsLoading, showConflictsPanel, deviceKey,
-      formatTime, formatFullTime, copyToClipboard, selectDevice, clearSelection,
-      pingDevice, reconnect, handleScroll, refreshConflicts, showConflictsForIP,
-      investigateConflict, resolveConflict,
+      devices,
+      networks,
+      networkList,
+      loading,
+      connected,
+      connectionError,
+      selectedNetworkId,
+      selectedStatus,
+      searchQuery,
+      selectedDevice,
+      totalDevicesCount,
+      onlineCount,
+      offlineCount,
+      conflictCount,
+      filteredDevicesCount,
+      displayedDevices,
+      displayedDevicesCount,
+      scrollContainer,
+      hasMore,
+      isLoadingMore,
+      conflictsData,
+      conflictsLoading,
+      showConflictsPanel,
+      deviceKey,
+      formatTime,
+      formatFullTime,
+      copyToClipboard,
+      selectDevice,
+      clearSelection,
+      pingDevice,
+      reconnect,
+      handleScroll,
+      refreshData,
+      refreshConflicts,
+      showConflictsForIP,
+      investigateConflict,
+      resolveConflict,
     }
   }
 }
 </script>
+
+
 
 <style scoped>
 * {
