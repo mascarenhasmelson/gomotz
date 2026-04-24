@@ -232,7 +232,7 @@
         <!-- Port List Table -->
         <div class="port-results">
           <div v-if="openPorts.length === 0" class="no-ports">
-            <div class="no-ports-icon">🔌</div>
+            <div class="no-ports-icon">  </div>
             <h3>No Open Ports Found</h3>
             <p>The target {{ scanTarget }} has no open ports in the range 1-65535</p>
             <p class="scan-summary">This could mean the host is down, firewalled, or has no services running</p>

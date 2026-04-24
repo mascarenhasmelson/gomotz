@@ -28,7 +28,7 @@
             <input
               type="text"
               id="hostname"
-              v-model="newMonitor.host"
+              v-model="newMonitor.hostname"
               placeholder="e.g., google.com or 8.8.8.8"
               class="form-input"
               :disabled="isAdding"
@@ -41,7 +41,7 @@
             <input
               type="text"
               id="friendlyName"
-              v-model="newMonitor.name"
+              v-model="newMonitor.friendly_name"
               placeholder="e.g., Google DNS"
               class="form-input"
               :disabled="isAdding"
@@ -54,7 +54,7 @@
             <label for="interval">Check Interval (seconds)</label>
             <select
               id="interval"
-              v-model="newMonitor.interval"
+              v-model="newMonitor.check_interval"
               class="form-select"
               :disabled="isAdding"
             >
@@ -71,11 +71,26 @@
             <input
               type="number"
               id="threshold"
-              v-model="newMonitor.threshold"
+              v-model="newMonitor.latency_threshold"
               min="50"
               max="1000"
               step="10"
-              value="200"
+              class="form-input"
+              :disabled="isAdding"
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="timeout">Timeout (seconds)</label>
+            <input
+              type="number"
+              id="timeout"
+              v-model="newMonitor.timeout"
+              min="1"
+              max="30"
+              step="1"
               class="form-input"
               :disabled="isAdding"
             />
@@ -84,11 +99,11 @@
 
         <!-- Action Buttons -->
         <div class="form-actions">
-          <button class="btn btn-primary" @click="addMonitor" :disabled="!newMonitor.host || isAdding || !isConnected">
+          <button class="btn btn-primary" @click="addMonitor" :disabled="!newMonitor.hostname || isAdding || !isConnected">
             <span class="btn-icon">➕</span>
             {{ isAdding ? 'Adding...' : 'Add Monitor' }}
           </button>
-          <button class="btn btn-secondary" @click="testConnection" :disabled="!newMonitor.host || !isConnected">
+          <button class="btn btn-secondary" @click="testConnection" :disabled="!newMonitor.hostname || !isConnected">
             <span class="btn-icon">🔍</span>
             Test Connection
           </button>
@@ -108,9 +123,8 @@
           <div class="header-left">
             <div class="status-indicator" :class="monitor.status"></div>
             <div class="title-section">
-              <h3 class="monitor-name">{{ monitor.name || monitor.host }}</h3>
-              <span class="monitor-host">{{ monitor.host }}</span>
-              <span class="monitor-id">ID: {{ monitor.id }}</span>
+              <h3 class="monitor-name">{{ monitor.friendly_name || monitor.hostname }}</h3>
+              <span class="monitor-host">{{ monitor.hostname }}</span>
             </div>
           </div>
           <div class="header-actions">
@@ -126,14 +140,14 @@
         <!-- Heartbeat Timeline -->
         <div class="heartbeat-timeline">
           <div 
-            v-for="(beat, index) in monitor.heartbeats" 
+            v-for="(beat, index) in getHeartbeats(monitor)" 
             :key="index"
             class="heartbeat-block"
-            :class="getHeartbeatClass(beat)"
+            :class="beat.status"
             :title="getHeartbeatTitle(beat)"
           ></div>
           <div v-if="!monitor.heartbeats || monitor.heartbeats.length === 0" class="no-data">
-            No data yet
+            Waiting for data...
           </div>
         </div>
 
@@ -141,31 +155,31 @@
         <div class="stats-grid">
           <div class="stat-item">
             <span class="stat-label">Uptime (24h)</span>
-            <span class="stat-value" :class="getUptimeClass(monitor.stats.uptime)">
-              {{ monitor.stats.uptime }}%
+            <span class="stat-value" :class="getUptimeClass(monitor.stats?.uptime || 0)">
+              {{ monitor.stats?.uptime || 0 }}%
             </span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Avg Latency</span>
-            <span class="stat-value" :class="getLatencyClass(monitor.stats.avgLatency)">
-              {{ monitor.stats.avgLatency }}ms
+            <span class="stat-value" :class="getLatencyClass(monitor.stats?.avg_latency || 0)">
+              {{ monitor.stats?.avg_latency || 0 }}ms
             </span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Packet Loss</span>
-            <span class="stat-value" :class="getPacketLossClass(monitor.stats.packetLoss)">
-              {{ monitor.stats.packetLoss }}%
+            <span class="stat-value" :class="getPacketLossClass(monitor.stats?.packet_loss || 0)">
+              {{ monitor.stats?.packet_loss || 0 }}%
             </span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Last Check</span>
-            <span class="stat-value">{{ formatTime(monitor.lastCheck) }}</span>
+            <span class="stat-value">{{ formatLastCheck(monitor) }}</span>
           </div>
         </div>
 
         <!-- Response Time -->
-        <div class="response-time" :class="getLatencyClass(monitor.lastLatency)">
-          {{ monitor.lastLatency }}ms
+        <div class="response-time" :class="getLatencyClass(monitor.last_latency || 0)">
+          {{ monitor.last_latency || 0 }}ms
         </div>
       </div>
 
@@ -204,20 +218,12 @@
                   <span class="meta-value">{{ testResult.data.ip || 'N/A' }}</span>
                 </div>
                 <div class="meta-item">
-                  <span class="meta-label">Packets:</span>
-                  <span class="meta-value">{{ testResult.data.packetsSent }}/{{ testResult.data.packetsReceived }}</span>
-                </div>
-                <div class="meta-item">
                   <span class="meta-label">Avg Latency:</span>
-                  <span class="meta-value">{{ testResult.data.avgLatency || 0 }}ms</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label">Min/Max:</span>
-                  <span class="meta-value">{{ testResult.data.minLatency || 0 }}/{{ testResult.data.maxLatency || 0 }}ms</span>
+                  <span class="meta-value">{{ testResult.data.avg_latency || 0 }}ms</span>
                 </div>
                 <div class="meta-item">
                   <span class="meta-label">Packet Loss:</span>
-                  <span class="meta-value">{{ testResult.data.packetLoss || 0 }}%</span>
+                  <span class="meta-value">{{ testResult.data.packet_loss || 0 }}%</span>
                 </div>
               </div>
             </div>
@@ -240,7 +246,7 @@
           <button class="close-btn" @click="closeDeleteModal">&times;</button>
         </div>
         <div class="modal-body">
-          <p>Are you sure you want to delete monitor for <strong>{{ monitorToDelete?.host }}</strong>?</p>
+          <p>Are you sure you want to delete monitor for <strong>{{ monitorToDelete?.hostname }}</strong>?</p>
           <p class="warning">This action cannot be undone.</p>
         </div>
         <div class="modal-footer">
@@ -255,8 +261,8 @@
 <script>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 
-// WebSocket URL - adjust based on your environment
-const WS_URL = 'ws://localhost:8082/ws/ping'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
+const WS_BASE_URL = API_BASE_URL.replace('http', 'ws').replace('https', 'wss')
 
 export default {
   name: 'PingMonitor',
@@ -271,14 +277,15 @@ export default {
     const connectionMessage = ref('Disconnected')
     
     const newMonitor = reactive({
-      host: '',
-      name: '',
-      interval: 60,
-      threshold: 200
+      hostname: '',
+      friendly_name: '',
+      check_interval: 60,
+      latency_threshold: 200,
+      timeout: 3
     })
 
     const testResult = ref({
-      status: 'success',
+      status: 'pending',
       message: '',
       data: null
     })
@@ -290,55 +297,74 @@ export default {
     // WebSocket connection
     let ws = null
     let reconnectTimer = null
+    let heartbeatTimer = null
     const reconnectAttempts = ref(0)
-    const maxReconnectAttempts = 5
+    const maxReconnectAttempts = 10
 
     // Connect to WebSocket
     const connectWebSocket = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('WebSocket already connected')
+        return
+      }
+
       connectionStatus.value = 'connecting'
       connectionMessage.value = 'Connecting...'
       
-      ws = new WebSocket(WS_URL)
+      const wsUrl = `${WS_BASE_URL}/v1/api/ws/ping`
+      console.log('Connecting to WebSocket:', wsUrl)
+      
+      ws = new WebSocket(wsUrl)
       
       ws.onopen = () => {
-        console.log('WebSocket connected')
+        console.log('✅ WebSocket connected')
         isConnected.value = true
         connectionStatus.value = 'connected'
         connectionMessage.value = 'Connected'
         reconnectAttempts.value = 0
         
-        // Request initial data
-        ws.send(JSON.stringify({
-          type: 'getMonitors'
-        }))
+        // Send heartbeat every 30 seconds
+        if (heartbeatTimer) clearInterval(heartbeatTimer)
+        heartbeatTimer = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+            console.log('💓 Heartbeat sent')
+          }
+        }, 30000)
       }
       
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
+          console.log('📨 WebSocket message received:', data.type, data)
           handleWebSocketMessage(data)
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error)
+          console.error('Failed to parse WebSocket message:', error, event.data)
         }
       }
       
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
+        console.error('❌ WebSocket error:', error)
         isConnected.value = false
         connectionStatus.value = 'error'
         connectionMessage.value = 'Connection error'
       }
       
-      ws.onclose = () => {
-        console.log('WebSocket disconnected')
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected:', event.code, event.reason)
         isConnected.value = false
         connectionStatus.value = 'disconnected'
         connectionMessage.value = 'Disconnected'
         
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer)
+          heartbeatTimer = null
+        }
+        
         // Attempt to reconnect
         if (reconnectAttempts.value < maxReconnectAttempts) {
           reconnectAttempts.value++
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000)
+          const delay = Math.min(3000 * Math.pow(2, reconnectAttempts.value), 30000)
           connectionMessage.value = `Reconnecting in ${delay/1000}s...`
           
           if (reconnectTimer) clearTimeout(reconnectTimer)
@@ -352,77 +378,91 @@ export default {
     // Handle WebSocket messages
     const handleWebSocketMessage = (data) => {
       switch (data.type) {
-        case 'monitors':
-          // Initial list of monitors
-          monitors.value = data.monitors || []
+        case 'initial_state':
+          console.log('📋 Initial state received:', data.monitors?.length, 'monitors')
+          monitors.value = (data.monitors || []).map(m => ({
+            ...m,
+            status: m.status || 'pending',
+            heartbeats: m.heartbeats || []
+          }))
           loading.value = false
           break
           
-        case 'monitorAdded':
-          // New monitor added
-          monitors.value.push(data.monitor)
+        case 'ping_monitor_created':
+          console.log('➕ Monitor created:', data.monitor?.hostname)
+          monitors.value.push({
+            ...data.monitor,
+            status: data.monitor?.status || 'pending',
+            heartbeats: []
+          })
           isAdding.value = false
           resetForm()
           break
           
-        case 'monitorUpdated':
-          // Monitor updated
-          const index = monitors.value.findIndex(m => m.id === data.monitor.id)
+        case 'ping_monitor_updated':
+          console.log('✏️ Monitor updated:', data.monitor?.hostname)
+          const index = monitors.value.findIndex(m => m.id === data.monitor?.id)
           if (index !== -1) {
-            monitors.value[index] = data.monitor
+            monitors.value[index] = {
+              ...data.monitor,
+              status: data.monitor?.status || 'pending',
+              heartbeats: monitors.value[index].heartbeats || []
+            }
           }
           break
           
-        case 'monitorDeleted':
-          // Monitor deleted
-          monitors.value = monitors.value.filter(m => m.id !== data.id)
+        case 'ping_monitor_deleted':
+          console.log('🗑️ Monitor deleted:', data.monitor_id)
+          monitors.value = monitors.value.filter(m => m.id !== data.monitor_id)
           break
           
-        case 'pingUpdate':
-          // Real-time ping update
-          updateMonitorWithPing(data.monitorId, data.ping)
+        case 'ping_monitor_update':
+         
+          console.log('📊 Ping update received:', data)
+          updateMonitorWithPing(data)
           break
           
-        case 'testResult':
-          // Test connection result
-          testResult.value = {
-            status: data.success ? 'success' : 'error',
-            message: data.message,
-            data: data.data
-          }
+        case 'pong':
+          console.log('💓 Heartbeat received')
           break
           
         case 'error':
-          console.error('Server error:', data.message)
-          alert(`Error: ${data.message}`)
+          console.error('❌ Server error:', data.message)
           break
+          
+        default:
+          console.log('Unknown message type:', data.type, data)
       }
     }
 
     // Update monitor with new ping data
-    const updateMonitorWithPing = (monitorId, ping) => {
-      const monitor = monitors.value.find(m => m.id === monitorId)
-      if (!monitor) return
-      
-      // Update last check
-      monitor.lastCheck = ping.timestamp
-      monitor.lastLatency = ping.latency || 0
-      
-      // Update status based on latency and threshold
-      if (!ping.success) {
-        monitor.status = 'offline'
-      } else if (ping.latency > monitor.threshold) {
-        monitor.status = 'warning'
-      } else {
-        monitor.status = 'online'
+    const updateMonitorWithPing = (data) => {
+      const monitor = monitors.value.find(m => m.id === data.monitor_id)
+      if (!monitor) {
+        console.warn('Monitor not found:', data.monitor_id)
+        return
       }
       
-      // Add to heartbeats
+      console.log(`🔄 Updating monitor ${monitor.hostname}: status=${data.status}, latency=${data.latency}ms`)
+      
+      // Update basic info
+      monitor.last_latency = data.latency || 0
+      // monitor.last_checked_at = data.checked_at || new Date().toISOString()
+      monitor.last_latency = data.latency_ms || 0  // keep for display
+      monitor.status = data.status || 'pending'
+      latency: data.latency_ms
+      
+      // Update stats if provided
+      if (data.stats) {
+        monitor.stats = data.stats
+      }
+      
+      // Add to heartbeat history
       if (!monitor.heartbeats) monitor.heartbeats = []
       monitor.heartbeats.push({
-        status: monitor.status,
-        latency: ping.latency,
-        timestamp: ping.timestamp
+        status: data.status,
+        latency: data.latency,
+        timestamp: data.checked_at || new Date().toISOString()
       })
       
       // Keep last 24 heartbeats
@@ -430,68 +470,137 @@ export default {
         monitor.heartbeats = monitor.heartbeats.slice(-24)
       }
       
-      // Update stats
-      updateMonitorStats(monitor)
+      // Force Vue reactivity
+      monitors.value = [...monitors.value]
     }
 
-    // Calculate monitor statistics
-    const updateMonitorStats = (monitor) => {
-      const heartbeats = monitor.heartbeats || []
-      const total = heartbeats.length
-      
-      if (total === 0) {
-        monitor.stats = {
-          uptime: 0,
-          avgLatency: 0,
-          packetLoss: 0
+    // Get heartbeats for display
+    const getHeartbeats = (monitor) => {
+      if (!monitor.heartbeats || monitor.heartbeats.length === 0) {
+        // If no heartbeats but we have a status, show current status
+        if (monitor.status && monitor.status !== 'pending') {
+          return [{ status: monitor.status }]
         }
-        return
+        return []
       }
-      
-      const online = heartbeats.filter(h => h.status === 'online').length
-      const warning = heartbeats.filter(h => h.status === 'warning').length
-      const offline = heartbeats.filter(h => h.status === 'offline').length
-      const latencies = heartbeats.filter(h => h.latency > 0).map(h => h.latency)
-      
-      monitor.stats = {
-        uptime: Math.round(((online + warning) / total) * 100 * 10) / 10,
-        avgLatency: latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0,
-        packetLoss: Math.round((offline / total) * 100 * 10) / 10
+      return monitor.heartbeats
+    }
+
+    const getHeartbeatTitle = (beat) => {
+      if (!beat.timestamp) return `Status: ${beat.status}`
+      const time = new Date(beat.timestamp).toLocaleString()
+      const latency = beat.latency ? `${beat.latency}ms` : 'No response'
+      return `${time} - ${latency} - ${beat.status.toUpperCase()}`
+    }
+
+    // API Methods (REST fallback)
+    const fetchMonitors = async () => {
+      loading.value = true
+      try {
+        console.log('Fetching monitors from API...')
+        const response = await fetch(`${API_BASE_URL}/v1/api/ping`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        console.log('Fetched monitors:', data?.length || 0)
+        monitors.value = (data || []).map(m => ({
+          ...m,
+          status: m.status || 'pending',
+          heartbeats: []
+        }))
+      } catch (error) {
+        console.error('Error fetching monitors:', error)
+      } finally {
+        loading.value = false
       }
     }
 
     // Add new monitor
-    const addMonitor = () => {
-      if (!newMonitor.host || !isConnected.value) return
+    const addMonitor = async () => {
+      if (!newMonitor.hostname || !isConnected.value) return
       
       isAdding.value = true
       
-      ws.send(JSON.stringify({
-        type: 'addMonitor',
-        monitor: {
-          host: newMonitor.host,
-          name: newMonitor.name || newMonitor.host,
-          interval: newMonitor.interval,
-          threshold: newMonitor.threshold
-        }
-      }))
+      const payload = {
+        hostname: newMonitor.hostname,
+        friendly_name: newMonitor.friendly_name || newMonitor.hostname,
+        check_interval: newMonitor.check_interval,
+        latency_threshold: newMonitor.latency_threshold,
+        timeout: newMonitor.timeout
+      }
+      
+      console.log('Adding monitor:', payload)
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/api/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const result = await response.json()
+        console.log('Monitor added:', result)
+        
+        // Don't push here - WebSocket will send ping_monitor_created
+        resetForm()
+      } catch (error) {
+        console.error('Error adding monitor:', error)
+        alert(`Failed to add monitor: ${error.message}`)
+      } finally {
+        isAdding.value = false
+      }
     }
 
     // Test connection
-    const testConnection = () => {
-      if (!newMonitor.host || !isConnected.value) return
+    const testConnection = async () => {
+      if (!newMonitor.hostname) return
       
-      ws.send(JSON.stringify({
-        type: 'testConnection',
-        host: newMonitor.host
-      }))
-      
-      // Modal will show when response arrives
       showTestModal.value = true
       testResult.value = {
         status: 'pending',
         message: 'Testing connection...',
         data: null
+      }
+      
+      try {
+        console.log('Testing connection to:', newMonitor.hostname)
+        const response = await fetch(`${API_BASE_URL}/v1/api/ping/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostname: newMonitor.hostname,
+            timeout: newMonitor.timeout || 3
+          })
+        })
+        
+        const data = await response.json()
+        console.log('Test result:', data)
+        
+     if (data.success) {
+    testResult.value = {
+        status: 'success',
+        message: `Host is reachable`,
+        data: {
+            ip: data.hostname,
+            avg_latency: data.latency_ms || 0,
+            packet_loss: 0
+        }
+    }
+} else {
+    testResult.value = {
+        status: 'error',
+        message: data.error || 'Host is unreachable',
+        data: null
+    }
+}
+      } catch (error) {
+        console.error('Test connection error:', error)
+        testResult.value = {
+          status: 'error',
+          message: error.message || 'Connection failed',
+          data: null
+        }
       }
     }
 
@@ -503,14 +612,15 @@ export default {
 
     // Edit monitor
     const editMonitor = (monitor) => {
-      newMonitor.host = monitor.host
-      newMonitor.name = monitor.name === monitor.host ? '' : monitor.name
-      newMonitor.interval = monitor.interval
-      newMonitor.threshold = monitor.threshold
+      newMonitor.hostname = monitor.hostname
+      newMonitor.friendly_name = monitor.friendly_name === monitor.hostname ? '' : monitor.friendly_name
+      newMonitor.check_interval = monitor.check_interval
+      newMonitor.latency_threshold = monitor.latency_threshold
+      newMonitor.timeout = monitor.timeout || 3
       
       // Delete old monitor
       monitorToDelete.value = monitor
-      confirmDelete(true) // Skip confirmation for edit
+      confirmDelete(true)
     }
 
     // Delete monitor
@@ -520,19 +630,27 @@ export default {
     }
 
     // Confirm delete
-    const confirmDelete = (skipConfirm = false) => {
+    const confirmDelete = async (skipConfirm = false) => {
       if (!monitorToDelete.value) return
       
       if (!skipConfirm) {
         closeDeleteModal()
       }
       
-      ws.send(JSON.stringify({
-        type: 'deleteMonitor',
-        id: monitorToDelete.value.id
-      }))
-      
-      monitorToDelete.value = null
+      try {
+        console.log('Deleting monitor:', monitorToDelete.value.id)
+        const response = await fetch(`${API_BASE_URL}/v1/api/ping/${monitorToDelete.value.id}`, {
+          method: 'DELETE'
+        })
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        // Don't filter here - WebSocket will send ping_monitor_deleted
+        monitorToDelete.value = null
+      } catch (error) {
+        console.error('Error deleting monitor:', error)
+        alert(`Failed to delete monitor: ${error.message}`)
+      }
     }
 
     // Close delete modal
@@ -543,10 +661,11 @@ export default {
 
     // Reset form
     const resetForm = () => {
-      newMonitor.host = ''
-      newMonitor.name = ''
-      newMonitor.interval = 60
-      newMonitor.threshold = 200
+      newMonitor.hostname = ''
+      newMonitor.friendly_name = ''
+      newMonitor.check_interval = 60
+      newMonitor.latency_threshold = 200
+      newMonitor.timeout = 3
     }
 
     // Close test modal
@@ -554,17 +673,7 @@ export default {
       showTestModal.value = false
     }
 
-    // Helper methods
-    const getHeartbeatClass = (beat) => {
-      return beat.status || 'offline'
-    }
-
-    const getHeartbeatTitle = (beat) => {
-      const time = new Date(beat.timestamp).toLocaleString()
-      const latency = beat.latency ? `${beat.latency}ms` : 'No response'
-      return `${time} - ${latency}`
-    }
-
+    // Helper methods for styling
     const getUptimeClass = (uptime) => {
       if (uptime >= 99) return 'excellent'
       if (uptime >= 95) return 'good'
@@ -587,7 +696,8 @@ export default {
       return 'poor'
     }
 
-    const formatTime = (timestamp) => {
+    const formatLastCheck = (monitor) => {
+      const timestamp = monitor.last_checked_at
       if (!timestamp) return 'Never'
       const date = new Date(timestamp)
       const now = new Date()
@@ -599,9 +709,23 @@ export default {
       return date.toLocaleDateString()
     }
 
+    // Manual refresh
+    const refreshMonitors = async () => {
+      await fetchMonitors()
+    }
+
     // Lifecycle
     onMounted(() => {
+      fetchMonitors()
       connectWebSocket()
+      
+      // Also set up polling as fallback (every 30 seconds)
+      setInterval(() => {
+        if (!isConnected.value) {
+          console.log('WebSocket disconnected, polling for updates...')
+          fetchMonitors()
+        }
+      }, 30000)
     })
 
     onUnmounted(() => {
@@ -610,6 +734,9 @@ export default {
       }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
+      }
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
       }
     })
 
@@ -635,18 +762,20 @@ export default {
       closeDeleteModal,
       resetForm,
       closeTestModal,
-      getHeartbeatClass,
+      getHeartbeats,
       getHeartbeatTitle,
       getUptimeClass,
       getLatencyClass,
       getPacketLossClass,
-      formatTime
+      formatLastCheck,
+      refreshMonitors
     }
   }
 }
 </script>
 
 <style scoped>
+/* Keep all existing styles - they remain the same */
 .ping-monitor {
   min-height: 100vh;
   background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);
@@ -678,12 +807,7 @@ export default {
   color: #fbbf24;
 }
 
-.connection-bar.disconnected {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
-}
-
+.connection-bar.disconnected,
 .connection-bar.error {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
@@ -918,7 +1042,7 @@ export default {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
 }
 
-.monitor-card.online {
+.monitor-card.up {
   border-left: 4px solid #10b981;
 }
 
@@ -926,12 +1050,16 @@ export default {
   border-left: 4px solid #f59e0b;
 }
 
-.monitor-card.offline {
+.monitor-card.down {
   border-left: 4px solid #ef4444;
 }
 
+.monitor-card.pending {
+  border-left: 4px solid #94a3b8;
+}
+
 /* Card Header */
-.card-header {
+.monitor-card .card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -961,12 +1089,6 @@ export default {
 .monitor-host {
   color: #94a3b8;
   font-size: 0.85rem;
-}
-
-.monitor-id {
-  color: #64748b;
-  font-size: 0.7rem;
-  margin-top: 2px;
 }
 
 .header-actions {
@@ -1018,7 +1140,7 @@ export default {
   transform: scaleY(1.2);
 }
 
-.heartbeat-block.online {
+.heartbeat-block.up {
   background: #10b981;
 }
 
@@ -1026,8 +1148,12 @@ export default {
   background: #f59e0b;
 }
 
-.heartbeat-block.offline {
+.heartbeat-block.down {
   background: #ef4444;
+}
+
+.heartbeat-block.pending {
+  background: #64748b;
 }
 
 .no-data {
@@ -1107,7 +1233,8 @@ export default {
   color: #fbbf24;
 }
 
-.response-time.poor {
+.response-time.poor,
+.response-time.offline {
   color: #f87171;
 }
 

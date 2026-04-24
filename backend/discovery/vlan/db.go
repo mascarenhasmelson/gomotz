@@ -12,6 +12,14 @@ import (
 	"github.com/mascarenhasmelson/gomotz/utils"
 )
 
+type ARPScanDevice struct {
+	NetworkID     int
+	IPAddress     string
+	MACAddress    string
+	CurrentStatus string
+	InterfaceName string
+}
+
 type PostgresDB struct {
 	pool *pgxpool.Pool
 	conn *pgx.Conn
@@ -97,7 +105,7 @@ func scanVLANRow(rows interface {
 	var ipAddress, cidrNotation, cidrFull, defaultGateway string
 
 	err := rows.Scan(
-		&network.ID, &vlanID, &interfaceName, &network.VLANName, &network.NetworkMode, // ✅ added &interfaceName
+		&network.ID, &vlanID, &interfaceName, &network.VLANName, &network.NetworkMode, //  added &interfaceName
 		&ipAddress, &cidrNotation, &cidrFull, &defaultGateway,
 		&network.MonitoringEnabled, &network.ScanIntervalSeconds,
 		&network.CreatedAt, &network.UpdatedAt,
@@ -654,7 +662,7 @@ func (p *PostgresDB) CreateVLANNetworkByInterface(ctx context.Context, vlan *uti
 // UpdateVLANNetworkByInterface updates by interface name
 func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *utils.VLANNetwork, interfaceName string) error {
 	if vlan.NetworkMode == "auto" {
-		// ✅ For auto mode — persist IP/CIDR so recovery works on restart
+		//  For auto mode — persist IP/CIDR so recovery works on restart
 		query := `
 			UPDATE vlan_networks
 			SET vlan_name = $1,
@@ -731,5 +739,51 @@ func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *uti
 
 func (p *PostgresDB) DeleteVLANNetworkByInterface(ctx context.Context, interfaceName string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM vlan_networks WHERE interface_name = $1`, interfaceName)
+	return err
+}
+
+// db scan arp
+
+func (p *PostgresDB) GetAllDevicesForARPScan(ctx context.Context) ([]*ARPScanDevice, error) {
+	query := `
+		SELECT 
+			d.network_id,
+			host(d.ip_address) AS ip_address,
+			d.mac_address::text,
+			d.device_status,
+			v.interface_name
+		FROM discovered_devices d
+		JOIN vlan_networks v ON v.id = d.network_id
+		WHERE d.device_status != 'conflict'   -- skip conflict devices
+		  AND v.monitoring_enabled = true      -- only monitored networks
+		ORDER BY d.network_id, d.ip_address
+	`
+	rows, err := p.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []*ARPScanDevice
+	for rows.Next() {
+		d := &ARPScanDevice{}
+		if err := rows.Scan(
+			&d.NetworkID, &d.IPAddress, &d.MACAddress,
+			&d.CurrentStatus, &d.InterfaceName,
+		); err != nil {
+			return nil, err
+		}
+		devices = append(devices, d)
+	}
+	return devices, rows.Err()
+}
+
+// UpdateDeviceStatusByNetworkAndMAC updates device status using network_id + mac
+func (p *PostgresDB) UpdateDeviceStatusByNetworkAndMAC(ctx context.Context, networkID int, macAddress, status string) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE discovered_devices
+		SET device_status = $1, last_seen = NOW()
+		WHERE network_id = $2 AND mac_address = $3::macaddr
+	`, status, networkID, macAddress)
 	return err
 }

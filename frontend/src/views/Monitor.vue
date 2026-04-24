@@ -37,14 +37,14 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const tools = ref([
-  { id: 1, name: 'Device Monitoring', path: '/monitor/discovery', icon: '🔎', beta: false },
-  { id: 2, name: 'TCP Port Monitoring', path: '/monitor/TCPMonitoring', icon: '🔌', beta: false },
-  { id: 4, name: 'SNMP Monitor', path: '/monitor/SNMPMonitor', icon: '📊', beta: false },
-  { id: 5, name: 'Ping Monitor', path: '/monitor/PingMonitor', icon: '📡', beta: false },
-  { id: 6, name: 'HTTP(s) Keyword', path: '/monitor/HTTPsKeyword', icon: '🔍', beta: false },
-  { id: 9, name: 'HTTP(s) Monitor', path: '/monitor/HTTPsMonitoring', icon: '🌍', beta: false },
-  { id: 10, name: 'LanWakeup', path: '/monitor/LANWakeup', icon: '🔌', beta: true },
-  { id: 11, name: 'Domain Expiry', path: '/monitor/domain-expiry', icon: '📅', beta: false },
+  { id: 1, name: 'Device Monitoring', path: '/monitor/discovery', icon: '', beta: false },
+  { id: 2, name: 'TCP Port Monitoring', path: '/monitor/TCPMonitoring', icon: '  ', beta: false },
+  { id: 4, name: 'SNMP Monitor', path: '/monitor/SNMPMonitor', icon: '', beta: false },
+  { id: 5, name: 'Ping Monitor', path: '/monitor/PingMonitor', icon: '   ', beta: false },
+  // { id: 6, name: 'HTTP(s) Keyword', path: '/monitor/HTTPsKeyword', icon: '', beta: false },
+  { id: 9, name: 'HTTP(s) Monitor', path: '/monitor/HTTPsMonitoring', icon: '', beta: false },
+  { id: 10, name: 'LanWakeup', path: '/monitor/LANWakeup', icon: '  ', beta: false },
+  { id: 11, name: 'Domain Expiry', path: '/monitor/domain-expiry', icon: '', beta: false },
 ])
 
 const toolDescriptions = {

@@ -1,7 +1,7 @@
 services:
   postgres_db:
     image: postgres:16-alpine
-    container_name: tailpass_postgres
+    container_name: gomotz_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -14,30 +14,30 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-  redis:
-    image: redis:7-alpine
-    container_name: tailpass_redis
-    network_mode: host
-    restart: unless-stopped
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: gomotz_redis
+  #   network_mode: host
+  #   restart: unless-stopped
   
   backend:
     build: ./backend
-    container_name: tailpass-backend
+    container_name: gomotz-backend
     depends_on:
       postgres_db:
         condition: service_healthy
-      redis:
-        condition: service_started
+      # redis:
+      #   condition: service_started
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5431/${POSTGRES_DB}
-      - REDIS_ADDR=${REDIS_ADDR}   
+      # - REDIS_ADDR=${REDIS_ADDR}   
     network_mode: host
-    command: ./TailPass
+    command: ./gomotz
     restart: unless-stopped
 
   frontend:
     build: ./frontend
-    container_name: tailpass-frontend
+    container_name: gomotz-frontend
     depends_on:
       - backend
     environment:

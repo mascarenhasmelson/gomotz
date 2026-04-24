@@ -43,7 +43,7 @@ func (p *PostgresDB) GetAllPortMonitors(ctx context.Context) ([]*utils.PortMonit
 	rows, err := p.pool.Query(ctx, `
         SELECT id, friendly_name, hostname, port, 
                heartbeat_interval, retries, heartbeat_retry_interval, 
-               status, last_tcp_status,        -- ✅ must be here
+               status, last_tcp_status,        --  must be here
                last_checked_at, last_response_ms,
                created_at, updated_at
         FROM port_monitors 
@@ -60,7 +60,7 @@ func (p *PostgresDB) GetAllPortMonitors(ctx context.Context) ([]*utils.PortMonit
 		if err := rows.Scan(
 			&m.ID, &m.FriendlyName, &m.Hostname, &m.Port,
 			&m.HeartbeatInterval, &m.Retries, &m.HeartbeatRetryInterval,
-			&m.Status, &m.LastTCPStatus, // ✅ must be here
+			&m.Status, &m.LastTCPStatus, //  must be here
 			&m.LastCheckedAt, &m.LastResponseMs,
 			&m.CreatedAt, &m.UpdatedAt,
 		); err != nil {
@@ -308,4 +308,120 @@ func (p *PostgresDB) GetAllEnabledSNMPMonitors(ctx context.Context) ([]*utils.SN
 		monitors = append(monitors, m)
 	}
 	return monitors, rows.Err()
+}
+func (p *PostgresDB) CreatePingMonitor(ctx context.Context, m *utils.PingMonitor) error {
+	query := `
+        INSERT INTO ping_monitors
+        (friendly_name, hostname, check_interval, latency_threshold, timeout)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, status, created_at, updated_at
+    `
+	return p.pool.QueryRow(ctx, query,
+		m.FriendlyName, m.Hostname, m.CheckInterval,
+		m.LatencyThreshold, m.Timeout,
+	).Scan(&m.ID, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+}
+
+func (p *PostgresDB) GetAllPingMonitors(ctx context.Context) ([]*utils.PingMonitor, error) {
+	rows, err := p.pool.Query(ctx, `
+        SELECT id, friendly_name, hostname, check_interval, latency_threshold,
+               timeout, status, last_latency_ms, last_checked_at,
+               error_message, created_at, updated_at
+        FROM ping_monitors ORDER BY created_at DESC
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var monitors []*utils.PingMonitor
+	for rows.Next() {
+		m := &utils.PingMonitor{}
+		if err := rows.Scan(
+			&m.ID, &m.FriendlyName, &m.Hostname,
+			&m.CheckInterval, &m.LatencyThreshold, &m.Timeout,
+			&m.Status, &m.LastLatencyMs, &m.LastCheckedAt,
+			&m.ErrorMessage, &m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		monitors = append(monitors, m)
+	}
+	return monitors, rows.Err()
+}
+
+func (p *PostgresDB) GetPingMonitorByID(ctx context.Context, id int) (*utils.PingMonitor, error) {
+	m := &utils.PingMonitor{}
+	err := p.pool.QueryRow(ctx, `
+        SELECT id, friendly_name, hostname, check_interval, latency_threshold,
+               timeout, status, last_latency_ms, last_checked_at,
+               error_message, created_at, updated_at
+        FROM ping_monitors WHERE id = $1
+    `, id).Scan(
+		&m.ID, &m.FriendlyName, &m.Hostname,
+		&m.CheckInterval, &m.LatencyThreshold, &m.Timeout,
+		&m.Status, &m.LastLatencyMs, &m.LastCheckedAt,
+		&m.ErrorMessage, &m.CreatedAt, &m.UpdatedAt,
+	)
+	return m, err
+}
+
+func (p *PostgresDB) UpdatePingMonitor(ctx context.Context, m *utils.PingMonitor) error {
+	_, err := p.pool.Exec(ctx, `
+        UPDATE ping_monitors
+        SET friendly_name = $1, hostname = $2, check_interval = $3,
+            latency_threshold = $4, timeout = $5, updated_at = NOW()
+        WHERE id = $6
+    `, m.FriendlyName, m.Hostname, m.CheckInterval,
+		m.LatencyThreshold, m.Timeout, m.ID)
+	return err
+}
+
+func (p *PostgresDB) UpdatePingMonitorStatus(ctx context.Context, id int, status string, latencyMs *int, errMsg *string) error {
+	_, err := p.pool.Exec(ctx, `
+        UPDATE ping_monitors
+        SET status = $1, last_latency_ms = $2,
+            last_checked_at = NOW(), error_message = $3
+        WHERE id = $4
+    `, status, latencyMs, errMsg, id)
+	return err
+}
+
+func (p *PostgresDB) DeletePingMonitor(ctx context.Context, id int) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM ping_monitors WHERE id = $1`, id)
+	return err
+}
+
+func (p *PostgresDB) InsertPingMonitorLog(ctx context.Context, l *utils.PingMonitorLog) error {
+	_, err := p.pool.Exec(ctx, `
+        INSERT INTO ping_monitor_logs (monitor_id, status, latency_ms, error_message)
+        VALUES ($1, $2, $3, $4)
+    `, l.MonitorID, l.Status, l.LatencyMs, l.ErrorMessage)
+	return err
+}
+
+func (p *PostgresDB) GetPingMonitorLogs(ctx context.Context, monitorID, limit int) ([]*utils.PingMonitorLog, error) {
+	rows, err := p.pool.Query(ctx, `
+        SELECT id, monitor_id, status, latency_ms, error_message, checked_at
+        FROM ping_monitor_logs
+        WHERE monitor_id = $1
+        ORDER BY checked_at DESC LIMIT $2
+    `, monitorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*utils.PingMonitorLog
+	for rows.Next() {
+		l := &utils.PingMonitorLog{}
+		if err := rows.Scan(
+			&l.ID, &l.MonitorID, &l.Status,
+			&l.LatencyMs, &l.ErrorMessage, &l.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	return logs, rows.Err()
 }

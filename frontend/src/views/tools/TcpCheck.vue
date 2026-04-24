@@ -34,7 +34,7 @@
 
           <div class="form-group">
             <label for="port-input">
-              <span class="label-icon">🔌</span>
+              <span class="label-icon">  </span>
               Port Number
             </label>
             <div class="port-input-container">
@@ -450,7 +450,7 @@ export default {
       presets: [
         { label: 'Web Server', icon: '🌐', host: 'google.com', port: 80 },
         { label: 'Secure Web', icon: '🔒', host: 'google.com', port: 443 },
-        { label: 'DNS Server', icon: '📡', host: '8.8.8.8', port: 53 },
+        { label: 'DNS Server', icon: '   ', host: '8.8.8.8', port: 53 },
         { label: 'SSH Server', icon: '💻', host: 'github.com', port: 22 },
         { label: 'Email Server', icon: '📧', host: 'smtp.gmail.com', port: 587 },
         { label: 'MySQL', icon: '🗄️', host: 'localhost', port: 3306 }

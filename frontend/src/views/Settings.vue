@@ -70,7 +70,7 @@
 
           <!-- Empty State -->
           <div v-if="interfaces.length === 0 && !isLoading" class="empty-state">
-            <div class="empty-icon">🔌</div>
+            <div class="empty-icon">  </div>
             <h3>No Interfaces Found</h3>
             <p>Unable to detect network interfaces</p>
           </div>

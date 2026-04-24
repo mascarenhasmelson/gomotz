@@ -207,7 +207,7 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 }
 
 func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
-	// ✅ Build SNMP client
+	//  Build SNMP client
 	g := &gosnmp.GoSNMP{
 		Target:    m.Hostname,
 		Port:      uint16(m.Port),
@@ -216,7 +216,7 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 		Retries:   0, // handled manually
 	}
 
-	// ✅ Set SNMP version
+	//  Set SNMP version
 	switch m.SNMPVersion {
 	case "v1":
 		g.Version = gosnmp.Version1
@@ -242,7 +242,7 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 
 	variable := result.Variables[0]
 
-	// ✅ Check for error OID
+	//  Check for error OID
 	if variable.Type == gosnmp.NoSuchObject || variable.Type == gosnmp.NoSuchInstance {
 		return "", fmt.Errorf("OID not found: %s", m.OID)
 	}
@@ -250,7 +250,7 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 	return formatSNMPValue(variable, m.ExpectedValueType), nil
 }
 
-// ✅ Format SNMP value based on expected type
+// Format SNMP value based on expected type
 func formatSNMPValue(variable gosnmp.SnmpPDU, expectedType string) string {
 	switch variable.Type {
 	case gosnmp.OctetString:
@@ -313,7 +313,8 @@ func (s *SNMPMonitorService) PollOnce(m *utils.SNMPMonitor) (string, int, error)
 }
 
 // validateOID checks if OID format is valid
-// ✅ Proper OID validation
+//
+//	Proper OID validation
 func validateOID(oid string) bool {
 	if len(oid) == 0 {
 		return false

@@ -52,7 +52,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.Clients[client] = true
 			h.mu.Unlock()
-			log.Printf("✅ WebSocket client connected. Total: %d", len(h.Clients))
+			log.Printf("  WebSocket client connected. Total: %d", len(h.Clients))
 
 		case client := <-h.Unregister:
 			h.mu.Lock()
@@ -61,7 +61,7 @@ func (h *Hub) Run() {
 				close(client.Send)
 			}
 			h.mu.Unlock()
-			log.Printf("🔌 WebSocket client disconnected. Total: %d", len(h.Clients))
+			log.Printf("   WebSocket client disconnected. Total: %d", len(h.Clients))
 
 		case message := <-h.Broadcast:
 			h.mu.RLock()
@@ -119,7 +119,7 @@ func (h *Hub) BroadcastMessage(message interface{}) {
 }
 
 func (h *Hub) HandleNotification(notification *utils.DeviceNotification) {
-	log.Printf("📡 Broadcasting notification: %s - %s (networkid%d)",
+	log.Printf("    Broadcasting notification: %s - %s (networkid%d)",
 		notification.EventType, notification.IPAddress, notification.NetworkId)
 
 	h.BroadcastMessage(notification)

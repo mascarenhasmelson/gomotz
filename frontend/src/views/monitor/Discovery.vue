@@ -199,7 +199,7 @@
           </div>
 
           <div v-if="filteredDevicesCount === 0 && !loading" class="no-devices">
-            <div class="no-devices-icon">📡</div>
+            <div class="no-devices-icon">   </div>
             <h3>No Devices Found</h3>
             <p v-if="searchQuery">No devices match your search criteria</p>
             <p v-else-if="selectedNetworkId !== 'all'">No devices in selected network</p>
@@ -299,7 +299,7 @@
             <div class="action-buttons">
               <button @click="copyToClipboard(selectedDevice.ip_address)" class="action-btn copy-ip">📋 Copy IP</button>
               <button @click="copyToClipboard(selectedDevice.mac_address)" class="action-btn copy-mac">📋 Copy MAC</button>
-              <button @click="pingDevice(selectedDevice)" class="action-btn ping">📡 Ping</button>
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping">    Ping</button>
               <button @click="showConflictsForIP(selectedDevice)" class="action-btn conflict-info" v-if="selectedDevice.status === 'conflict'">⚠️ View Conflicts</button>
             </div>
           </div>
@@ -318,7 +318,7 @@
           <span>Loading conflicts...</span>
         </div>
         <div v-else-if="conflictsData.length === 0" class="no-conflicts">
-          <span>✅ No active IP conflicts detected</span>
+          <span>  No active IP conflicts detected</span>
         </div>
         <div v-else>
           <div v-for="conflict in conflictsData" :key="`${conflict.network_id}:${conflict.ip_address}`" class="conflict-item">
@@ -334,7 +334,7 @@
             </div>
             <div class="conflict-actions">
               <button @click="investigateConflict(conflict)" class="investigate-btn">🔍 Investigate</button>
-              <button @click="resolveConflict(conflict)" class="resolve-btn">✅ Mark Resolved</button>
+              <button @click="resolveConflict(conflict)" class="resolve-btn">  Mark Resolved</button>
             </div>
           </div>
         </div>
@@ -379,7 +379,7 @@ class WebSocketManager {
     this.ws = new WebSocket(url)
 
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected')
+      console.log('  WebSocket connected')
       this.isConnected = true
       this.isConnecting = false
       this.reconnectAttempts = 0
@@ -395,7 +395,7 @@ class WebSocketManager {
     }
 
     this.ws.onclose = () => {
-      console.log('🔌 WebSocket closed')
+      console.log('   WebSocket closed')
       this.isConnected = false
       this.isConnecting = false
       this.reconnect()
@@ -572,7 +572,7 @@ export default {
         const data = await res.json()
         if (Array.isArray(data)) {
           networks.value = data
-          console.log(`📡 Loaded ${networks.value.length} networks:`, networks.value.map(n => n.vlan_name))
+          console.log(`    Loaded ${networks.value.length} networks:`, networks.value.map(n => n.vlan_name))
         }
         return true
       } catch (err) {

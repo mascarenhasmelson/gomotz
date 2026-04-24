@@ -167,7 +167,7 @@
 
       <!-- Empty State - Show when not loading and there are no services -->
       <div v-else class="empty-state">
-        <div class="empty-icon">📡</div>
+        <div class="empty-icon">   </div>
         <h3>No services found</h3>
         <p v-if="searchQuery">No services match your search criteria</p>
         <p v-else>Add your first service to start monitoring</p>

@@ -282,7 +282,7 @@
               </tr>
               <tr v-if="monitors.length === 0 && !isLoading">
                 <td colspan="8" class="empty-state">
-                  <div class="empty-icon">📡</div>
+                  <div class="empty-icon">   </div>
                   <p>No monitors configured yet</p>
                   <p class="empty-hint">Create your first monitor using the form above</p>
                 </td>
@@ -419,13 +419,13 @@ export default {
 
     // WebSocket Connection
     const connectWebSocket = () => {
-      const wsUrl = `${WS_BASE_URL}/ws/monitors`
+      const wsUrl = `${WS_BASE_URL}/v1/ws/monitors`
       console.log('Connecting to WebSocket:', wsUrl)
       
       ws.value = new WebSocket(wsUrl)
 
       ws.value.onopen = () => {
-        console.log('✅ Monitor WebSocket connected')
+        console.log('  Monitor WebSocket connected')
         wsConnected.value = true
       }
 
@@ -483,7 +483,7 @@ export default {
       }
 
       ws.value.onclose = () => {
-        console.log('🔌 Monitor WebSocket disconnected')
+        console.log('   Monitor WebSocket disconnected')
         wsConnected.value = false
         setTimeout(connectWebSocket, 3000)
       }
@@ -515,7 +515,7 @@ export default {
         console.log('Loaded monitors via REST API:', monitors.value.length)
       } catch (error) {
         console.error('Error fetching monitors:', error)
-        alert(`Failed to load monitors: ${error.message}`)
+        // alert(`Failed to load monitors: ${error.message}`)
       } finally {
         isLoading.value = false
       }

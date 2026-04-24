@@ -18,7 +18,6 @@ import (
 )
 
 var wsMu sync.Mutex
-
 var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
@@ -55,9 +54,7 @@ func HandleSynScanWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func SynScan(ws *websocket.Conn, host string) {
-
 	wsSend(ws, utils.ScanMessage{Type: "status", Message: "Resolving host"})
-
 	ips, err := net.LookupIP(host)
 	if err != nil {
 		wsSend(ws, utils.ScanMessage{Type: "error", Message: err.Error()})
@@ -240,7 +237,6 @@ func sendSynChunk(
 			Type:    "progress",
 			Scanned: bEnd,
 		})
-
 		time.Sleep(10 * time.Millisecond)
 	}
 }

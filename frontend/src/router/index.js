@@ -74,10 +74,10 @@ const router = createRouter({
           path: 'PingMonitor',
           component: () => import('../views/monitor/PingMonitor.vue')
         },
-          {
-          path: 'HTTPsKeyword',
-          component: () => import('../views/monitor/HTTPsKeyword.vue')
-        },
+        //   {
+        //   path: 'HTTPsKeyword',
+        //   component: () => import('../views/monitor/HTTPsKeyword.vue')
+        // },
     
         {
           path: 'TCPMonitoring',

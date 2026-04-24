@@ -331,7 +331,7 @@ const setupWebSocket = () => {
   ws.onerror = (error) => {
     console.error('WebSocket error:', error)
     backendStatus.value = { connected: false }
-    showNotification('Backend connection error', 'error')
+  //  showNotification('Backend connection error', 'error')
   }
   
   ws.onclose = () => {

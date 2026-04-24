@@ -27,10 +27,18 @@ const (
 	EventIPConflictND ARPEvent = 4
 	EventMACChange    ARPEvent = 5
 	EventMACChangeND  ARPEvent = 6
-	EventCameOnline   ARPEvent = 7
+	EventCameOnline1  ARPEvent = 7
 	EventCameOnline2  ARPEvent = 8
 	EventWentOffline  ARPEvent = 9
 )
+
+type DBARPScanner struct {
+	db       *PostgresDB
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	interval time.Duration
+}
 
 type ARPEventCallback func(event ARPEvent, host *Host, oldHost *Host)
 
@@ -77,15 +85,13 @@ type ARPScanner struct {
 	pendingConflicts  map[string][]net.HardwareAddr
 	conflictMu        sync.Mutex
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-
+	ctx               context.Context
+	cancel            context.CancelFunc
+	wg                sync.WaitGroup
 	hostnameDiscovery *HostnameDiscovery
 	vendorLookup      VendorLookup
 	httpClient        *http.Client
-
-	OnARPEvent ARPEventCallback
+	OnARPEvent        ARPEventCallback
 }
 
 func NewARPScanner(subnetCIDR string, scanInterval time.Duration) (*ARPScanner, error) {
@@ -114,24 +120,21 @@ func NewARPScanner(subnetCIDR string, scanInterval time.Duration) (*ARPScanner, 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ARPScanner{
-		iface:     iface,
-		subnet:    subnet,
-		localIP:   localIP,
-		localAddr: localAddr,
-		localMAC:  iface.HardwareAddr,
-		client:    client,
-		HostMap:   make(map[string]*Host),
-
+		iface:             iface,
+		subnet:            subnet,
+		localIP:           localIP,
+		localAddr:         localAddr,
+		localMAC:          iface.HardwareAddr,
+		client:            client,
+		HostMap:           make(map[string]*Host),
 		scanInterval:      scanInterval,
 		replyWindow:       2 * time.Second,
 		fullSweepInterval: scanInterval * 10,
 		dupCheckInterval:  scanInterval * 5,
-
-		pendingConflicts: make(map[string][]net.HardwareAddr),
-
-		ctx:        ctx,
-		cancel:     cancel,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		pendingConflicts:  make(map[string][]net.HardwareAddr),
+		ctx:               ctx,
+		cancel:            cancel,
+		httpClient:        &http.Client{Timeout: 5 * time.Second},
 	}, nil
 }
 
@@ -182,6 +185,7 @@ func (s *ARPScanner) sender() {
 		case <-s.ctx.Done():
 			return
 		case <-targetedTicker.C:
+
 			s.targetedScan()
 
 		case <-fullSweepTicker.C:
@@ -247,6 +251,7 @@ func (s *ARPScanner) targetedScan() {
 
 	s.checkOfflineByFlag()
 }
+
 func (s *ARPScanner) checkOfflineByFlag() {
 	s.HostMutex.Lock()
 	defer s.HostMutex.Unlock()
@@ -270,6 +275,31 @@ func (s *ARPScanner) checkOfflineByFlag() {
 	}
 }
 
+// func (s *ARPScanner) checkOfflineByFlag() {
+// 	s.HostMutex.Lock()
+// 	defer s.HostMutex.Unlock()
+
+// 	now := time.Now()
+// 	offlineThreshold := 3 * s.scanInterval // 👈 tune this
+
+// 	for _, host := range s.HostMap {
+// 		if host.Status != StatusOnline {
+// 			continue
+// 		}
+
+// 		// 👇 KEY FIX: use LastSeen instead of flag
+// 		if now.Sub(host.LastSeen) > offlineThreshold {
+// 			oldHost := copyHost(host)
+// 			host.Status = StatusOffline
+
+// 			log.Printf("[ARP] Went offline (timeout): %s (%s)", host.IP, host.MAC)
+
+//				if s.OnARPEvent != nil {
+//					go s.OnARPEvent(EventWentOffline, copyHost(host), oldHost)
+//				}
+//			}
+//		}
+//	}
 func (s *ARPScanner) duplicateIPSweep() {
 	s.HostMutex.RLock()
 	knownIPs := make([]net.IP, 0, len(s.HostMap))
@@ -463,7 +493,7 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 			if existing.Status == StatusOnline {
 				// Device re-announcing itself — already online.
 				if s.OnARPEvent != nil {
-					go s.OnARPEvent(EventCameOnline, copyHost(existing), nil)
+					go s.OnARPEvent(EventCameOnline1, copyHost(existing), nil)
 				}
 			} else {
 				// Was offline, gratuitous ARP = came back online.
@@ -832,4 +862,315 @@ func (d *DatabaseVendorLookup) SaveVendor(ctx context.Context, v *utils.MACVendo
 }
 func (d *DatabaseVendorLookup) UpdateVendorLastSeen(ctx context.Context, oui string) error {
 	return d.db.UpdateVendorLastSeen(ctx, oui)
+}
+
+// db scan
+
+func NewDBARPScanner(db *PostgresDB, interval time.Duration) *DBARPScanner {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &DBARPScanner{
+		db:       db,
+		ctx:      ctx,
+		cancel:   cancel,
+		interval: interval,
+	}
+}
+
+func (s *DBARPScanner) Start() {
+	log.Printf("[DB-ARP] Starting DB-based unicast ARP scanner (interval: %v)", s.interval)
+	s.wg.Add(1)
+	go s.run()
+}
+
+func (s *DBARPScanner) Stop() {
+	s.cancel()
+	s.wg.Wait()
+	log.Printf("[DB-ARP] Stopped")
+}
+
+func (s *DBARPScanner) run() {
+	defer s.wg.Done()
+
+	// Run immediately on start
+	s.scanAllDevices()
+
+	ticker := time.NewTicker(s.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.scanAllDevices()
+		}
+	}
+}
+
+func (s *DBARPScanner) scanAllDevices() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// ✅ Fetch ALL devices from DB regardless of network
+	devices, err := s.db.GetAllDevicesForARPScan(ctx)
+	if err != nil {
+		log.Printf("[DB-ARP] Failed to fetch devices: %v", err)
+		return
+	}
+
+	if len(devices) == 0 {
+		return
+	}
+
+	log.Printf("[DB-ARP] Scanning %d devices from database", len(devices))
+
+	// ✅ Group devices by their network interface for ARP client reuse
+	byInterface := make(map[string][]*ARPScanDevice)
+	for _, d := range devices {
+		byInterface[d.InterfaceName] = append(byInterface[d.InterfaceName], d)
+	}
+
+	// ✅ Scan each interface group in parallel
+	var wg sync.WaitGroup
+	for ifaceName, devs := range byInterface {
+		wg.Add(1)
+		go func(ifaceName string, devs []*ARPScanDevice) {
+			defer wg.Done()
+			s.scanInterface(ifaceName, devs)
+		}(ifaceName, devs)
+	}
+	wg.Wait()
+
+	log.Printf("[DB-ARP] Scan cycle complete — %d devices checked", len(devices))
+}
+
+func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice) {
+	// Get the interface
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		log.Printf("[DB-ARP] Interface %s not found: %v", ifaceName, err)
+		// Mark all devices on this interface as offline
+		s.markDevicesOffline(devices, "interface not found")
+		return
+	}
+
+	if iface.Flags&net.FlagUp == 0 {
+		log.Printf("[DB-ARP] Interface %s is down", ifaceName)
+		s.markDevicesOffline(devices, "interface down")
+		return
+	}
+
+	// Get local IP for this interface
+	localIP, err := getInterfaceIPv4(iface)
+	if err != nil {
+		log.Printf("[DB-ARP] No IPv4 on %s: %v", ifaceName, err)
+		return
+	}
+
+	localAddr, ok := netip.AddrFromSlice(localIP.To4())
+	if !ok {
+		return
+	}
+
+	// Create ARP client for this interface
+	client, err := arp.Dial(iface)
+	if err != nil {
+		log.Printf("[DB-ARP] ARP dial failed for %s: %v", ifaceName, err)
+		return
+	}
+	defer client.Close()
+
+	log.Printf("[DB-ARP] Scanning %d devices on %s", len(devices), ifaceName)
+
+	// ✅ Send unicast ARP to each device one by one
+	replied := make(map[string]bool)
+	var repliedMu sync.Mutex
+
+	// Start reply collector goroutine
+	replyCtx, replyCancel := context.WithCancel(s.ctx)
+	defer replyCancel()
+
+	var replyWg sync.WaitGroup
+	replyWg.Add(1)
+	go func() {
+		defer replyWg.Done()
+		s.collectReplies(replyCtx, client, iface, replied, &repliedMu)
+	}()
+
+	// Send unicast ARP requests to each device
+	for _, device := range devices {
+		if s.ctx.Err() != nil {
+			break
+		}
+
+		targetIP := net.ParseIP(device.IPAddress).To4()
+		if targetIP == nil {
+			continue
+		}
+
+		targetAddr, ok := netip.AddrFromSlice(targetIP)
+		if !ok {
+			continue
+		}
+
+		targetMAC, err := net.ParseMAC(device.MACAddress)
+		if err != nil {
+			// Fallback to broadcast if MAC is invalid
+			targetMAC = ethernet.Broadcast
+		}
+
+		// ✅ Send unicast ARP (to known MAC)
+		pkt, err := arp.NewPacket(
+			arp.OperationRequest,
+			iface.HardwareAddr,
+			localAddr,
+			targetMAC,
+			targetAddr,
+		)
+		if err != nil {
+			continue
+		}
+
+		if err := client.WriteTo(pkt, targetMAC); err != nil {
+			log.Printf("[DB-ARP] Send failed for %s: %v", device.IPAddress, err)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Wait for replies
+	select {
+	case <-time.After(3 * time.Second):
+	case <-s.ctx.Done():
+		replyCancel()
+		replyWg.Wait()
+		return
+	}
+
+	replyCancel()
+	replyWg.Wait()
+
+	// ✅ Update DB status for each device based on replies
+	s.updateDeviceStatuses(devices, replied)
+}
+
+func (s *DBARPScanner) collectReplies(
+	ctx context.Context,
+	client *arp.Client,
+	iface *net.Interface,
+	replied map[string]bool,
+	mu *sync.Mutex,
+) {
+	client.SetReadDeadline(time.Now().Add(time.Second))
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		packet, _, err := client.Read()
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				client.SetReadDeadline(time.Now().Add(time.Second))
+				continue
+			}
+			return
+		}
+
+		if packet.Operation != arp.OperationReply {
+			continue
+		}
+
+		senderIP := net.IP(packet.SenderIP.AsSlice()).String()
+
+		mu.Lock()
+		replied[senderIP] = true
+		mu.Unlock()
+
+		client.SetReadDeadline(time.Now().Add(time.Second))
+	}
+}
+
+func (s *DBARPScanner) updateDeviceStatuses(devices []*ARPScanDevice, replied map[string]bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	onlineCount := 0
+	offlineCount := 0
+
+	for _, device := range devices {
+		isOnline := replied[device.IPAddress]
+		var newStatus string
+
+		if isOnline {
+			newStatus = "online"
+			onlineCount++
+		} else {
+			// ✅ Only mark offline if currently online or new
+			// Don't override 'conflict' status
+			if device.CurrentStatus == "conflict" {
+				continue
+			}
+			newStatus = "offline"
+			offlineCount++
+		}
+
+		// ✅ Only update if status changed — avoids unnecessary DB writes
+		if device.CurrentStatus == newStatus {
+			continue
+		}
+
+		if err := s.db.UpdateDeviceStatusByNetworkAndMAC(ctx, device.NetworkID, device.MACAddress, newStatus); err != nil {
+			log.Printf("[DB-ARP] Failed to update %s (%s): %v",
+				device.IPAddress, device.MACAddress, err)
+			continue
+		}
+
+		log.Printf("[DB-ARP] %s (%s) on %s: %s → %s",
+			device.IPAddress, device.MACAddress, device.InterfaceName,
+			device.CurrentStatus, newStatus)
+	}
+
+	log.Printf("[DB-ARP] Updated: %d online, %d offline", onlineCount, offlineCount)
+}
+
+func (s *DBARPScanner) markDevicesOffline(devices []*ARPScanDevice, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, device := range devices {
+		if device.CurrentStatus == "offline" || device.CurrentStatus == "conflict" {
+			continue
+		}
+		if err := s.db.UpdateDeviceStatusByNetworkAndMAC(ctx, device.NetworkID, device.MACAddress, "offline"); err != nil {
+			log.Printf("[DB-ARP] Failed to mark offline %s: %v", device.IPAddress, err)
+		}
+	}
+	log.Printf("[DB-ARP] Marked %d devices offline (%s)", len(devices), reason)
+}
+
+// ============================================
+// HELPER
+// ============================================
+
+func getInterfaceIPv4(iface *net.Interface) (net.IP, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.To4() != nil {
+			return ip.To4(), nil
+		}
+	}
+	return nil, fmt.Errorf("no IPv4 address on %s", iface.Name)
 }

@@ -3,12 +3,17 @@ package monitorsrv
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/utils"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 )
 
 type BroadcastFunc func(payload []byte)
@@ -20,7 +25,7 @@ type PortMonitorService struct {
 	mu        sync.RWMutex
 	monitors  map[int]*portMonitorWorker
 	wg        sync.WaitGroup
-	broadcast BroadcastFunc // ✅ instead of *vlan.Hub
+	broadcast BroadcastFunc //  instead of *vlan.Hub
 }
 
 type portMonitorWorker struct {
@@ -28,14 +33,267 @@ type portMonitorWorker struct {
 	cancel  context.CancelFunc
 }
 
-func NewPortMonitorService(db *PostgresDB, broadcast BroadcastFunc) *PortMonitorService { // ✅
+type PingMonitorService struct {
+	db        *PostgresDB
+	ctx       context.Context
+	cancel    context.CancelFunc
+	mu        sync.RWMutex
+	monitors  map[int]*pingWorker
+	wg        sync.WaitGroup
+	broadcast BroadcastFunc
+}
+
+type pingWorker struct {
+	monitor *utils.PingMonitor
+	cancel  context.CancelFunc
+}
+
+func NewPingMonitorService(db *PostgresDB, broadcast BroadcastFunc) *PingMonitorService {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &PingMonitorService{
+		db:        db,
+		ctx:       ctx,
+		cancel:    cancel,
+		monitors:  make(map[int]*pingWorker),
+		broadcast: broadcast,
+	}
+}
+
+func (s *PingMonitorService) RecoverFromDB() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	monitors, err := s.db.GetAllPingMonitors(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("[PING MONITOR] Recovering %d monitor(s)", len(monitors))
+	for _, m := range monitors {
+		s.StartMonitor(m)
+	}
+	return nil
+}
+
+func (s *PingMonitorService) StartMonitor(m *utils.PingMonitor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if w, exists := s.monitors[m.ID]; exists {
+		w.cancel()
+	}
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.monitors[m.ID] = &pingWorker{monitor: m, cancel: cancel}
+
+	s.wg.Add(1)
+	go s.runWorker(ctx, m)
+
+	log.Printf("[PING MONITOR] Started %d — %s (%s) every %ds",
+		m.ID, m.FriendlyName, m.Hostname, m.CheckInterval)
+}
+
+func (s *PingMonitorService) StopMonitor(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if w, exists := s.monitors[id]; exists {
+		w.cancel()
+		delete(s.monitors, id)
+		log.Printf("[PING MONITOR] Stopped monitor %d", id)
+	}
+}
+
+func (s *PingMonitorService) Shutdown() {
+	s.cancel()
+	s.wg.Wait()
+	log.Println("[PING MONITOR] All monitors stopped")
+}
+
+func (s *PingMonitorService) GetActiveCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.monitors)
+}
+
+func (s *PingMonitorService) runWorker(ctx context.Context, m *utils.PingMonitor) {
+	defer s.wg.Done()
+
+	// Ping immediately on start
+	s.pingAndSave(m)
+
+	ticker := time.NewTicker(time.Duration(m.CheckInterval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.pingAndSave(m)
+		}
+	}
+}
+
+func (s *PingMonitorService) pingAndSave(m *utils.PingMonitor) {
+	latencyMs, err := s.doPing(m.Hostname, m.Timeout)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var status string
+	var latencyPtr *int
+	var errMsgPtr *string
+
+	if err != nil {
+		status = "down"
+		errMsg := err.Error()
+		errMsgPtr = &errMsg
+		log.Printf("[PING MONITOR] %s (%s) → down [%s]",
+			m.FriendlyName, m.Hostname, err.Error())
+	} else {
+		latencyPtr = &latencyMs
+		//  warning if latency exceeds threshold
+		if latencyMs > m.LatencyThreshold {
+			status = "warning"
+		} else {
+			status = "up"
+		}
+		log.Printf("[PING MONITOR] %s (%s) → %s [%dms] threshold:%dms",
+			m.FriendlyName, m.Hostname, status, latencyMs, m.LatencyThreshold)
+	}
+
+	if err := s.db.UpdatePingMonitorStatus(ctx, m.ID, status, latencyPtr, errMsgPtr); err != nil {
+		log.Printf("[PING MONITOR] Failed to update status %d: %v", m.ID, err)
+	}
+
+	if err := s.db.InsertPingMonitorLog(ctx, &utils.PingMonitorLog{
+		MonitorID:    m.ID,
+		Status:       status,
+		LatencyMs:    latencyPtr,
+		ErrorMessage: errMsgPtr,
+	}); err != nil {
+		log.Printf("[PING MONITOR] Failed to insert log %d: %v", m.ID, err)
+	}
+
+	//Broadcast realtime update
+	if s.broadcast != nil {
+		latency := 0
+		if latencyPtr != nil {
+			latency = *latencyPtr
+		}
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type":          "ping_monitor_update",
+			"monitor_id":    m.ID,
+			"friendly_name": m.FriendlyName,
+			"hostname":      m.Hostname,
+			"status":        status,
+			"latency_ms":    latency,
+			"threshold":     m.LatencyThreshold,
+			"error": func() string {
+				if errMsgPtr != nil {
+					return *errMsgPtr
+				}
+				return ""
+			}(),
+			"checked_at": time.Now().UTC(),
+		})
+		s.broadcast(payload)
+	}
+}
+
+// doPing sends a single ICMP echo and returns latency in ms
+func (s *PingMonitorService) doPing(target string, timeoutSecs int) (int, error) {
+	ipAddr, err := resolveTarget(target)
+	if err != nil {
+		return 0, err
+	}
+
+	conn, err := icmp.ListenPacket("ip4:icmp", "")
+	if err != nil {
+		return 0, fmt.Errorf("listen error: %w", err)
+	}
+	defer conn.Close()
+
+	msg := icmp.Message{
+		Type: ipv4.ICMPTypeEcho,
+		Code: 0,
+		Body: &icmp.Echo{
+			ID:   os.Getpid() & 0xffff,
+			Seq:  1,
+			Data: []byte("gomotz-ping"),
+		},
+	}
+
+	msgBytes, err := msg.Marshal(nil)
+	if err != nil {
+		return 0, err
+	}
+
+	start := time.Now()
+
+	if _, err := conn.WriteTo(msgBytes, ipAddr); err != nil {
+		return 0, fmt.Errorf("write error: %w", err)
+	}
+
+	reply := make([]byte, 1500)
+	deadline := time.Duration(timeoutSecs) * time.Second
+	if err := conn.SetReadDeadline(time.Now().Add(deadline)); err != nil {
+		return 0, err
+	}
+
+	n, _, err := conn.ReadFrom(reply)
+	if err != nil {
+		return 0, fmt.Errorf("timeout or unreachable: %w", err)
+	}
+
+	latencyMs := int(time.Since(start).Milliseconds())
+
+	parsedMsg, err := icmp.ParseMessage(1, reply[:n])
+	if err != nil {
+		return 0, fmt.Errorf("parse error: %w", err)
+	}
+
+	switch parsedMsg.Type {
+	case ipv4.ICMPTypeEchoReply:
+		return latencyMs, nil
+	case ipv4.ICMPTypeDestinationUnreachable:
+		return 0, fmt.Errorf("destination unreachable")
+	default:
+		return 0, fmt.Errorf("unexpected ICMP type: %v", parsedMsg.Type)
+	}
+}
+
+// PingOnce does a single ping — used for test connection
+func (s *PingMonitorService) PingOnce(hostname string, timeoutSecs int) (int, error) {
+	return s.doPing(hostname, timeoutSecs)
+}
+
+func resolveTarget(target string) (*net.IPAddr, error) {
+	ipAddr, err := net.ResolveIPAddr("ip4", target)
+	if err == nil {
+		return ipAddr, nil
+	}
+	ips, err := net.LookupIP(target)
+	if err != nil || len(ips) == 0 {
+		return nil, fmt.Errorf("failed to resolve: %s", target)
+	}
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			return &net.IPAddr{IP: v4}, nil
+		}
+	}
+	return nil, fmt.Errorf("no IPv4 found for: %s", target)
+}
+
+func NewPortMonitorService(db *PostgresDB, broadcast BroadcastFunc) *PortMonitorService { //
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PortMonitorService{
 		db:        db,
 		ctx:       ctx,
 		cancel:    cancel,
 		monitors:  make(map[int]*portMonitorWorker),
-		broadcast: broadcast, // ✅
+		broadcast: broadcast, //
 	}
 }
 
@@ -121,7 +379,7 @@ func (s *PortMonitorService) checkAndSave(m *utils.PortMonitor) {
 		Timeout: 10,
 	})
 
-	// ✅ Derive status from tcp status, not just resp.Success
+	//  Derive status from tcp status, not just resp.Success
 	status := tcpStatusToMonitorStatus(resp.Status)
 
 	// Retries only if down
@@ -200,7 +458,7 @@ func (s *PortMonitorService) checkAndSave(m *utils.PortMonitor) {
 	}
 }
 
-// ✅ Single place to define the mapping
+// Single place to define the mapping
 func tcpStatusToMonitorStatus(tcpStatus string) string {
 	switch tcpStatus {
 	case "open":

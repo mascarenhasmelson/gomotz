@@ -48,12 +48,12 @@ func (d *InterfaceDetector) GetAllInterfaces() ([]DetectedInterface, error) {
 	var results []DetectedInterface
 
 	for _, iface := range ifaces {
-		// ✅ Skip loopback interfaces
+		//  Skip loopback interfaces
 		if iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
 
-		// ✅ Skip interfaces that are down
+		//  Skip interfaces that are down
 		if iface.Flags&net.FlagUp == 0 {
 			continue
 		}

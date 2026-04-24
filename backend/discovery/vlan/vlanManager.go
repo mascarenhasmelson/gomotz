@@ -33,6 +33,7 @@ type VLANScanManager struct {
 	pendingVLANs    map[int]*utils.VLANNetwork
 	pendingMu       sync.Mutex
 	parentInterface string
+	dbScanner       *DBARPScanner
 }
 
 type VLANScanner struct {
@@ -75,7 +76,7 @@ func (m *VLANScanManager) StopVLANScanByInterface(interfaceName string) error {
 
 func NewVLANScanManager(database *PostgresDB, parentInterface string) *VLANScanManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &VLANScanManager{
+	m := &VLANScanManager{
 		parentInterface:   parentInterface,
 		scanners:          make(map[int]*VLANScanner),
 		hostnameDiscovery: make(map[string]*HostnameDiscovery),
@@ -84,6 +85,8 @@ func NewVLANScanManager(database *PostgresDB, parentInterface string) *VLANScanM
 		ctx:               ctx,
 		cancel:            cancel,
 	}
+	m.dbScanner = NewDBARPScanner(database, 2*time.Minute)
+	return m
 }
 
 // ============================================
@@ -124,7 +127,7 @@ func (m *VLANScanManager) StartVLANScan(config *utils.VLANNetwork) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// ✅ Key by config.ID (DB primary key), not config.VLANId (which is 0 for physical)
+	//  Key by config.ID (DB primary key), not config.VLANId (which is 0 for physical)
 	if vs, exists := m.scanners[config.ID]; exists && vs.IsRunning {
 		return fmt.Errorf("scan already running for network %d (%s)", config.ID, config.InterfaceName)
 	}
@@ -141,7 +144,7 @@ func (m *VLANScanManager) startVLANScanLocked(config *utils.VLANNetwork) error {
 
 	scanInterval := time.Duration(config.ScanIntervalSeconds) * time.Second
 
-	interfaceName, err := m.DetectInterfaceForCIDR(cidr, config.ID) // ✅ pass config.ID
+	interfaceName, err := m.DetectInterfaceForCIDR(cidr, config.ID) //  pass config.ID
 	if err != nil {
 		log.Printf("[Network %d] Interface not found: %v", config.ID, err)
 		m.markAllDevicesOffline(config.ID)
@@ -170,19 +173,19 @@ func (m *VLANScanManager) startVLANScanLocked(config *utils.VLANNetwork) error {
 		arpScanner.SetHostnameDiscovery(hd)
 	}
 
-	// ✅ Use config.ID as the network identifier throughout
+	//  Use config.ID as the network identifier throughout
 	arpScanner.OnARPEvent = m.buildEventCallback(config.ID)
 
 	ctx, cancel := context.WithCancel(m.ctx)
 	vs := &VLANScanner{
-		NetworkId: config.ID, // ✅ DB primary key
+		NetworkId: config.ID, //  DB primary key
 		Scanner:   arpScanner,
 		Config:    config,
 		Status:    "running",
 		Cancel:    cancel,
 		IsRunning: true,
 	}
-	m.scanners[config.ID] = vs // ✅ key by config.ID
+	m.scanners[config.ID] = vs //  key by config.ID
 
 	arpScanner.Start()
 
@@ -221,7 +224,7 @@ func (m *VLANScanManager) StopVLANScan(networkID int) error {
 	delete(m.pendingVLANs, networkID)
 	m.pendingMu.Unlock()
 
-	vs, exists := m.scanners[networkID] // ✅ networkID is config.ID
+	vs, exists := m.scanners[networkID] //  networkID is config.ID
 	if !exists {
 		return fmt.Errorf("no scanner found for network %d", networkID)
 	}
@@ -266,7 +269,8 @@ func (m *VLANScanManager) RecoverFromRestart() error {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// ->ALWAYS start infinite retry loop
+	m.dbScanner.Start()
+	log.Printf("[DB-ARP] ->DB-based unicast ARP scanner started")
 	m.wg.Add(1)
 	go m.retryPendingVLANs()
 	log.Printf("[RETRY] ->  Infinite retry loop started (runs forever, checks every 30s)")
@@ -398,6 +402,10 @@ func (m *VLANScanManager) Shutdown() {
 		hd.Stop()
 		log.Printf("  Stopped hostname discovery on %s", ifaceName)
 	}
+	if m.dbScanner != nil {
+		m.dbScanner.Stop()
+		log.Printf("  Stopped DB-based ARP scanner")
+	}
 
 	m.cancel()
 	m.wg.Wait()
@@ -456,7 +464,7 @@ func (m *VLANScanManager) buildEventCallback(vlanID int) ARPEventCallback {
 			log.Printf("[VLAN %d]  MAC change + new device: %s (old MAC: %s)",
 				vlanID, host.IP, oldMAC)
 
-		case EventCameOnline:
+		case EventCameOnline1:
 			log.Printf("[VLAN %d]  Gratuitous ARP (still online): %s (%s)",
 				vlanID, host.IP, host.MAC)
 
@@ -915,12 +923,12 @@ func (m *VLANScanManager) GetCIDRFromConfig(config *utils.VLANNetwork) (string, 
 		return *config.CIDRFull, nil
 
 	case "auto", "dhcp":
-		// ✅ First try CIDRFull from DB (populated at monitor time)
+		//  First try CIDRFull from DB (populated at monitor time)
 		if config.CIDRFull != nil && *config.CIDRFull != "" {
 			return *config.CIDRFull, nil
 		}
 
-		// ✅ Fallback: detect live from the actual interface
+		//  Fallback: detect live from the actual interface
 		if config.InterfaceName == "" {
 			return "", fmt.Errorf("no interface name for network %d", config.ID)
 		}

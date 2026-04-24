@@ -31,6 +31,8 @@ type Router struct {
 	monitorDB   *monitorsrv.PostgresDB
 	scanManager *vlan.VLANScanManager
 	portMonitor *monitorsrv.PortMonitorService
+	snmpMonitor *monitorsrv.SNMPMonitorService
+	pingMonitor *monitorsrv.PingMonitorService
 	wsHub       *ws.Hub
 	mux         *http.ServeMux
 	upgrader    websocket.Upgrader
@@ -42,7 +44,7 @@ type MonitorRequest struct {
 
 var wsMu sync.Mutex
 
-func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, monitorDB *monitorsrv.PostgresDB, scanManager *vlan.VLANScanManager, portMonitor *monitorsrv.PortMonitorService, wsHub *ws.Hub) *http.ServeMux {
+func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, monitorDB *monitorsrv.PostgresDB, scanManager *vlan.VLANScanManager, portMonitor *monitorsrv.PortMonitorService, snmpMonitor *monitorsrv.SNMPMonitorService, pingMonitor *monitorsrv.PingMonitorService, wsHub *ws.Hub) *http.ServeMux {
 	r := &Router{
 		ctx:         ctx,
 		pool:        pool,
@@ -50,6 +52,8 @@ func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresD
 		monitorDB:   monitorDB,
 		scanManager: scanManager,
 		portMonitor: portMonitor,
+		snmpMonitor: snmpMonitor,
+		pingMonitor: pingMonitor,
 		wsHub:       wsHub,
 		mux:         http.NewServeMux(),
 		upgrader: websocket.Upgrader{
@@ -86,17 +90,587 @@ func (r *Router) routes() {
 	r.mux.HandleFunc("/v1/api/status", r.getStatus)
 	r.mux.HandleFunc("/ws", r.handleWebSocket)
 	r.mux.HandleFunc("/v1/api/conflicts", r.getConflicts)
+
 	r.mux.HandleFunc("/v1/api/status/detailed", r.getDetailedStatus)
 	r.mux.HandleFunc("/v1/api/discovery/status", r.getDiscoveryStatus)
 	r.mux.HandleFunc("/v1/api/discovery/trigger", r.triggerDiscovery)
-
 	r.mux.HandleFunc("/v1/api/monitors", r.handlePortMonitors)
 	r.mux.HandleFunc("/v1/api/monitors/", r.handlePortMonitorWithID)
-	r.mux.HandleFunc("/ws/monitors", r.handleMonitorWebSocket)
+	r.mux.HandleFunc("/v1/ws/monitors", r.handleMonitorWebSocket)
 	r.mux.HandleFunc("/v1/api/monitors/test", r.testPortConnection)
 
+	r.mux.HandleFunc("/v1/api/snmp", r.handleSNMPMonitors)
+	r.mux.HandleFunc("/v1/api/snmp/test", r.testSNMPConnection)
+	r.mux.HandleFunc("/v1/api/snmp/", r.handleSNMPMonitorWithID)
+	r.mux.HandleFunc("/v1/api/ws/snmp", r.handleSNMPWebSocket)
+
+	r.mux.HandleFunc("/v1/api/ping", r.handlePingMonitors)
+	r.mux.HandleFunc("/v1/api/ping/test", r.testPingConnection)
+	r.mux.HandleFunc("/v1/api/ping/", r.handlePingMonitorWithID)
+	r.mux.HandleFunc("/v1/api/ws/ping", r.handlePingWebSocket)
+
+}
+func (r *Router) handlePingMonitors(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.pingMonitor == nil {
+		respondError(w, http.StatusServiceUnavailable, "ping monitor service not initialized")
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		monitors, err := r.monitorDB.GetAllPingMonitors(r.ctx)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if monitors == nil {
+			monitors = []*utils.PingMonitor{}
+		}
+		respondJSON(w, http.StatusOK, monitors)
+
+	case http.MethodPost:
+		var body utils.CreatePingMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.Hostname == "" {
+			respondError(w, http.StatusBadRequest, "hostname required")
+			return
+		}
+		if body.FriendlyName == "" {
+			body.FriendlyName = body.Hostname
+		}
+		if body.CheckInterval <= 0 {
+			body.CheckInterval = 60
+		}
+		if body.LatencyThreshold <= 0 {
+			body.LatencyThreshold = 200
+		}
+		if body.Timeout <= 0 {
+			body.Timeout = 3
+		}
+
+		m := &utils.PingMonitor{
+			FriendlyName:     body.FriendlyName,
+			Hostname:         body.Hostname,
+			CheckInterval:    body.CheckInterval,
+			LatencyThreshold: body.LatencyThreshold,
+			Timeout:          body.Timeout,
+		}
+		if err := r.monitorDB.CreatePingMonitor(r.ctx, m); err != nil {
+			if strings.Contains(err.Error(), "duplicate") {
+				respondError(w, http.StatusConflict, "monitor for this hostname already exists")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.pingMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ping_monitor_created", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusCreated, m)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
+func (r *Router) handlePingMonitorWithID(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/ping/")
+	parts := strings.Split(path, "/")
+
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid monitor ID")
+		return
+	}
+	if len(parts) > 1 && parts[1] == "logs" {
+		limit := 50
+		if s := req.URL.Query().Get("limit"); s != "" {
+			if l, err := strconv.Atoi(s); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		logs, err := r.monitorDB.GetPingMonitorLogs(r.ctx, id, limit)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if logs == nil {
+			logs = []*utils.PingMonitorLog{}
+		}
+		respondJSON(w, http.StatusOK, logs)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		m, err := r.monitorDB.GetPingMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodPut:
+		var body utils.CreatePingMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.CheckInterval <= 0 {
+			body.CheckInterval = 60
+		}
+		if body.LatencyThreshold <= 0 {
+			body.LatencyThreshold = 200
+		}
+		if body.Timeout <= 0 {
+			body.Timeout = 3
+		}
+
+		m := &utils.PingMonitor{
+			ID:               id,
+			FriendlyName:     body.FriendlyName,
+			Hostname:         body.Hostname,
+			CheckInterval:    body.CheckInterval,
+			LatencyThreshold: body.LatencyThreshold,
+			Timeout:          body.Timeout,
+		}
+		if err := r.monitorDB.UpdatePingMonitor(r.ctx, m); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.pingMonitor.StopMonitor(id)
+		r.pingMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ping_monitor_updated", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodDelete:
+		m, err := r.monitorDB.GetPingMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+
+		r.pingMonitor.StopMonitor(id)
+
+		if err := r.monitorDB.DeletePingMonitor(r.ctx, id); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ping_monitor_deleted", "monitor_id": id, "name": m.FriendlyName,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "deleted", "monitor_id": id, "name": m.FriendlyName,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) testPingConnection(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	if req.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var body struct {
+		Hostname string `json:"hostname"`
+		Timeout  int    `json:"timeout"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if body.Hostname == "" {
+		respondError(w, http.StatusBadRequest, "hostname required")
+		return
+	}
+	if body.Timeout <= 0 {
+		body.Timeout = 3
+	}
+
+	latencyMs, err := r.pingMonitor.PingOnce(body.Hostname, body.Timeout)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success":  false,
+			"hostname": body.Hostname,
+			"error":    err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"hostname":   body.Hostname,
+		"latency_ms": latencyMs,
+	})
+}
+
+func (r *Router) handlePingWebSocket(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	conn, err := r.upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		log.Printf("Ping WebSocket upgrade error: %v", err)
+		return
+	}
+
+	// Send initial state on connect
+	monitors, err := r.monitorDB.GetAllPingMonitors(r.ctx)
+	if err == nil {
+		if monitors == nil {
+			monitors = []*utils.PingMonitor{}
+		}
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type": "initial_state", "monitors": monitors,
+		})
+		conn.WriteMessage(websocket.TextMessage, payload)
+	}
+
+	client := &vlan.Client{
+		Hub:  r.wsHub,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+	client.Hub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
+}
+func (r *Router) handleSNMPMonitors(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	switch req.Method {
+	case http.MethodGet:
+		monitors, err := r.monitorDB.GetAllSNMPMonitors(r.ctx)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if monitors == nil {
+			monitors = []*utils.SNMPMonitor{}
+		}
+		respondJSON(w, http.StatusOK, monitors)
+
+	case http.MethodPost:
+		var body utils.CreateSNMPMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.FriendlyName == "" || body.Hostname == "" || body.OID == "" {
+			respondError(w, http.StatusBadRequest, "friendly_name, hostname and oid required")
+			return
+		}
+
+		// Defaults
+		if body.Port == 0 {
+			body.Port = 161
+		}
+		if body.CommunityString == "" {
+			body.CommunityString = "public"
+		}
+		if body.SNMPVersion == "" {
+			body.SNMPVersion = "v2c"
+		}
+		if body.PollingInterval <= 0 {
+			body.PollingInterval = 60
+		}
+		if body.Timeout <= 0 {
+			body.Timeout = 5
+		}
+		if body.ExpectedValueType == "" {
+			body.ExpectedValueType = "Integer"
+		}
+
+		m := &utils.SNMPMonitor{
+			FriendlyName:      body.FriendlyName,
+			Hostname:          body.Hostname,
+			Port:              body.Port,
+			CommunityString:   body.CommunityString,
+			OID:               body.OID,
+			SNMPVersion:       body.SNMPVersion,
+			PollingInterval:   body.PollingInterval,
+			Timeout:           body.Timeout,
+			Retries:           body.Retries,
+			ExpectedValueType: body.ExpectedValueType,
+		}
+		if err := r.monitorDB.CreateSNMPMonitor(r.ctx, m); err != nil {
+			if strings.Contains(err.Error(), "duplicate") {
+				respondError(w, http.StatusConflict, "monitor for this hostname:port:oid already exists")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.snmpMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "snmp_monitor_created", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusCreated, m)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) handleSNMPMonitorWithID(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/snmp/")
+	parts := strings.Split(path, "/")
+
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid monitor ID")
+		return
+	}
+	if len(parts) > 1 && parts[1] == "logs" {
+		limit := 50
+		if s := req.URL.Query().Get("limit"); s != "" {
+			if l, err := strconv.Atoi(s); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		logs, err := r.monitorDB.GetSNMPMonitorLogs(r.ctx, id, limit)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if logs == nil {
+			logs = []*utils.SNMPMonitorLog{}
+		}
+		respondJSON(w, http.StatusOK, logs)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		m, err := r.monitorDB.GetSNMPMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodPut:
+		var body utils.CreateSNMPMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.Port == 0 {
+			body.Port = 161
+		}
+		if body.PollingInterval <= 0 {
+			body.PollingInterval = 60
+		}
+		if body.Timeout <= 0 {
+			body.Timeout = 5
+		}
+
+		m := &utils.SNMPMonitor{
+			ID:                id,
+			FriendlyName:      body.FriendlyName,
+			Hostname:          body.Hostname,
+			Port:              body.Port,
+			CommunityString:   body.CommunityString,
+			OID:               body.OID,
+			SNMPVersion:       body.SNMPVersion,
+			PollingInterval:   body.PollingInterval,
+			Timeout:           body.Timeout,
+			Retries:           body.Retries,
+			ExpectedValueType: body.ExpectedValueType,
+		}
+		if err := r.monitorDB.UpdateSNMPMonitor(r.ctx, m); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.snmpMonitor.StopMonitor(id)
+		r.snmpMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "snmp_monitor_updated", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodDelete:
+		m, err := r.monitorDB.GetSNMPMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+
+		r.snmpMonitor.StopMonitor(id)
+
+		if err := r.monitorDB.DeleteSNMPMonitor(r.ctx, id); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "snmp_monitor_deleted", "monitor_id": id, "name": m.FriendlyName,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "deleted", "monitor_id": id, "name": m.FriendlyName,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) testSNMPConnection(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	if req.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var body utils.CreateSNMPMonitorRequest
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if body.Port == 0 {
+		body.Port = 161
+	}
+	if body.CommunityString == "" {
+		body.CommunityString = "public"
+	}
+	if body.SNMPVersion == "" {
+		body.SNMPVersion = "v2c"
+	}
+	if body.Timeout <= 0 {
+		body.Timeout = 5
+	}
+	if body.ExpectedValueType == "" {
+		body.ExpectedValueType = "Integer"
+	}
+
+	m := &utils.SNMPMonitor{
+		Hostname:          body.Hostname,
+		Port:              body.Port,
+		CommunityString:   body.CommunityString,
+		OID:               body.OID,
+		SNMPVersion:       body.SNMPVersion,
+		Timeout:           body.Timeout,
+		ExpectedValueType: body.ExpectedValueType,
+	}
+
+	value, responseMs, err := r.snmpMonitor.PollOnce(m)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     false,
+			"error":       err.Error(),
+			"hostname":    body.Hostname,
+			"port":        body.Port,
+			"oid":         body.OID,
+			"response_ms": 0,
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":      true,
+		"value":        value,
+		"hostname":     body.Hostname,
+		"port":         body.Port,
+		"oid":          body.OID,
+		"snmp_version": body.SNMPVersion,
+		"response_ms":  responseMs,
+	})
+}
+
+func (r *Router) handleSNMPWebSocket(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	conn, err := r.upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		log.Printf("SNMP WebSocket upgrade error: %v", err)
+		return
+	}
+
+	// Send initial state on connect
+	monitors, err := r.monitorDB.GetAllSNMPMonitors(r.ctx)
+	if err == nil {
+		if monitors == nil {
+			monitors = []*utils.SNMPMonitor{}
+		}
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type": "initial_state", "monitors": monitors,
+		})
+		conn.WriteMessage(websocket.TextMessage, payload)
+	}
+
+	client := &vlan.Client{
+		Hub:  r.wsHub,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+	client.Hub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
+}
 func (r *Router) testPortConnection(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
@@ -136,7 +710,7 @@ func (r *Router) testPortConnection(w http.ResponseWriter, req *http.Request) {
 			"response_time": resp.ResponseTime,
 		})
 	} else {
-		respondJSON(w, http.StatusOK, map[string]interface{}{ // 200 not 4xx — let frontend decide
+		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success":       false,
 			"status":        resp.Status,
 			"message":       resp.Message,
@@ -157,8 +731,8 @@ func (r *Router) handleMonitorWebSocket(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	// ✅ Send current state immediately on connect
-	monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) // ✅ was r.GetAllPortMonitors
+	//  Send current state immediately on connect
+	monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) //  was r.GetAllPortMonitors
 	if err == nil {
 		if monitors == nil {
 			monitors = []*utils.PortMonitor{}
@@ -189,7 +763,7 @@ func (r *Router) handlePortMonitors(w http.ResponseWriter, req *http.Request) {
 
 	switch req.Method {
 	case http.MethodGet:
-		monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) // ✅
+		monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) //
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -225,7 +799,7 @@ func (r *Router) handlePortMonitors(w http.ResponseWriter, req *http.Request) {
 			Retries:                body.Retries,
 			HeartbeatRetryInterval: body.HeartbeatRetryInterval,
 		}
-		if err := r.monitorDB.CreatePortMonitor(r.ctx, m); err != nil { // ✅
+		if err := r.monitorDB.CreatePortMonitor(r.ctx, m); err != nil { //
 			if strings.Contains(err.Error(), "duplicate") {
 				respondError(w, http.StatusConflict,
 					"monitor for this hostname:port already exists")
@@ -274,7 +848,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 				limit = l
 			}
 		}
-		logs, err := r.monitorDB.GetPortMonitorLogs(r.ctx, id, limit) // ✅
+		logs, err := r.monitorDB.GetPortMonitorLogs(r.ctx, id, limit) //
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -288,7 +862,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 
 	switch req.Method {
 	case http.MethodGet:
-		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) // ✅
+		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) //
 		if err != nil {
 			respondError(w, http.StatusNotFound, "monitor not found")
 			return
@@ -317,7 +891,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 			Retries:                body.Retries,
 			HeartbeatRetryInterval: body.HeartbeatRetryInterval,
 		}
-		if err := r.monitorDB.UpdatePortMonitor(r.ctx, m); err != nil { // ✅
+		if err := r.monitorDB.UpdatePortMonitor(r.ctx, m); err != nil { //
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -335,7 +909,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 		respondJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
-		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) // ✅
+		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) //
 		if err != nil {
 			respondError(w, http.StatusNotFound, "monitor not found")
 			return
@@ -343,7 +917,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 
 		r.portMonitor.StopMonitor(id)
 
-		if err := r.monitorDB.DeletePortMonitor(r.ctx, id); err != nil { // ✅
+		if err := r.monitorDB.DeletePortMonitor(r.ctx, id); err != nil { //
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -417,7 +991,7 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 	defer cancel()
 
 	if action == "monitor" {
-		// ✅ Parse optional body
+		//  Parse optional body
 		var monitorReq MonitorRequest
 		if req.Body != nil {
 			json.NewDecoder(req.Body).Decode(&monitorReq) // all fields optional
@@ -428,7 +1002,7 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 			vlanID = *targetInterface.VLANId
 		}
 
-		// ✅ Name priority: user provided > auto-generated
+		//  Name priority: user provided > auto-generated
 		networkName := monitorReq.Name
 		if networkName == "" {
 			if targetInterface.IsVLAN {
@@ -438,17 +1012,15 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 			}
 		}
 
-		// ✅ Scan interval priority: user provided > default
+		//  Scan interval priority: user provided > default
 		scanInterval := monitorReq.ScanInterval
 		if scanInterval <= 0 {
 			scanInterval = 30
 		}
-
 		ipAddr := targetInterface.IPv4
 		cidr := fmt.Sprintf("/%d", targetInterface.CIDR)
 		cidrFull := ipAddr + cidr
 		gateway := targetInterface.DefaultGateway
-
 		vlanConfig := &utils.VLANNetwork{
 			VLANId:              vlanID,
 			InterfaceName:       interfaceName,
@@ -465,7 +1037,7 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 		existing, _ := r.db.GetVLANNetworkByInterface(ctx, interfaceName)
 		if existing != nil {
 			existing.MonitoringEnabled = true
-			// ✅ Only override name/interval if user explicitly provided them
+			//  Only override name/interval if user explicitly provided them
 			if monitorReq.Name != "" {
 				existing.VLANName = monitorReq.Name
 			}
@@ -483,7 +1055,6 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 				return
 			}
 		}
-
 		log.Printf("[Monitor] Starting scan for %s with DB id=%d name=%s",
 			interfaceName, vlanConfig.ID, vlanConfig.VLANName)
 
@@ -492,12 +1063,11 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 				fmt.Sprintf("Failed to start monitoring: %v", err))
 			return
 		}
-
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"status":       "monitoring_started",
 			"interface":    interfaceName,
-			"network_id":   vlanConfig.ID,       // ✅ frontend uses to fetch devices
-			"network_name": vlanConfig.VLANName, // ✅ frontend displays this
+			"network_id":   vlanConfig.ID,       //  frontend uses to fetch devices
+			"network_name": vlanConfig.VLANName, //  frontend displays this
 			"interface_type": func() string {
 				if targetInterface.IsVLAN {
 					return "vlan"
@@ -514,19 +1084,16 @@ func (r *Router) handleInterfaceAction(w http.ResponseWriter, req *http.Request)
 			respondError(w, http.StatusNotFound, "Network not found in database")
 			return
 		}
-
 		existing.MonitoringEnabled = false
 		if err := r.db.UpdateVLANNetworkByInterface(ctx, existing, interfaceName); err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-
 		r.scanManager.StopVLANScanByInterface(existing.InterfaceName)
-
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"status":       "monitoring_stopped",
 			"interface":    interfaceName,
-			"network_id":   existing.ID, // ✅ useful for frontend cleanup
+			"network_id":   existing.ID,
 			"network_name": existing.VLANName,
 		})
 	}
@@ -556,7 +1123,7 @@ func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
 
 	vlans, _ := r.db.GetAllVLANs(ctx)
 
-	// ✅ Build map by interface_name instead of constructed name
+	//  Build map by interface_name instead of constructed name
 	vlanMap := make(map[string]*utils.VLANNetwork)
 	for _, v := range vlans {
 		if v.InterfaceName != "" {
@@ -583,7 +1150,7 @@ func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
 			IsMonitored:       false,
 		}
 
-		// ✅ Check by interface name
+		//  Check by interface name
 		if v, exists := vlanMap[iface.Name]; exists && v.MonitoringEnabled {
 			resp.IsMonitored = true
 			resp.NetworkDBId = &v.ID
@@ -856,7 +1423,7 @@ func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
 // 	defer cancel()
 
 // 	if action == "monitor" {
-// 		// ✅ Allow monitoring ANY interface type (physical or VLAN)
+// 		//  Allow monitoring ANY interface type (physical or VLAN)
 
 // 		// Determine VLAN ID (0 for non-VLAN interfaces)
 // 		vlanID := 0
@@ -877,7 +1444,7 @@ func (r *Router) getInterfaces(w http.ResponseWriter, req *http.Request) {
 
 // 		vlanConfig := &utils.VLANNetwork{
 // 			VLANId:              vlanID,
-// 			InterfaceName:       interfaceName, // ✅ Set interface name
+// 			InterfaceName:       interfaceName, //  Set interface name
 // 			VLANName:            networkName,
 // 			NetworkMode:         "auto", // Auto-detected
 // 			IPAddress:           &ipAddr,
@@ -1267,7 +1834,7 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, id int) {
 		return
 	}
 
-	existing, err := r.db.GetNetworkByID(r.ctx, id) // ✅ lookup by id
+	existing, err := r.db.GetNetworkByID(r.ctx, id) //  lookup by id
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Network not found")
 		return
@@ -1300,7 +1867,7 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, id int) {
 		}
 	}
 
-	if err := r.db.UpdateNetwork(r.ctx, existing); err != nil { // ✅ new UpdateNetwork
+	if err := r.db.UpdateNetwork(r.ctx, existing); err != nil { //  new UpdateNetwork
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -1316,11 +1883,11 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, id int) {
 	respondJSON(w, http.StatusOK, existing)
 }
 
-// ✅ deleteVLAN — use interface_name based delete
+// deleteVLAN — use interface_name based delete
 func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, id int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	existing, err := r.db.GetNetworkByID(r.ctx, id) // ✅ get first to find interface_name
+	existing, err := r.db.GetNetworkByID(r.ctx, id) //  get first to find interface_name
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Network not found")
 		return
@@ -1328,7 +1895,7 @@ func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, id int) {
 
 	r.scanManager.StopVLANScan(existing.VLANId)
 
-	if err := r.db.DeleteNetwork(r.ctx, existing.InterfaceName); // ✅ delete by interface_name
+	if err := r.db.DeleteNetwork(r.ctx, existing.InterfaceName); //  delete by interface_name
 	err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

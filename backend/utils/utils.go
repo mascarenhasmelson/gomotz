@@ -385,3 +385,39 @@ type CreateSNMPMonitorRequest struct {
 	Retries           int    `json:"retries"`
 	ExpectedValueType string `json:"expected_value_type"`
 }
+
+// ----------------------ping
+
+type PingMonitor struct {
+	ID               int        `json:"id"`
+	FriendlyName     string     `json:"friendly_name"`
+	Hostname         string     `json:"hostname"`
+	CheckInterval    int        `json:"check_interval"`
+	LatencyThreshold int        `json:"latency_threshold"`
+	Timeout          int        `json:"timeout"`
+	Status           string     `json:"status"`
+	LastLatencyMs    *int       `json:"last_latency_ms,omitempty"`
+	LastCheckedAt    *time.Time `json:"last_checked_at,omitempty"`
+	ErrorMessage     *string    `json:"error_message,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type PingMonitorLog struct {
+	ID           int       `json:"id"`
+	MonitorID    int       `json:"monitor_id"`
+	Status       string    `json:"status"`
+	LatencyMs    *int      `json:"latency_ms,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	CheckedAt    time.Time `json:"checked_at"`
+}
+
+type CreatePingMonitorRequest struct {
+	FriendlyName     string `json:"friendly_name"`
+	Hostname         string `json:"hostname"`
+	CheckInterval    int    `json:"check_interval"`
+	LatencyThreshold int    `json:"latency_threshold"`
+	Timeout          int    `json:"timeout"`
+}
+
+// -------------------ping end
