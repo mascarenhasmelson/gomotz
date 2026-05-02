@@ -421,3 +421,46 @@ type CreatePingMonitorRequest struct {
 }
 
 // -------------------ping end
+
+// --------------certificate monitor
+type SSLMonitor struct {
+	ID            int        `json:"id"`
+	Domain        string     `json:"domain"`
+	FriendlyName  string     `json:"friendly_name,omitempty"`
+	Port          int        `json:"port"`
+	CheckInterval int        `json:"check_interval"`
+	WarningDays   int        `json:"warning_days"`
+	CriticalDays  int        `json:"critical_days"`
+	Status        string     `json:"status"`
+	Issuer        *string    `json:"issuer,omitempty"`
+	Subject       *string    `json:"subject,omitempty"`
+	ValidFrom     *time.Time `json:"valid_from,omitempty"`
+	ValidUntil    *time.Time `json:"valid_until,omitempty"`
+	DaysRemaining *int       `json:"days_remaining,omitempty"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type SSLMonitorLog struct {
+	ID            int        `json:"id"`
+	MonitorID     int        `json:"monitor_id"`
+	Status        string     `json:"status"`
+	Issuer        *string    `json:"issuer,omitempty"`
+	ValidUntil    *time.Time `json:"valid_until,omitempty"`
+	DaysRemaining *int       `json:"days_remaining,omitempty"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	CheckedAt     time.Time  `json:"checked_at"`
+}
+
+type CreateSSLMonitorRequest struct {
+	Domain        string `json:"domain"`
+	FriendlyName  string `json:"friendly_name"`
+	Port          int    `json:"port"`
+	CheckInterval int    `json:"check_interval"`
+	WarningDays   int    `json:"warning_days"`
+	CriticalDays  int    `json:"critical_days"`
+}
+
+// --------------certificate monitor end------------------------

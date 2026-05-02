@@ -2,11 +2,14 @@ package monitorsrv
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +18,21 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )
+
+type SSLMonitorService struct {
+	db        *PostgresDB
+	ctx       context.Context
+	cancel    context.CancelFunc
+	mu        sync.RWMutex
+	monitors  map[int]*sslWorker
+	wg        sync.WaitGroup
+	broadcast BroadcastFunc
+}
+
+type sslWorker struct {
+	monitor *utils.SSLMonitor
+	cancel  context.CancelFunc
+}
 
 type BroadcastFunc func(payload []byte)
 
@@ -468,4 +486,247 @@ func tcpStatusToMonitorStatus(tcpStatus string) string {
 	default:
 		return "down"
 	}
+}
+
+func NewSSLMonitorService(db *PostgresDB, broadcast BroadcastFunc) *SSLMonitorService {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &SSLMonitorService{
+		db:        db,
+		ctx:       ctx,
+		cancel:    cancel,
+		monitors:  make(map[int]*sslWorker),
+		broadcast: broadcast,
+	}
+}
+
+func (s *SSLMonitorService) RecoverFromDB() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	monitors, err := s.db.GetAllSSLMonitors(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("[SSL MONITOR] Recovering %d monitor(s)", len(monitors))
+	for _, m := range monitors {
+		s.StartMonitor(m)
+	}
+	return nil
+}
+
+func (s *SSLMonitorService) StartMonitor(m *utils.SSLMonitor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if w, exists := s.monitors[m.ID]; exists {
+		w.cancel()
+	}
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.monitors[m.ID] = &sslWorker{monitor: m, cancel: cancel}
+
+	s.wg.Add(1)
+	go s.runWorker(ctx, m)
+
+	log.Printf("[SSL MONITOR] Started %d — %s every %ds",
+		m.ID, m.Domain, m.CheckInterval)
+}
+
+func (s *SSLMonitorService) StopMonitor(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if w, exists := s.monitors[id]; exists {
+		w.cancel()
+		delete(s.monitors, id)
+		log.Printf("[SSL MONITOR] Stopped monitor %d", id)
+	}
+}
+
+func (s *SSLMonitorService) Shutdown() {
+	s.cancel()
+	s.wg.Wait()
+	log.Println("[SSL MONITOR] All monitors stopped")
+}
+
+func (s *SSLMonitorService) runWorker(ctx context.Context, m *utils.SSLMonitor) {
+	defer s.wg.Done()
+
+	// Check immediately on start
+	s.checkAndSave(m)
+
+	ticker := time.NewTicker(time.Duration(m.CheckInterval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkAndSave(m)
+		}
+	}
+}
+
+func (s *SSLMonitorService) checkAndSave(m *utils.SSLMonitor) {
+	result, err := s.checkCertificate(m.Domain, m.Port, m.WarningDays, m.CriticalDays)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err != nil {
+		errMsg := err.Error()
+		log.Printf("[SSL MONITOR] %s → error [%s]", m.Domain, errMsg)
+
+		s.db.UpdateSSLMonitorStatus(ctx, m.ID,
+			"error", "", "", nil, nil, nil, &errMsg)
+
+		s.db.InsertSSLMonitorLog(ctx, &utils.SSLMonitorLog{
+			MonitorID:    m.ID,
+			Status:       "error",
+			ErrorMessage: &errMsg,
+		})
+
+		s.broadcastUpdate(m, "error", 0, "", nil, &errMsg)
+		return
+	}
+
+	log.Printf("[SSL MONITOR] %s → %s [%d days] issuer: %s",
+		m.Domain, result.Status, result.DaysRemaining, result.Issuer)
+
+	s.db.UpdateSSLMonitorStatus(ctx, m.ID,
+		result.Status, result.Issuer, result.Subject,
+		&result.ValidFrom, &result.ValidUntil,
+		&result.DaysRemaining, nil,
+	)
+
+	s.db.InsertSSLMonitorLog(ctx, &utils.SSLMonitorLog{
+		MonitorID:     m.ID,
+		Status:        result.Status,
+		Issuer:        &result.Issuer,
+		ValidUntil:    &result.ValidUntil,
+		DaysRemaining: &result.DaysRemaining,
+	})
+
+	s.broadcastUpdate(m, result.Status, result.DaysRemaining, result.Issuer,
+		&result.ValidUntil, nil)
+}
+
+type certResult struct {
+	Status        string
+	Issuer        string
+	Subject       string
+	ValidFrom     time.Time
+	ValidUntil    time.Time
+	DaysRemaining int
+}
+
+func (s *SSLMonitorService) checkCertificate(domain string, port, warningDays, criticalDays int) (*certResult, error) {
+	// ✅ Clean domain — remove http/https prefix
+	domain = cleanDomain(domain)
+
+	addr := fmt.Sprintf("%s:%d", domain, port)
+
+	conn, err := tls.DialWithDialer(
+		&net.Dialer{Timeout: 10 * time.Second},
+		"tcp",
+		addr,
+		&tls.Config{
+			ServerName:         domain,
+			InsecureSkipVerify: false,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("TLS connect failed: %w", err)
+	}
+	defer conn.Close()
+
+	certs := conn.ConnectionState().PeerCertificates
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no certificates found")
+	}
+
+	// ✅ Use leaf certificate (first one)
+	cert := certs[0]
+	now := time.Now()
+	daysRemaining := int(math.Ceil(cert.NotAfter.Sub(now).Hours() / 24))
+
+	// ✅ Determine status based on thresholds
+	var status string
+	switch {
+	case now.After(cert.NotAfter):
+		status = "expired"
+	case daysRemaining <= criticalDays:
+		status = "critical"
+	case daysRemaining <= warningDays:
+		status = "warning"
+	default:
+		status = "valid"
+	}
+
+	// ✅ Extract issuer
+	issuer := cert.Issuer.Organization
+	issuerStr := "Unknown"
+	if len(issuer) > 0 {
+		issuerStr = strings.Join(issuer, ", ")
+	} else if cert.Issuer.CommonName != "" {
+		issuerStr = cert.Issuer.CommonName
+	}
+
+	return &certResult{
+		Status:        status,
+		Issuer:        issuerStr,
+		Subject:       cert.Subject.CommonName,
+		ValidFrom:     cert.NotBefore,
+		ValidUntil:    cert.NotAfter,
+		DaysRemaining: daysRemaining,
+	}, nil
+}
+
+func (s *SSLMonitorService) broadcastUpdate(m *utils.SSLMonitor, status string, daysRemaining int,
+	issuer string, validUntil *time.Time, errMsg *string,
+) {
+	if s.broadcast == nil {
+		return
+	}
+
+	validUntilStr := ""
+	if validUntil != nil {
+		validUntilStr = validUntil.Format(time.RFC3339)
+	}
+	errStr := ""
+	if errMsg != nil {
+		errStr = *errMsg
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":           "ssl_monitor_update",
+		"monitor_id":     m.ID,
+		"domain":         m.Domain,
+		"friendly_name":  m.FriendlyName,
+		"status":         status,
+		"days_remaining": daysRemaining,
+		"issuer":         issuer,
+		"valid_until":    validUntilStr,
+		"warning_days":   m.WarningDays,
+		"critical_days":  m.CriticalDays,
+		"error":          errStr,
+		"checked_at":     time.Now().UTC(),
+	})
+	s.broadcast(payload)
+}
+
+// CheckOnce does a single check — used for test connection
+func (s *SSLMonitorService) CheckOnce(domain string, port, warningDays, criticalDays int) (*certResult, error) {
+	return s.checkCertificate(domain, port, warningDays, criticalDays)
+}
+
+func cleanDomain(domain string) string {
+	domain = strings.TrimPrefix(domain, "https://")
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimPrefix(domain, "www.")
+	domain = strings.Split(domain, "/")[0] // remove path
+	domain = strings.Split(domain, ":")[0] // remove port
+	return strings.TrimSpace(domain)
 }

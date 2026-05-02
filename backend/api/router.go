@@ -33,6 +33,7 @@ type Router struct {
 	portMonitor *monitorsrv.PortMonitorService
 	snmpMonitor *monitorsrv.SNMPMonitorService
 	pingMonitor *monitorsrv.PingMonitorService
+	sslMonitor  *monitorsrv.SSLMonitorService
 	wsHub       *ws.Hub
 	mux         *http.ServeMux
 	upgrader    websocket.Upgrader
@@ -44,7 +45,7 @@ type MonitorRequest struct {
 
 var wsMu sync.Mutex
 
-func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, monitorDB *monitorsrv.PostgresDB, scanManager *vlan.VLANScanManager, portMonitor *monitorsrv.PortMonitorService, snmpMonitor *monitorsrv.SNMPMonitorService, pingMonitor *monitorsrv.PingMonitorService, wsHub *ws.Hub) *http.ServeMux {
+func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresDB, monitorDB *monitorsrv.PostgresDB, scanManager *vlan.VLANScanManager, portMonitor *monitorsrv.PortMonitorService, snmpMonitor *monitorsrv.SNMPMonitorService, pingMonitor *monitorsrv.PingMonitorService, sslMonitor *monitorsrv.SSLMonitorService, wsHub *ws.Hub) *http.ServeMux {
 	r := &Router{
 		ctx:         ctx,
 		pool:        pool,
@@ -54,6 +55,7 @@ func NewRouter(ctx context.Context, pool *pgxpool.Pool, database *vlan.PostgresD
 		portMonitor: portMonitor,
 		snmpMonitor: snmpMonitor,
 		pingMonitor: pingMonitor,
+		sslMonitor:  sslMonitor,
 		wsHub:       wsHub,
 		mux:         http.NewServeMux(),
 		upgrader: websocket.Upgrader{
@@ -109,6 +111,293 @@ func (r *Router) routes() {
 	r.mux.HandleFunc("/v1/api/ping/", r.handlePingMonitorWithID)
 	r.mux.HandleFunc("/v1/api/ws/ping", r.handlePingWebSocket)
 
+	r.mux.HandleFunc("/v1/api/ssl", r.handleSSLMonitors)
+	r.mux.HandleFunc("/v1/api/ssl/test", r.testSSLCertificate) // ✅ before /ssl/
+	r.mux.HandleFunc("/v1/api/ssl/", r.handleSSLMonitorWithID)
+	r.mux.HandleFunc("/v1/api/ws/ssl", r.handleSSLWebSocket)
+}
+
+func (r *Router) handleSSLMonitors(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	switch req.Method {
+	case http.MethodGet:
+		monitors, err := r.monitorDB.GetAllSSLMonitors(r.ctx)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if monitors == nil {
+			monitors = []*utils.SSLMonitor{}
+		}
+		respondJSON(w, http.StatusOK, monitors)
+
+	case http.MethodPost:
+		var body utils.CreateSSLMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.Domain == "" {
+			respondError(w, http.StatusBadRequest, "domain required")
+			return
+		}
+
+		// Defaults
+		if body.Port == 0 {
+			body.Port = 443
+		}
+		if body.CheckInterval <= 0 {
+			body.CheckInterval = 3600
+		}
+		if body.WarningDays <= 0 {
+			body.WarningDays = 30
+		}
+		if body.CriticalDays <= 0 {
+			body.CriticalDays = 7
+		}
+		if body.FriendlyName == "" {
+			body.FriendlyName = body.Domain
+		}
+
+		m := &utils.SSLMonitor{
+			Domain:        body.Domain,
+			FriendlyName:  body.FriendlyName,
+			Port:          body.Port,
+			CheckInterval: body.CheckInterval,
+			WarningDays:   body.WarningDays,
+			CriticalDays:  body.CriticalDays,
+		}
+		if err := r.monitorDB.CreateSSLMonitor(r.ctx, m); err != nil {
+			if strings.Contains(err.Error(), "duplicate") {
+				respondError(w, http.StatusConflict, "monitor for this domain already exists")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.sslMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ssl_monitor_created", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusCreated, m)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) handleSSLMonitorWithID(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(req.URL.Path, "/v1/api/ssl/")
+	parts := strings.Split(path, "/")
+
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid monitor ID")
+		return
+	}
+
+	// GET /v1/api/ssl/1/logs
+	if len(parts) > 1 && parts[1] == "logs" {
+		limit := 50
+		if s := req.URL.Query().Get("limit"); s != "" {
+			if l, err := strconv.Atoi(s); err == nil && l > 0 {
+				limit = l
+			}
+		}
+		logs, err := r.monitorDB.GetSSLMonitorLogs(r.ctx, id, limit)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if logs == nil {
+			logs = []*utils.SSLMonitorLog{}
+		}
+		respondJSON(w, http.StatusOK, logs)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		m, err := r.monitorDB.GetSSLMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodPut:
+		var body utils.CreateSSLMonitorRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		if body.Port == 0 {
+			body.Port = 443
+		}
+		if body.CheckInterval <= 0 {
+			body.CheckInterval = 3600
+		}
+		if body.WarningDays <= 0 {
+			body.WarningDays = 30
+		}
+		if body.CriticalDays <= 0 {
+			body.CriticalDays = 7
+		}
+
+		m := &utils.SSLMonitor{
+			ID:            id,
+			FriendlyName:  body.FriendlyName,
+			Port:          body.Port,
+			CheckInterval: body.CheckInterval,
+			WarningDays:   body.WarningDays,
+			CriticalDays:  body.CriticalDays,
+		}
+		if err := r.monitorDB.UpdateSSLMonitor(r.ctx, m); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		r.sslMonitor.StopMonitor(id)
+		r.sslMonitor.StartMonitor(m)
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ssl_monitor_updated", "monitor": m,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, m)
+
+	case http.MethodDelete:
+		m, err := r.monitorDB.GetSSLMonitorByID(r.ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+
+		r.sslMonitor.StopMonitor(id)
+
+		if err := r.monitorDB.DeleteSSLMonitor(r.ctx, id); err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		if payload, err := json.Marshal(map[string]interface{}{
+			"type": "ssl_monitor_deleted", "monitor_id": id, "domain": m.Domain,
+		}); err == nil {
+			r.wsHub.Broadcast <- payload
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "deleted", "monitor_id": id, "domain": m.Domain,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) testSSLCertificate(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+	if req.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var body struct {
+		Domain       string `json:"domain"`
+		Port         int    `json:"port"`
+		WarningDays  int    `json:"warning_days"`
+		CriticalDays int    `json:"critical_days"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if body.Domain == "" {
+		respondError(w, http.StatusBadRequest, "domain required")
+		return
+	}
+	if body.Port == 0 {
+		body.Port = 443
+	}
+	if body.WarningDays == 0 {
+		body.WarningDays = 30
+	}
+	if body.CriticalDays == 0 {
+		body.CriticalDays = 7
+	}
+
+	result, err := r.sslMonitor.CheckOnce(body.Domain, body.Port,
+		body.WarningDays, body.CriticalDays)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"domain":  body.Domain,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":        true,
+		"domain":         body.Domain,
+		"status":         result.Status,
+		"issuer":         result.Issuer,
+		"subject":        result.Subject,
+		"valid_from":     result.ValidFrom,
+		"valid_until":    result.ValidUntil,
+		"days_remaining": result.DaysRemaining,
+	})
+}
+
+func (r *Router) handleSSLWebSocket(w http.ResponseWriter, req *http.Request) {
+	if EnableCORS(&w, req) {
+		return
+	}
+
+	conn, err := r.upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		log.Printf("SSL WebSocket upgrade error: %v", err)
+		return
+	}
+
+	monitors, err := r.monitorDB.GetAllSSLMonitors(r.ctx)
+	if err == nil {
+		if monitors == nil {
+			monitors = []*utils.SSLMonitor{}
+		}
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type": "initial_state", "monitors": monitors,
+		})
+		conn.WriteMessage(websocket.TextMessage, payload)
+	}
+
+	client := &vlan.Client{
+		Hub:  r.wsHub,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+	client.Hub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
 }
 func (r *Router) handlePingMonitors(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {

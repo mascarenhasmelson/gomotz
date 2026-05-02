@@ -2,6 +2,7 @@ package monitorsrv
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -418,6 +419,138 @@ func (p *PostgresDB) GetPingMonitorLogs(ctx context.Context, monitorID, limit in
 		if err := rows.Scan(
 			&l.ID, &l.MonitorID, &l.Status,
 			&l.LatencyMs, &l.ErrorMessage, &l.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	return logs, rows.Err()
+}
+
+func (p *PostgresDB) CreateSSLMonitor(ctx context.Context, m *utils.SSLMonitor) error {
+	query := `
+        INSERT INTO ssl_monitors
+        (domain, friendly_name, port, check_interval, warning_days, critical_days)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, status, created_at, updated_at
+    `
+	return p.pool.QueryRow(ctx, query,
+		m.Domain, m.FriendlyName, m.Port,
+		m.CheckInterval, m.WarningDays, m.CriticalDays,
+	).Scan(&m.ID, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+}
+
+func (p *PostgresDB) GetAllSSLMonitors(ctx context.Context) ([]*utils.SSLMonitor, error) {
+	rows, err := p.pool.Query(ctx, `
+        SELECT id, domain, friendly_name, port, check_interval,
+               warning_days, critical_days, status, issuer, subject,
+               valid_from, valid_until, days_remaining,
+               last_checked_at, error_message, created_at, updated_at
+        FROM ssl_monitors ORDER BY domain ASC
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var monitors []*utils.SSLMonitor
+	for rows.Next() {
+		m := &utils.SSLMonitor{}
+		if err := rows.Scan(
+			&m.ID, &m.Domain, &m.FriendlyName, &m.Port,
+			&m.CheckInterval, &m.WarningDays, &m.CriticalDays,
+			&m.Status, &m.Issuer, &m.Subject,
+			&m.ValidFrom, &m.ValidUntil, &m.DaysRemaining,
+			&m.LastCheckedAt, &m.ErrorMessage,
+			&m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		monitors = append(monitors, m)
+	}
+	return monitors, rows.Err()
+}
+
+func (p *PostgresDB) GetSSLMonitorByID(ctx context.Context, id int) (*utils.SSLMonitor, error) {
+	m := &utils.SSLMonitor{}
+	err := p.pool.QueryRow(ctx, `
+        SELECT id, domain, friendly_name, port, check_interval,
+               warning_days, critical_days, status, issuer, subject,
+               valid_from, valid_until, days_remaining,
+               last_checked_at, error_message, created_at, updated_at
+        FROM ssl_monitors WHERE id = $1
+    `, id).Scan(
+		&m.ID, &m.Domain, &m.FriendlyName, &m.Port,
+		&m.CheckInterval, &m.WarningDays, &m.CriticalDays,
+		&m.Status, &m.Issuer, &m.Subject,
+		&m.ValidFrom, &m.ValidUntil, &m.DaysRemaining,
+		&m.LastCheckedAt, &m.ErrorMessage,
+		&m.CreatedAt, &m.UpdatedAt,
+	)
+	return m, err
+}
+
+func (p *PostgresDB) UpdateSSLMonitor(ctx context.Context, m *utils.SSLMonitor) error {
+	_, err := p.pool.Exec(ctx, `
+        UPDATE ssl_monitors
+        SET friendly_name = $1, port = $2, check_interval = $3,
+            warning_days = $4, critical_days = $5, updated_at = NOW()
+        WHERE id = $6
+    `, m.FriendlyName, m.Port, m.CheckInterval,
+		m.WarningDays, m.CriticalDays, m.ID)
+	return err
+}
+
+func (p *PostgresDB) UpdateSSLMonitorStatus(ctx context.Context, id int,
+	status, issuer, subject string,
+	validFrom, validUntil *time.Time,
+	daysRemaining *int,
+	errMsg *string,
+) error {
+	_, err := p.pool.Exec(ctx, `
+        UPDATE ssl_monitors
+        SET status = $1, issuer = $2, subject = $3,
+            valid_from = $4, valid_until = $5,
+            days_remaining = $6, last_checked_at = NOW(),
+            error_message = $7
+        WHERE id = $8
+    `, status, issuer, subject, validFrom, validUntil,
+		daysRemaining, errMsg, id)
+	return err
+}
+
+func (p *PostgresDB) DeleteSSLMonitor(ctx context.Context, id int) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM ssl_monitors WHERE id = $1`, id)
+	return err
+}
+
+func (p *PostgresDB) InsertSSLMonitorLog(ctx context.Context, l *utils.SSLMonitorLog) error {
+	_, err := p.pool.Exec(ctx, `
+        INSERT INTO ssl_monitor_logs
+        (monitor_id, status, issuer, valid_until, days_remaining, error_message)
+        VALUES ($1, $2, $3, $4, $5, $6)
+    `, l.MonitorID, l.Status, l.Issuer, l.ValidUntil, l.DaysRemaining, l.ErrorMessage)
+	return err
+}
+
+func (p *PostgresDB) GetSSLMonitorLogs(ctx context.Context, monitorID, limit int) ([]*utils.SSLMonitorLog, error) {
+	rows, err := p.pool.Query(ctx, `
+        SELECT id, monitor_id, status, issuer, valid_until, days_remaining, error_message, checked_at
+        FROM ssl_monitor_logs
+        WHERE monitor_id = $1
+        ORDER BY checked_at DESC LIMIT $2
+    `, monitorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*utils.SSLMonitorLog
+	for rows.Next() {
+		l := &utils.SSLMonitorLog{}
+		if err := rows.Scan(
+			&l.ID, &l.MonitorID, &l.Status, &l.Issuer,
+			&l.ValidUntil, &l.DaysRemaining, &l.ErrorMessage, &l.CheckedAt,
 		); err != nil {
 			return nil, err
 		}

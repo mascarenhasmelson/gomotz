@@ -156,19 +156,19 @@
           <div class="stat-item">
             <span class="stat-label">Uptime (24h)</span>
             <span class="stat-value" :class="getUptimeClass(monitor.stats?.uptime || 0)">
-              {{ monitor.stats?.uptime || 0 }}%
+              {{ monitor.stats?.uptime ?? 0 }}%
             </span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Avg Latency</span>
             <span class="stat-value" :class="getLatencyClass(monitor.stats?.avg_latency || 0)">
-              {{ monitor.stats?.avg_latency || 0 }}ms
+              {{ monitor.stats?.avg_latency ?? 0 }}ms
             </span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Packet Loss</span>
             <span class="stat-value" :class="getPacketLossClass(monitor.stats?.packet_loss || 0)">
-              {{ monitor.stats?.packet_loss || 0 }}%
+              {{ monitor.stats?.packet_loss ?? 0 }}%
             </span>
           </div>
           <div class="stat-item">
@@ -178,8 +178,8 @@
         </div>
 
         <!-- Response Time -->
-        <div class="response-time" :class="getLatencyClass(monitor.last_latency || 0)">
-          {{ monitor.last_latency || 0 }}ms
+        <div class="response-time" :class="getLatencyClass(monitor.last_latency_ms || 0)">
+          {{ monitor.last_latency_ms || 0 }}ms
         </div>
       </div>
 
@@ -333,15 +333,15 @@ export default {
         }, 30000)
       }
       
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          console.log('📨 WebSocket message received:', data.type, data)
-          handleWebSocketMessage(data)
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error, event.data)
-        }
-      }
+    ws.onmessage = (event) => {
+    try {
+        const data = JSON.parse(event.data)
+        console.log('📨 WS received:', data.type, JSON.stringify(data))  // ✅ add this
+        handleWebSocketMessage(data)
+    } catch (error) {
+        console.error('Failed to parse WS message:', error)
+    }
+}
       
       ws.onerror = (error) => {
         console.error('❌ WebSocket error:', error)
@@ -380,11 +380,19 @@ export default {
       switch (data.type) {
         case 'initial_state':
           console.log('📋 Initial state received:', data.monitors?.length, 'monitors')
-          monitors.value = (data.monitors || []).map(m => ({
-            ...m,
-            status: m.status || 'pending',
-            heartbeats: m.heartbeats || []
-          }))
+          // monitors.value = (data.monitors || []).map(m => ({
+          //   ...m,
+          //   status: m.status || 'pending',
+          //   heartbeats: m.heartbeats || []
+          // }))
+          monitors.value = (data || []).map(m => ({
+    ...m,
+    status: m.status || 'pending',
+    last_latency: m.last_latency_ms || 0,    // ✅ map for display
+    last_check: m.last_checked_at || null,
+    heartbeats: [],
+    stats: { uptime: 0, avg_latency: 0, packet_loss: 0 }
+}))
           loading.value = false
           break
           
@@ -434,45 +442,104 @@ export default {
           console.log('Unknown message type:', data.type, data)
       }
     }
-
-    // Update monitor with new ping data
-    const updateMonitorWithPing = (data) => {
-      const monitor = monitors.value.find(m => m.id === data.monitor_id)
-      if (!monitor) {
-        console.warn('Monitor not found:', data.monitor_id)
+const updateMonitorWithPing = (data) => {
+    const monitor = monitors.value.find(m => m.id === data.monitor_id)
+    if (!monitor) {
+        console.warn('[PING] Monitor not found:', data.monitor_id)
         return
-      }
-      
-      console.log(`🔄 Updating monitor ${monitor.hostname}: status=${data.status}, latency=${data.latency}ms`)
-      
-      // Update basic info
-      monitor.last_latency = data.latency || 0
-      // monitor.last_checked_at = data.checked_at || new Date().toISOString()
-      monitor.last_latency = data.latency_ms || 0  // keep for display
-      monitor.status = data.status || 'pending'
-      latency: data.latency_ms
-      
-      // Update stats if provided
-      if (data.stats) {
-        monitor.stats = data.stats
-      }
-      
-      // Add to heartbeat history
-      if (!monitor.heartbeats) monitor.heartbeats = []
-      monitor.heartbeats.push({
-        status: data.status,
-        latency: data.latency,
-        timestamp: data.checked_at || new Date().toISOString()
-      })
-      
-      // Keep last 24 heartbeats
-      if (monitor.heartbeats.length > 24) {
-        monitor.heartbeats = monitor.heartbeats.slice(-24)
-      }
-      
-      // Force Vue reactivity
-      monitors.value = [...monitors.value]
     }
+
+    console.log('[PING] Update received:', data)
+
+    // ✅ Update all fields correctly
+    monitor.last_latency_ms = data.latency_ms || 0
+    monitor.last_latency = data.latency_ms || 0      // for display
+    monitor.last_checked_at = data.checked_at
+    monitor.status = data.status
+    monitor.error_message = data.error || null
+
+    // ✅ Update stats
+    if (!monitor.stats) {
+        monitor.stats = { uptime: 0, avg_latency: 0, packet_loss: 0 }
+    }
+
+    // ✅ Add to heartbeat history
+    if (!monitor.heartbeats) monitor.heartbeats = []
+    monitor.heartbeats.push({
+        status: data.status,
+        latency: data.latency_ms,                    // ✅ correct field
+        timestamp: data.checked_at
+    })
+    if (monitor.heartbeats.length > 24) {
+        monitor.heartbeats = monitor.heartbeats.slice(-24)
+    }
+
+    // ✅ Recalculate stats from heartbeats
+    monitor.stats = calculateStats(monitor.heartbeats, monitor.latency_threshold)
+
+    // ✅ Force Vue reactivity
+    monitors.value = [...monitors.value]
+}
+
+// ✅ Add this helper
+const calculateStats = (heartbeats, threshold) => {
+    if (!heartbeats || heartbeats.length === 0) {
+        return { uptime: 0, avg_latency: 0, packet_loss: 0 }
+    }
+
+    const total = heartbeats.length
+    const up = heartbeats.filter(h => h.status === 'up' || h.status === 'warning').length
+    const latencies = heartbeats
+        .filter(h => h.latency && h.latency > 0)
+        .map(h => h.latency)
+
+    const avgLatency = latencies.length > 0
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0
+
+    const packetLoss = Math.round(((total - up) / total) * 100)
+    const uptime = Math.round((up / total) * 100)
+
+    return { uptime, avg_latency: avgLatency, packet_loss: packetLoss }
+}
+    // Update monitor with new ping data
+    // const updateMonitorWithPing = (data) => {
+    //   const monitor = monitors.value.find(m => m.id === data.monitor_id)
+    //   if (!monitor) {
+    //     console.warn('Monitor not found:', data.monitor_id)
+    //     return
+    //   }
+      
+    //   console.log(`🔄 Updating monitor ${monitor.hostname}: status=${data.status}, latency=${data.latency}ms`)
+      
+    //   // Update basic info
+    //   monitor.last_latency = data.latency || 0
+    //   // monitor.last_checked_at = data.checked_at || new Date().toISOString()
+    //   monitor.last_latency = data.latency_ms || 0  // keep for display
+    //   monitor.status = data.status || 'pending'
+    //   latency: data.latency_ms
+      
+    //   // Update stats if provided
+    //   if (data.stats) {
+    //     monitor.stats = data.stats
+    //   }
+      
+    //   // Add to heartbeat history
+    //   if (!monitor.heartbeats) monitor.heartbeats = []
+    //   monitor.heartbeats.push({
+    //     status: data.status,
+    //     latency: data.latency,
+    //     timestamp: data.checked_at || new Date().toISOString()
+    //   })
+      
+    //   // Keep last 24 heartbeats
+    //   if (monitor.heartbeats.length > 24) {
+    //     monitor.heartbeats = monitor.heartbeats.slice(-24)
+    //   }
+      
+    //   // Force Vue reactivity
+    //   monitors.value = [...monitors.value]
+    // }
 
     // Get heartbeats for display
     const getHeartbeats = (monitor) => {

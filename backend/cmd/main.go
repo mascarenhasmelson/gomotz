@@ -119,6 +119,14 @@ func main() {
 		log.Println("->Ping monitors recovered from database")
 	}
 
+	sslSvc := monitorsrv.NewSSLMonitorService(monitorDB, func(payload []byte) {
+		wsHub.Broadcast <- payload
+	})
+	if err := sslSvc.RecoverFromDB(); err != nil {
+		log.Printf(" SSL monitor recovery: %v", err)
+	} else {
+		log.Println("->SSL monitors recovered from database")
+	}
 	//  HTTP server
 	server := &http.Server{
 		Addr: ":8082",
@@ -131,6 +139,7 @@ func main() {
 			monitorSvc, //
 			snmpSvc,
 			pingSvc,
+			sslSvc,
 			wsHub,
 		),
 		ReadTimeout:  15 * time.Second,
@@ -151,6 +160,9 @@ func main() {
 		log.Println("->Port monitors stopped")
 		pingSvc.Shutdown()
 		log.Println("->Ping monitors stopped")
+
+		sslSvc.Shutdown()
+		log.Println("->ssl monitors stopped")
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		// shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer shutdownCancel()
