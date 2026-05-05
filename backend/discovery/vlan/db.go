@@ -659,7 +659,6 @@ func (p *PostgresDB) CreateVLANNetworkByInterface(ctx context.Context, vlan *uti
 	).Scan(&vlan.ID, &vlan.CreatedAt, &vlan.UpdatedAt)
 }
 
-// UpdateVLANNetworkByInterface updates by interface name
 func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *utils.VLANNetwork, interfaceName string) error {
 	if vlan.NetworkMode == "auto" {
 		//  For auto mode — persist IP/CIDR so recovery works on restart
@@ -689,7 +688,6 @@ func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *uti
 	}
 
 	if vlan.NetworkMode == "dhcp" {
-		// dhcp — no static IP to store
 		query := `
 			UPDATE vlan_networks
 			SET vlan_name = $1,
@@ -778,7 +776,6 @@ func (p *PostgresDB) GetAllDevicesForARPScan(ctx context.Context) ([]*ARPScanDev
 	return devices, rows.Err()
 }
 
-// UpdateDeviceStatusByNetworkAndMAC updates device status using network_id + mac
 func (p *PostgresDB) UpdateDeviceStatusByNetworkAndMAC(ctx context.Context, networkID int, macAddress, status string) error {
 	_, err := p.pool.Exec(ctx, `
 		UPDATE discovered_devices

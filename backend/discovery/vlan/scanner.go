@@ -68,23 +68,20 @@ type VendorLookup interface {
 }
 
 type ARPScanner struct {
-	iface     *net.Interface
-	subnet    *net.IPNet
-	localIP   net.IP
-	localAddr netip.Addr
-	localMAC  net.HardwareAddr
-	client    *arp.Client
-
-	HostMap   map[string]*Host
-	HostMutex sync.RWMutex
-
+	iface             *net.Interface
+	subnet            *net.IPNet
+	localIP           net.IP
+	localAddr         netip.Addr
+	localMAC          net.HardwareAddr
+	client            *arp.Client
+	HostMap           map[string]*Host
+	HostMutex         sync.RWMutex
 	scanInterval      time.Duration
 	replyWindow       time.Duration
 	fullSweepInterval time.Duration
 	dupCheckInterval  time.Duration
 	pendingConflicts  map[string][]net.HardwareAddr
 	conflictMu        sync.Mutex
-
 	ctx               context.Context
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
@@ -138,16 +135,18 @@ func NewARPScanner(subnetCIDR string, scanInterval time.Duration) (*ARPScanner, 
 	}, nil
 }
 
-func (s *ARPScanner) SetVendorLookup(v VendorLookup)            { s.vendorLookup = v }
-func (s *ARPScanner) SetHostnameDiscovery(h *HostnameDiscovery) { s.hostnameDiscovery = h }
+func (s *ARPScanner) SetVendorLookup(v VendorLookup) {
+	s.vendorLookup = v
+}
+func (s *ARPScanner) SetHostnameDiscovery(h *HostnameDiscovery) {
+	s.hostnameDiscovery = h
+}
 
 func (s *ARPScanner) Start() {
 	log.Printf("[ARP] Starting for %s (scan: %v, full sweep: %v, dup check: %v)",
 		s.subnet, s.scanInterval, s.fullSweepInterval, s.dupCheckInterval)
-
 	s.wg.Add(1)
 	go s.receiver()
-
 	time.Sleep(200 * time.Millisecond)
 	s.wg.Add(1)
 	go s.sender()
@@ -170,24 +169,20 @@ func (s *ARPScanner) Stop() {
 
 func (s *ARPScanner) sender() {
 	defer s.wg.Done()
-	log.Printf("ARP 1 initial full subnet sweep: %s", s.subnet)
+	log.Printf("ARP 1 initial full subnet scan: %s", s.subnet)
 	s.fullSubnetSweep()
-
 	targetedTicker := time.NewTicker(s.scanInterval)
 	fullSweepTicker := time.NewTicker(s.fullSweepInterval)
 	dupCheckTicker := time.NewTicker(s.dupCheckInterval)
 	defer targetedTicker.Stop()
 	defer fullSweepTicker.Stop()
 	defer dupCheckTicker.Stop()
-
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-targetedTicker.C:
-
 			s.targetedScan()
-
 		case <-fullSweepTicker.C:
 			log.Printf("ARP 3  periodic full sweep (new device discovery): %s", s.subnet)
 			s.fullSubnetSweep()
@@ -222,7 +217,6 @@ func (s *ARPScanner) fullSubnetSweep() {
 }
 
 func (s *ARPScanner) targetedScan() {
-
 	s.HostMutex.Lock()
 	hosts := make([]*Host, 0, len(s.HostMap))
 	for _, h := range s.HostMap {
@@ -248,14 +242,12 @@ func (s *ARPScanner) targetedScan() {
 	case <-s.ctx.Done():
 		return
 	}
-
 	s.checkOfflineByFlag()
 }
 
 func (s *ARPScanner) checkOfflineByFlag() {
 	s.HostMutex.Lock()
 	defer s.HostMutex.Unlock()
-
 	for _, host := range s.HostMap {
 		if host.flag {
 			continue
@@ -280,14 +272,13 @@ func (s *ARPScanner) checkOfflineByFlag() {
 // 	defer s.HostMutex.Unlock()
 
 // 	now := time.Now()
-// 	offlineThreshold := 3 * s.scanInterval // 👈 tune this
+// 	offlineThreshold := 3 * s.scanInterval //
 
 // 	for _, host := range s.HostMap {
 // 		if host.Status != StatusOnline {
 // 			continue
 // 		}
 
-// 		// 👇 KEY FIX: use LastSeen instead of flag
 // 		if now.Sub(host.LastSeen) > offlineThreshold {
 // 			oldHost := copyHost(host)
 // 			host.Status = StatusOffline
@@ -309,13 +300,10 @@ func (s *ARPScanner) duplicateIPSweep() {
 		}
 	}
 	s.HostMutex.RUnlock()
-
 	if len(knownIPs) == 0 {
 		return
 	}
-
-	log.Printf("ARP Dup-check sweep — probing %d known IPs via broadcast", len(knownIPs))
-
+	log.Printf("ARP Dup check sweep probing %d known IPs via broadcast", len(knownIPs))
 	s.conflictMu.Lock()
 	s.pendingConflicts = make(map[string][]net.HardwareAddr)
 	s.conflictMu.Unlock()
@@ -344,13 +332,12 @@ func (s *ARPScanner) evaluateDuplicates() {
 	conflicts := s.pendingConflicts
 	s.pendingConflicts = make(map[string][]net.HardwareAddr)
 	s.conflictMu.Unlock()
-
 	for ipStr, macs := range conflicts {
 		unique := uniqueMACs(macs)
 		if len(unique) < 2 {
 			continue
 		}
-		log.Printf("[ARP] DUPLICATE IP DETECTED: %s is claimed by %d devices:", ipStr, len(unique))
+		log.Printf("[ARP] duplicate ip detected: %s is claimed by %d devices:", ipStr, len(unique))
 		for _, mac := range unique {
 			log.Printf("         MAC: %s", mac)
 		}
@@ -385,14 +372,12 @@ func (s *ARPScanner) isDupSweepActive() bool {
 func (s *ARPScanner) receiver() {
 	defer s.wg.Done()
 	s.client.SetReadDeadline(time.Now().Add(time.Second))
-
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		default:
 		}
-
 		packet, _, err := s.client.Read()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -402,7 +387,6 @@ func (s *ARPScanner) receiver() {
 			s.client.SetReadDeadline(time.Now().Add(time.Second))
 			continue
 		}
-
 		if s.isDupSweepActive() {
 			s.collectDupReply(packet)
 		}
@@ -419,9 +403,7 @@ func (s *ARPScanner) collectDupReply(packet *arp.Packet) {
 	if !s.subnet.Contains(senderIP) || senderIP.Equal(s.localIP) {
 		return
 	}
-
 	ipStr := senderIP.String()
-
 	s.conflictMu.Lock()
 	defer s.conflictMu.Unlock()
 
@@ -442,9 +424,7 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 	if !s.subnet.Contains(senderIP) || senderIP.Equal(s.localIP) {
 		return
 	}
-
 	isGarp := senderIP.Equal(targetIP)
-
 	s.HostMutex.Lock()
 	defer s.HostMutex.Unlock()
 
@@ -476,27 +456,23 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 				go s.OnARPEvent(EventNewDevice, copyHost(newHost), nil)
 			}
 		}
-
 		go s.resolveHostnameAsync(cloneIP(senderIP), newHost)
 		go s.resolveVendorAsync(cloneMAC(senderMAC), newHost)
 		return
 	}
 
-	// ── EXISTING IP ─────────────────────────────────────────────────────────
 	existing.flag = true
 	existing.LastSeen = time.Now()
-
 	macUnchanged := existing.MAC.String() == senderMAC.String()
-
 	if macUnchanged {
 		if isGarp {
 			if existing.Status == StatusOnline {
-				// Device re-announcing itself — already online.
+				// reannouncing itself already online.
 				if s.OnARPEvent != nil {
 					go s.OnARPEvent(EventCameOnline1, copyHost(existing), nil)
 				}
 			} else {
-				// Was offline, gratuitous ARP = came back online.
+				// was offline garp came back online.
 				oldHost := copyHost(existing)
 				existing.Status = StatusOnline
 				log.Printf("[ARP] Back online (gratuitous ARP): %s", senderIP)
@@ -505,7 +481,6 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 				}
 			}
 		} else if existing.Status != StatusOnline {
-			// Normal reply from a previously offline device.
 			oldHost := copyHost(existing)
 			existing.Status = StatusOnline
 			log.Printf("[ARP] Came online: %s (%s)", senderIP, senderMAC)
@@ -517,9 +492,7 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 	}
 
 	oldIP := s.removeMACFromOtherIP(senderMAC, ipStr)
-
 	if existing.Status == StatusOnline {
-		// Live slot with a different MAC = IP conflict / duplicate IP.
 		oldHost := copyHost(existing)
 		existing.MAC = broadcastMAC() // mark conflict slot, mirrors C code
 
@@ -530,13 +503,12 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 				go s.OnARPEvent(EventIPConflict, copyHost(existing), oldHost)
 			}
 		} else {
-			log.Printf("[ARP] IP conflict + new device: MAC %s on %s", senderMAC, senderIP)
+			log.Printf("[ARP] IP conflict new device: MAC %s on %s", senderMAC, senderIP)
 			if s.OnARPEvent != nil {
 				go s.OnARPEvent(EventIPConflictND, copyHost(existing), oldHost)
 			}
 		}
 	} else {
-		// Offline slot — MAC changed, new ownership.
 		oldHost := copyHost(existing)
 		existing.IP = cloneIP(senderIP)
 		existing.MAC = cloneMAC(senderMAC)
@@ -560,8 +532,6 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 	}
 }
 
-// removeMACFromOtherIP removes a host entry whose MAC matches but IP differs.
-// Mirrors removeNode() in C code.
 func (s *ARPScanner) removeMACFromOtherIP(mac net.HardwareAddr, skipIP string) string {
 	for ipStr, host := range s.HostMap {
 		if ipStr == skipIP {
@@ -574,10 +544,6 @@ func (s *ARPScanner) removeMACFromOtherIP(mac net.HardwareAddr, skipIP string) s
 	}
 	return ""
 }
-
-// ============================================
-// ARP PACKET SEND
-// ============================================
 
 func (s *ARPScanner) sendARPRequest(targetIP net.IP, dstMAC net.HardwareAddr) error {
 	targetAddr, ok := netip.AddrFromSlice(targetIP.To4())
@@ -597,10 +563,6 @@ func (s *ARPScanner) sendARPRequest(targetIP net.IP, dstMAC net.HardwareAddr) er
 	return s.client.WriteTo(pkt, dstMAC)
 }
 
-// ============================================
-// IP GENERATION
-// ============================================
-
 func (s *ARPScanner) generateTargetIPs() []net.IP {
 	var ips []net.IP
 	network := s.subnet.IP.Mask(s.subnet.Mask)
@@ -609,7 +571,6 @@ func (s *ARPScanner) generateTargetIPs() []net.IP {
 	for i := range network {
 		broadcast[i] = network[i] | ^s.subnet.Mask[i]
 	}
-
 	for ip := incrementIP(network); s.subnet.Contains(ip); ip = incrementIP(ip) {
 		if ip.Equal(network) || ip.Equal(broadcast) || ip.Equal(s.localIP) {
 			continue
@@ -629,10 +590,6 @@ func incrementIP(ip net.IP) net.IP {
 	binary.BigEndian.PutUint32(out, v)
 	return out
 }
-
-// ============================================
-// ASYNC RESOLUTION
-// ============================================
 
 func (s *ARPScanner) resolveHostnameAsync(ip net.IP, host *Host) {
 	var hostname string
@@ -666,10 +623,6 @@ func (s *ARPScanner) resolveVendorAsync(mac net.HardwareAddr, host *Host) {
 	log.Printf("[VENDOR] %s → %s", mac, vendor)
 }
 
-// ============================================
-// VENDOR LOOKUP
-// ============================================
-
 func (s *ARPScanner) getVendor(mac net.HardwareAddr) string {
 	if s.vendorLookup == nil || len(mac) < 3 {
 		return ""
@@ -677,12 +630,10 @@ func (s *ARPScanner) getVendor(mac net.HardwareAddr) string {
 	oui := strings.ToUpper(strings.ReplaceAll(mac.String()[:8], ":", ""))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if v, err := s.vendorLookup.GetVendorByOUI(ctx, oui); err == nil && v != nil {
 		s.vendorLookup.UpdateVendorLastSeen(ctx, oui)
 		return v.VendorName
 	}
-
 	name, err := s.fetchVendorFromAPI(mac)
 	if err != nil {
 		return ""
@@ -741,10 +692,6 @@ func (s *ARPScanner) logHostSummary(label string) {
 	}
 	log.Printf("[ARP] %s — %d hosts in %s", label, online, s.subnet)
 }
-
-// ============================================
-// HELPERS
-// ============================================
 
 func uniqueMACs(macs []net.HardwareAddr) []net.HardwareAddr {
 	seen := make(map[string]bool)
@@ -845,10 +792,6 @@ func resolveHostname(ip net.IP) string {
 	return strings.TrimSuffix(names[0], ".")
 }
 
-// ============================================
-// DATABASE VENDOR ADAPTER
-// ============================================
-
 type DatabaseVendorLookup struct{ db *PostgresDB }
 
 func NewDatabaseVendorLookup(db *PostgresDB) *DatabaseVendorLookup {
@@ -890,8 +833,6 @@ func (s *DBARPScanner) Stop() {
 
 func (s *DBARPScanner) run() {
 	defer s.wg.Done()
-
-	// Run immediately on start
 	s.scanAllDevices()
 
 	ticker := time.NewTicker(s.interval)
@@ -910,8 +851,6 @@ func (s *DBARPScanner) run() {
 func (s *DBARPScanner) scanAllDevices() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// ✅ Fetch ALL devices from DB regardless of network
 	devices, err := s.db.GetAllDevicesForARPScan(ctx)
 	if err != nil {
 		log.Printf("[DB-ARP] Failed to fetch devices: %v", err)
@@ -921,16 +860,11 @@ func (s *DBARPScanner) scanAllDevices() {
 	if len(devices) == 0 {
 		return
 	}
-
 	log.Printf("[DB-ARP] Scanning %d devices from database", len(devices))
-
-	// ✅ Group devices by their network interface for ARP client reuse
 	byInterface := make(map[string][]*ARPScanDevice)
 	for _, d := range devices {
 		byInterface[d.InterfaceName] = append(byInterface[d.InterfaceName], d)
 	}
-
-	// ✅ Scan each interface group in parallel
 	var wg sync.WaitGroup
 	for ifaceName, devs := range byInterface {
 		wg.Add(1)
@@ -945,34 +879,27 @@ func (s *DBARPScanner) scanAllDevices() {
 }
 
 func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice) {
-	// Get the interface
+	// get the interface
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		log.Printf("[DB-ARP] Interface %s not found: %v", ifaceName, err)
-		// Mark all devices on this interface as offline
 		s.markDevicesOffline(devices, "interface not found")
 		return
 	}
-
 	if iface.Flags&net.FlagUp == 0 {
 		log.Printf("[DB-ARP] Interface %s is down", ifaceName)
 		s.markDevicesOffline(devices, "interface down")
 		return
 	}
-
-	// Get local IP for this interface
 	localIP, err := getInterfaceIPv4(iface)
 	if err != nil {
 		log.Printf("[DB-ARP] No IPv4 on %s: %v", ifaceName, err)
 		return
 	}
-
 	localAddr, ok := netip.AddrFromSlice(localIP.To4())
 	if !ok {
 		return
 	}
-
-	// Create ARP client for this interface
 	client, err := arp.Dial(iface)
 	if err != nil {
 		log.Printf("[DB-ARP] ARP dial failed for %s: %v", ifaceName, err)
@@ -982,11 +909,9 @@ func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice)
 
 	log.Printf("[DB-ARP] Scanning %d devices on %s", len(devices), ifaceName)
 
-	// ✅ Send unicast ARP to each device one by one
+	//send unicast arp one by one
 	replied := make(map[string]bool)
 	var repliedMu sync.Mutex
-
-	// Start reply collector goroutine
 	replyCtx, replyCancel := context.WithCancel(s.ctx)
 	defer replyCancel()
 
@@ -997,29 +922,22 @@ func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice)
 		s.collectReplies(replyCtx, client, iface, replied, &repliedMu)
 	}()
 
-	// Send unicast ARP requests to each device
 	for _, device := range devices {
 		if s.ctx.Err() != nil {
 			break
 		}
-
 		targetIP := net.ParseIP(device.IPAddress).To4()
 		if targetIP == nil {
 			continue
 		}
-
 		targetAddr, ok := netip.AddrFromSlice(targetIP)
 		if !ok {
 			continue
 		}
-
 		targetMAC, err := net.ParseMAC(device.MACAddress)
 		if err != nil {
-			// Fallback to broadcast if MAC is invalid
 			targetMAC = ethernet.Broadcast
 		}
-
-		// ✅ Send unicast ARP (to known MAC)
 		pkt, err := arp.NewPacket(
 			arp.OperationRequest,
 			iface.HardwareAddr,
@@ -1030,15 +948,12 @@ func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice)
 		if err != nil {
 			continue
 		}
-
 		if err := client.WriteTo(pkt, targetMAC); err != nil {
 			log.Printf("[DB-ARP] Send failed for %s: %v", device.IPAddress, err)
 		}
 
 		time.Sleep(50 * time.Millisecond)
 	}
-
-	// Wait for replies
 	select {
 	case <-time.After(3 * time.Second):
 	case <-s.ctx.Done():
@@ -1049,8 +964,6 @@ func (s *DBARPScanner) scanInterface(ifaceName string, devices []*ARPScanDevice)
 
 	replyCancel()
 	replyWg.Wait()
-
-	// ✅ Update DB status for each device based on replies
 	s.updateDeviceStatuses(devices, replied)
 }
 
@@ -1108,16 +1021,13 @@ func (s *DBARPScanner) updateDeviceStatuses(devices []*ARPScanDevice, replied ma
 			newStatus = "online"
 			onlineCount++
 		} else {
-			// ✅ Only mark offline if currently online or new
-			// Don't override 'conflict' status
+
 			if device.CurrentStatus == "conflict" {
 				continue
 			}
 			newStatus = "offline"
 			offlineCount++
 		}
-
-		// ✅ Only update if status changed — avoids unnecessary DB writes
 		if device.CurrentStatus == newStatus {
 			continue
 		}
@@ -1150,10 +1060,6 @@ func (s *DBARPScanner) markDevicesOffline(devices []*ARPScanDevice, reason strin
 	}
 	log.Printf("[DB-ARP] Marked %d devices offline (%s)", len(devices), reason)
 }
-
-// ============================================
-// HELPER
-// ============================================
 
 func getInterfaceIPv4(iface *net.Interface) (net.IP, error) {
 	addrs, err := iface.Addrs()

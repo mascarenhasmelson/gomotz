@@ -19,22 +19,16 @@ import (
 const dbMaxConns = 10
 
 func main() {
-	log.Println("->Starting VLAN ARP Scanner Service...")
-
+	log.Println("-----starting VLAN ARP scanner Service---------")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Signal handling
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
 	go func() {
 		<-sig
 		fmt.Println("\n->Shutdown signal received...")
 		cancel()
 	}()
-
-	// Database connection
 	connString := os.Getenv("DATABASE_URL")
 	if connString == "" {
 		connString = "postgres://admin:StrongPassword123@localhost:5432/tunnel_services"
@@ -71,7 +65,7 @@ func main() {
 
 	go func() {
 		if err := database.StartListening(ctx, connString, wsHub.HandleNotification); err != nil {
-			log.Printf("PostgreSQL LISTEN/NOTIFY error: %v", err)
+			log.Printf("postgres listen notify error: %v", err)
 		}
 	}()
 	log.Println("PostgreSQL LISTEN/NOTIFY started on 'device_changes' channel")
@@ -82,17 +76,12 @@ func main() {
 	}
 	scanManager := vlan.NewVLANScanManager(database, parentInterface)
 	log.Println("VLAN scan manager created")
-
 	time.Sleep(500 * time.Millisecond)
-
-	//  Recover VLAN scanners
 	if err := scanManager.RecoverFromRestart(); err != nil {
 		log.Printf("  VLAN scanner recovery warning: %v", err)
 	} else {
 		log.Println("->VLAN scanners recovered from database")
 	}
-
-	//  Port monitor service — inject WS broadcast as a plain function
 	monitorSvc := monitorsrv.NewPortMonitorService(monitorDB, func(payload []byte) {
 		wsHub.Broadcast <- payload
 	})
@@ -127,44 +116,52 @@ func main() {
 	} else {
 		log.Println("->SSL monitors recovered from database")
 	}
-	//  HTTP server
+
+	domainSvc := monitorsrv.NewDomainExpiryService(monitorDB, func(payload []byte) {
+		wsHub.Broadcast <- payload
+	})
+	if err := domainSvc.RecoverFromDB(); err != nil {
+		log.Printf(" Domain monitor recovery: %v", err)
+	} else {
+		log.Println("->Domain monitors recovered from database")
+	}
 	server := &http.Server{
 		Addr: ":8082",
 		Handler: api.NewRouter(
 			ctx,
 			pool,
 			database,
-			monitorDB, //
+			monitorDB,
 			scanManager,
-			monitorSvc, //
+			monitorSvc,
 			snmpSvc,
 			pingSvc,
 			sslSvc,
+			domainSvc,
 			wsHub,
 		),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	//  Graceful shutdown
 	go func() {
 		<-ctx.Done()
-		log.Println("\n-> Stopping services...")
+		log.Println("\n----stopping services...")
 		snmpSvc.Shutdown()
 		log.Println("->SNMP scanners stopped")
 		scanManager.Shutdown()
 		log.Println("->VLAN scanners stopped")
 
-		monitorSvc.Shutdown() //
+		monitorSvc.Shutdown()
 		log.Println("->Port monitors stopped")
 		pingSvc.Shutdown()
 		log.Println("->Ping monitors stopped")
 
 		sslSvc.Shutdown()
 		log.Println("->ssl monitors stopped")
+		domainSvc.Shutdown()
+		log.Println("->domain monitors stopped")
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		// shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer shutdownCancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -183,6 +180,5 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(" HTTP server error:", err)
 	}
-
 	log.Println("->Graceful shutdown complete")
 }

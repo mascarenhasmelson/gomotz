@@ -9,10 +9,9 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/utils"
-
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var mu sync.Mutex
@@ -62,7 +61,7 @@ func HandleFetchServices(ctx context.Context, w http.ResponseWriter, pool *pgxpo
 	json.NewEncoder(w).Encode(services)
 }
 
-//delete service one at a time
+// delete service one at a time
 func HandleDeleteService(ctx context.Context, w http.ResponseWriter, pool *pgxpool.Pool, id int) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -96,7 +95,7 @@ func HandleDeleteService(ctx context.Context, w http.ResponseWriter, pool *pgxpo
 	w.Write([]byte(fmt.Sprintf("Service with ID %d deleted successfully", id)))
 }
 
-//add portforward
+// add portforward
 func HandleAddService(ctx context.Context, w http.ResponseWriter, pool *pgxpool.Pool, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -126,11 +125,8 @@ func HandleAddService(ctx context.Context, w http.ResponseWriter, pool *pgxpool.
 	json.NewEncoder(w).Encode(s)
 }
 
-//cors
+// cors
 func EnableCORS(w *http.ResponseWriter, r *http.Request) bool {
-	// (*w).Header().Set("Access-Control-Allow-Origin", "*")
-	// (*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	// (*w).Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
 	(*w).Header().Set("Access-Control-Allow-Origin", "*")
 	(*w).Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS,DELETE,GET")
 	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type")

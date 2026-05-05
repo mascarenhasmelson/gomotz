@@ -35,12 +35,10 @@ func HandleSynScanWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer ws.Close()
-
 	var req utils.ScanRequest
 	if err := ws.ReadJSON(&req); err != nil {
 		return
 	}
-
 	go SynScan(ws, req.Target)
 	for {
 		time.Sleep(10 * time.Second)
@@ -155,9 +153,7 @@ func listenForResponses(
 	stopChan chan struct{},
 ) {
 	defer wg.Done()
-
 	buf := make([]byte, 65535)
-
 	for {
 		select {
 		case <-stopChan:
@@ -168,18 +164,15 @@ func listenForResponses(
 			if err != nil {
 				continue
 			}
-
 			ipAddr, ok := addr.(*net.IPAddr)
 			if !ok || !ipAddr.IP.Equal(dstIP) {
 				continue
 			}
-
 			p := gopacket.NewPacket(buf[:n], layers.LayerTypeTCP, gopacket.Default)
 			tcpLayer := p.Layer(layers.LayerTypeTCP)
 			if tcpLayer == nil {
 				continue
 			}
-
 			tcp := tcpLayer.(*layers.TCP)
 			if tcp.SYN && tcp.ACK {
 				mu.Lock()
@@ -206,16 +199,13 @@ func sendSynChunk(
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
-
 	srcPort := layers.TCPPort(40000 + rand.Intn(20000))
 	batchSize := 50
-
 	for port := startPort; port <= endPort; port += batchSize {
 		bEnd := port + batchSize
 		if bEnd > endPort {
 			bEnd = endPort
 		}
-
 		for p := port; p < bEnd; p++ {
 			tcp := &layers.TCP{
 				SrcPort: srcPort,
@@ -232,7 +222,6 @@ func sendSynChunk(
 			}
 			time.Sleep(20 * time.Microsecond)
 		}
-
 		wsSend(ws, utils.ScanMessage{
 			Type:    "progress",
 			Scanned: bEnd,

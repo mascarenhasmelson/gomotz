@@ -18,15 +18,6 @@ import (
 var service utils.Service
 var workerLimit = make(chan struct{}, 200)
 
-// func checkPort(ip string, port int) bool {
-// 	address := fmt.Sprintf("%s:%d", ip, port)
-// 	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-// 	if err != nil {
-// 		return false
-// 	}
-// 	conn.Close()
-// 	return true
-// }
 func CheckPort(host string, port int) bool {
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -53,7 +44,6 @@ func CheckPort(host string, port int) bool {
 		DstIP:    dstIP,
 		Protocol: layers.IPProtocolTCP,
 	}
-
 	conn, err := net.ListenPacket("ip4:tcp", "0.0.0.0")
 	if err != nil {
 		log.Printf("Failed to create raw socket: %v", err)

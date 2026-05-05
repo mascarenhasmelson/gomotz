@@ -53,7 +53,7 @@ const toolDescriptions = {
   'SNMPMonitor': 'Monitor network devices via SNMP v1/v2 with custom OIDs',
   'PingMonitor': 'Monitor host availability, latency, and packet loss',
   'HTTPsKeyword': 'Monitor websites and APIs for specific keywords in responses',
-  'HTTPsMonitoring': 'Monitor website HTTP/HTTPS availability and response time',
+  'HTTPsMonitoring': 'Monitor website Certificate',
   'LANWakeup': 'Wake up devices on local network using Wake-on-LAN',
   'domain-expiry': 'Monitor domain expiration dates with WHOIS queries and alerts',
 }

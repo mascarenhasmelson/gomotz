@@ -558,3 +558,216 @@ func (p *PostgresDB) GetSSLMonitorLogs(ctx context.Context, monitorID, limit int
 	}
 	return logs, rows.Err()
 }
+
+func (p *PostgresDB) CreateDomainExpiryMonitor(ctx context.Context, m *utils.DomainExpiryMonitor) error {
+	query := `
+	INSERT INTO domain_expiry_monitors
+	(domain, friendly_name, check_interval, warning_days, critical_days)
+	VALUES ($1, $2, $3, $4, $5)
+	RETURNING id, status, created_at, updated_at
+	`
+
+	return p.pool.QueryRow(ctx, query,
+		m.Domain,
+		m.FriendlyName,
+		m.CheckInterval,
+		m.WarningDays,
+		m.CriticalDays,
+	).Scan(&m.ID, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+}
+
+func (p *PostgresDB) GetAllDomainExpiryMonitors(ctx context.Context) ([]*utils.DomainExpiryMonitor, error) {
+	rows, err := p.pool.Query(ctx, `
+	SELECT id, domain, friendly_name, check_interval, warning_days, critical_days,
+	       status, registrar, registrant, registered_on, expires_on, updated_on,
+	       days_remaining, name_servers, last_checked_at, error_message,
+	       created_at, updated_at
+	FROM domain_expiry_monitors
+	ORDER BY domain ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var monitors []*utils.DomainExpiryMonitor
+
+	for rows.Next() {
+		m := &utils.DomainExpiryMonitor{}
+
+		err := rows.Scan(
+			&m.ID, &m.Domain, &m.FriendlyName,
+			&m.CheckInterval, &m.WarningDays, &m.CriticalDays,
+			&m.Status, &m.Registrar, &m.Registrant,
+			&m.RegisteredOn, &m.ExpiresOn, &m.UpdatedOn,
+			&m.DaysRemaining, &m.NameServers,
+			&m.LastCheckedAt, &m.ErrorMessage,
+			&m.CreatedAt, &m.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		monitors = append(monitors, m)
+	}
+
+	return monitors, rows.Err()
+}
+
+func (p *PostgresDB) GetDomainExpiryMonitorByID(ctx context.Context, id int) (*utils.DomainExpiryMonitor, error) {
+	m := &utils.DomainExpiryMonitor{}
+
+	err := p.pool.QueryRow(ctx, `
+	SELECT id, domain, friendly_name, check_interval, warning_days, critical_days,
+	       status, registrar, registrant, registered_on, expires_on, updated_on,
+	       days_remaining, name_servers, last_checked_at, error_message,
+	       created_at, updated_at
+	FROM domain_expiry_monitors
+	WHERE id = $1
+	`, id).Scan(
+		&m.ID, &m.Domain, &m.FriendlyName,
+		&m.CheckInterval, &m.WarningDays, &m.CriticalDays,
+		&m.Status, &m.Registrar, &m.Registrant,
+		&m.RegisteredOn, &m.ExpiresOn, &m.UpdatedOn,
+		&m.DaysRemaining, &m.NameServers,
+		&m.LastCheckedAt, &m.ErrorMessage,
+		&m.CreatedAt, &m.UpdatedAt,
+	)
+
+	return m, err
+}
+
+func (p *PostgresDB) UpdateDomainExpiryMonitor(ctx context.Context, m *utils.DomainExpiryMonitor) error {
+	_, err := p.pool.Exec(ctx, `
+	UPDATE domain_expiry_monitors
+	SET friendly_name = $1,
+	    check_interval = $2,
+	    warning_days = $3,
+	    critical_days = $4,
+	    updated_at = NOW()
+	WHERE id = $5
+	`,
+		m.FriendlyName,
+		m.CheckInterval,
+		m.WarningDays,
+		m.CriticalDays,
+		m.ID,
+	)
+
+	return err
+}
+
+func (p *PostgresDB) UpdateDomainExpiryMonitorStatus(
+	ctx context.Context,
+	id int,
+	status string,
+	result *utils.WhoisResult,
+	daysRemaining *int,
+	errMsg *string,
+) error {
+
+	var registrar, registrant *string
+	var registeredOn, expiresOn, updatedOn *time.Time
+	var nameServers []string
+
+	if result != nil {
+		registrar = &result.Registrar
+		registrant = &result.Registrant
+		registeredOn = result.RegisteredOn
+		expiresOn = result.ExpiresOn
+		updatedOn = result.UpdatedOn
+		nameServers = result.NameServers
+	}
+
+	_, err := p.pool.Exec(ctx, `
+	UPDATE domain_expiry_monitors
+	SET status = $1,
+	    registrar = $2,
+	    registrant = $3,
+	    registered_on = $4,
+	    expires_on = $5,
+	    updated_on = $6,
+	    days_remaining = $7,
+	    name_servers = $8,
+	    last_checked_at = NOW(),
+	    error_message = $9
+	WHERE id = $10
+	`,
+		status,
+		registrar,
+		registrant,
+		registeredOn,
+		expiresOn,
+		updatedOn,
+		daysRemaining,
+		nameServers,
+		errMsg,
+		id,
+	)
+
+	return err
+}
+
+func (p *PostgresDB) DeleteDomainExpiryMonitor(ctx context.Context, id int) error {
+	_, err := p.pool.Exec(ctx,
+		`DELETE FROM domain_expiry_monitors WHERE id = $1`,
+		id,
+	)
+	return err
+}
+
+func (p *PostgresDB) InsertDomainExpiryLog(ctx context.Context, l *utils.DomainExpiryLog) error {
+	_, err := p.pool.Exec(ctx, `
+	INSERT INTO domain_expiry_logs
+	(monitor_id, status, registrar, expires_on, days_remaining, error_message)
+	VALUES ($1, $2, $3, $4, $5, $6)
+	`,
+		l.MonitorID,
+		l.Status,
+		l.Registrar,
+		l.ExpiresOn,
+		l.DaysRemaining,
+		l.ErrorMessage,
+	)
+
+	return err
+}
+
+func (p *PostgresDB) GetDomainExpiryLogs(ctx context.Context, monitorID, limit int) ([]*utils.DomainExpiryLog, error) {
+	rows, err := p.pool.Query(ctx, `
+	SELECT id, monitor_id, status, registrar, expires_on,
+	       days_remaining, error_message, checked_at
+	FROM domain_expiry_logs
+	WHERE monitor_id = $1
+	ORDER BY checked_at DESC
+	LIMIT $2
+	`, monitorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*utils.DomainExpiryLog
+
+	for rows.Next() {
+		l := &utils.DomainExpiryLog{}
+
+		err := rows.Scan(
+			&l.ID,
+			&l.MonitorID,
+			&l.Status,
+			&l.Registrar,
+			&l.ExpiresOn,
+			&l.DaysRemaining,
+			&l.ErrorMessage,
+			&l.CheckedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		logs = append(logs, l)
+	}
+
+	return logs, rows.Err()
+}

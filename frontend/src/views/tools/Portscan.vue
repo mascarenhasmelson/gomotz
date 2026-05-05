@@ -559,8 +559,8 @@ export default {
     
     connectWebSocket() {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/api/scan`;
-      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/scan`;
+      const wsUrl = `${wsProtocol}//${window.location.hostname}:8082/v1/api/scan`;
+  
       
       this.ws = new WebSocket(wsUrl);
       

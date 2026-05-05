@@ -18,13 +18,11 @@ func buildMessage(qtype, name string) (*dns.Msg, error) {
 		"caa": dns.TypeCAA, "dnskey": dns.TypeDNSKEY, "ds": dns.TypeDS,
 		"naptr": dns.TypeNAPTR, "rrsig": dns.TypeRRSIG,
 	}
-
 	qtype = strings.ToLower(qtype)
 	t, ok := typeMap[qtype]
 	if !ok {
 		return nil, fmt.Errorf("unsupported RR type: %s", qtype)
 	}
-
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(name), t)
 	m.RecursionDesired = true
@@ -33,13 +31,11 @@ func buildMessage(qtype, name string) (*dns.Msg, error) {
 
 func parseAnswer(rrs []dns.RR) []utils.RRResponse {
 	out := []utils.RRResponse{}
-
 	for _, rr := range rrs {
 		h := rr.Header()
 		t := dns.TypeToString[h.Rrtype]
 
 		switch v := rr.(type) {
-
 		case *dns.A:
 			out = append(out, utils.RRResponse{h.Name, t, h.Ttl, v.A.String()})
 		case *dns.AAAA:
@@ -84,7 +80,6 @@ func parseAnswer(rrs []dns.RR) []utils.RRResponse {
 					v.Regexp, v.Replacement),
 			})
 		default:
-			// Get the string representation and remove the header part
 			rrStr := rr.String()
 			if idx := strings.Index(rrStr, "\t"); idx != -1 {
 				rrStr = strings.TrimSpace(rrStr[idx:])

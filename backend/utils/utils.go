@@ -464,3 +464,55 @@ type CreateSSLMonitorRequest struct {
 }
 
 // --------------certificate monitor end------------------------
+// --------------domain expiry----------------------------------
+type DomainExpiryMonitor struct {
+	ID            int        `json:"id"`
+	Domain        string     `json:"domain"`
+	FriendlyName  string     `json:"friendly_name,omitempty"`
+	CheckInterval int        `json:"check_interval"`
+	WarningDays   int        `json:"warning_days"`
+	CriticalDays  int        `json:"critical_days"`
+	Status        string     `json:"status"`
+	Registrar     *string    `json:"registrar,omitempty"`
+	Registrant    *string    `json:"registrant,omitempty"`
+	RegisteredOn  *time.Time `json:"registered_on,omitempty"`
+	ExpiresOn     *time.Time `json:"expires_on,omitempty"`
+	UpdatedOn     *time.Time `json:"updated_on,omitempty"`
+	DaysRemaining *int       `json:"days_remaining,omitempty"`
+	NameServers   []string   `json:"name_servers,omitempty"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type DomainExpiryLog struct {
+	ID            int        `json:"id"`
+	MonitorID     int        `json:"monitor_id"`
+	Status        string     `json:"status"`
+	Registrar     *string    `json:"registrar,omitempty"`
+	ExpiresOn     *time.Time `json:"expires_on,omitempty"`
+	DaysRemaining *int       `json:"days_remaining,omitempty"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	CheckedAt     time.Time  `json:"checked_at"`
+}
+
+type CreateDomainExpiryRequest struct {
+	Domain        string `json:"domain"`
+	FriendlyName  string `json:"friendly_name"`
+	CheckInterval int    `json:"check_interval"`
+	WarningDays   int    `json:"warning_days"`
+	CriticalDays  int    `json:"critical_days"`
+}
+
+// whoisResult
+type WhoisResult struct {
+	Registrar    string
+	Registrant   string
+	RegisteredOn *time.Time
+	ExpiresOn    *time.Time
+	UpdatedOn    *time.Time
+	NameServers  []string
+}
+
+//---------------------------------------------------------------------

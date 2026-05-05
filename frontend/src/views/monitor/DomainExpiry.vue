@@ -15,10 +15,10 @@
     </div>
 
     <!-- Connection Status -->
-    <div class="connection-bar" :class="wsConnected ? 'connected' : 'disconnected'">
+    <!-- <div class="connection-bar" :class="wsConnected ? 'connected' : 'disconnected'">
       <span class="dot"></span>
       {{ wsConnected ? 'Live updates active' : 'Disconnected — updates paused' }}
-    </div>
+    </div> -->
 
     <!-- Stats Summary -->
     <div class="stats-row">
