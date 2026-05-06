@@ -18,6 +18,8 @@ The goal is to build a lightweight,  VPN layer directly into GoMotz — letting 
 - Self-hosted coordination server — no Tailscale, no cloud middleman
 - Automatic key exchange and peer registration via the GoMotz dashboard
 - Per-device access control and revocation
+- **LAN Wakeup (WoL)** — Remotely wake devices on your local network
+- **Reverse Proxy** — Built-in reverse proxy to route and expose internal services
 
 ---
 
