@@ -4,7 +4,7 @@
 
 <div align="center">
 
-<img src="https://img.shields.io/badge/version-0.1.0--beta-blueviolet?style=for-the-badge" />
+<img src="https://img.shields.io/badge/version-0.5.5--beta-blueviolet?style=for-the-badge" />
 <img src="https://img.shields.io/badge/platform-Raspberry%20Pi-c51a4a?style=for-the-badge&logo=raspberry-pi" />
 <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" />
 <img src="https://img.shields.io/badge/status-Coming%20Soon-orange?style=for-the-badge" />
@@ -36,12 +36,12 @@ GoMotz follows a lightweight, modular architecture optimized to run efficiently 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        GoMotz Agent                         │
-│                    (Raspberry Pi Device)                     │
+│                    (Raspberry Pi Device)                    │
 │                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐  │
-│  │   Network   │  │   Service   │  │   Port Forwarding  │  │
-│  │  Discovery  │  │  Monitors   │  │  & Tailscale Bind  │  │
-│  └──────┬──────┘  └──────┬──────┘  └─────────┬──────────┘  │
+│  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐   │
+│  │   Network   │  │   Service   │  │   Port Forwarding  │   │
+│  │  Discovery  │  │  Monitors   │  │  & Tailscale Bind  │   │
+│  └──────┬──────┘  └──────┬──────┘  └─────────┬──────────┘   │
 │         │                │                   │              │
 │  ┌──────▼────────────────▼───────────────────▼──────────┐   │
 │  │                    Core Engine                       │   │
