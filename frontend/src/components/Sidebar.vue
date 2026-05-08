@@ -81,48 +81,7 @@
   <div class="active-indicator"></div>
 </router-link>
 
-<router-link to="/remote" class="nav-item" active-class="active">
-  <div class="nav-icon">
-    <svg class="icon-svg" viewBox="0 0 24 24" width="24" height="24">
-      <path d="M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z" 
-        fill="currentColor"/>
-      <circle cx="17.5" cy="11.5" r="1.5" fill="currentColor"/>
-    </svg>
-  </div>
-  <transition name="slide">
-    <span class="nav-text" v-if="is_expanded">Remote Access</span>
-  </transition>
-  <div class="active-indicator"></div>
-</router-link>
 
-    <router-link to="/block" class="nav-item block-item" active-class="active">
-      <div class="nav-icon">
-        <!-- Shield with Block Symbol - Main Icon -->
-        <svg class="icon-svg" viewBox="0 0 24 24" width="24" height="24">
-          <!-- Shield Background -->
-          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" 
-                fill="currentColor" opacity="0.9"/>
-          <!-- Block Symbol (X) -->
-          <path d="M15.5 8.5L8.5 15.5M8.5 8.5L15.5 15.5" 
-                stroke="currentColor" 
-                stroke-width="2" 
-                stroke-linecap="round"
-                fill="none"/>
-          <!-- Lock Icon (Optional detail) -->
-          <circle cx="12" cy="13" r="2" fill="white" stroke="currentColor" stroke-width="1"/>
-          <path d="M10 11V9c0-1.1.9-2 2-2s2 .9 2 2v2" 
-                stroke="white" 
-                stroke-width="1.5" 
-                fill="none"/>
-        </svg>
-      </div>
-      <transition name="slide">
-        <span class="nav-text" v-if="is_expanded">
-          <span class="block-text">Internet Block</span>
-        </span>
-      </transition>
-      <div class="active-indicator"></div>
-    </router-link>
 				</div>
 			</nav>
 

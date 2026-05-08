@@ -69,7 +69,6 @@ func (h *Hub) Run() {
 				select {
 				case client.Send <- message:
 				default:
-					// Client's send buffer is full, close connection
 					close(client.Send)
 					delete(h.Clients, client)
 				}
@@ -77,23 +76,20 @@ func (h *Hub) Run() {
 			h.mu.RUnlock()
 
 		case <-ticker.C:
-			// Periodic cleanup of stale clients
 			h.cleanupStaleClients()
 		}
 	}
 }
 
-// cleanupStaleClients removes clients that haven't responded to pings
 func (h *Hub) cleanupStaleClients() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
 	now := time.Now()
 	for client := range h.Clients {
 		client.mu.Lock()
 		if now.Sub(client.LastPing) > pongWait+10*time.Second {
 			client.mu.Unlock()
-			log.Printf("⚠️ Removing stale client, last ping: %v ago", now.Sub(client.LastPing))
+			log.Printf("Removing stale client, last ping: %v ago", now.Sub(client.LastPing))
 			delete(h.Clients, client)
 			close(client.Send)
 			client.Conn.Close()
@@ -109,8 +105,6 @@ func (h *Hub) BroadcastMessage(message interface{}) {
 		log.Printf("Error marshaling message: %v", err)
 		return
 	}
-
-	// Non-blocking broadcast
 	select {
 	case h.Broadcast <- data:
 	default:
@@ -139,12 +133,8 @@ func (c *Client) ReadPump() {
 		log.Println("ReadPump called with nil client or connection")
 		return
 	}
-
-	// Set initial read deadline
 	c.Conn.SetReadLimit(maxMessageSize)
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-
-	// Set Pong handler to reset read deadline
 	c.Conn.SetPongHandler(func(string) error {
 		c.mu.Lock()
 		c.LastPing = time.Now()
@@ -153,7 +143,6 @@ func (c *Client) ReadPump() {
 		return nil
 	})
 
-	// Set Ping handler (if client sends ping)
 	c.Conn.SetPingHandler(func(data string) error {
 		c.mu.Lock()
 		c.LastPing = time.Now()
@@ -173,15 +162,12 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		// Handle ping/pong messages from client
 		var msg map[string]interface{}
 		if err := json.Unmarshal(message, &msg); err == nil {
 			if msg["type"] == "ping" {
 				c.mu.Lock()
 				c.LastPing = time.Now()
 				c.mu.Unlock()
-
-				// Respond with pong
 				response := map[string]string{"type": "pong"}
 				if respData, err := json.Marshal(response); err == nil {
 					select {
@@ -193,8 +179,6 @@ func (c *Client) ReadPump() {
 				continue
 			}
 		}
-
-		// Update last ping time for any message received
 		c.mu.Lock()
 		c.LastPing = time.Now()
 		c.mu.Unlock()
@@ -214,8 +198,6 @@ func (c *Client) WritePump() {
 		log.Println("WritePump called with nil client, connection, or send channel")
 		return
 	}
-
-	// Initialize last ping time
 	c.mu.Lock()
 	c.LastPing = time.Now()
 	c.mu.Unlock()
@@ -224,15 +206,11 @@ func (c *Client) WritePump() {
 		select {
 		case message, ok := <-c.Send:
 			if !ok {
-				// Hub closed the channel
 				c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-			// Write message
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				log.Printf("Failed to get writer: %v", err)
@@ -244,8 +222,6 @@ func (c *Client) WritePump() {
 				w.Close()
 				return
 			}
-
-			// Add queued messages to current websocket message
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
@@ -258,29 +234,23 @@ func (c *Client) WritePump() {
 			}
 
 		case <-ticker.C:
-			// Send ping message
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("Failed to send ping: %v", err)
 				return
 			}
-
-			// Update last ping time
 			c.mu.Lock()
 			c.LastPing = time.Now()
 			c.mu.Unlock()
 		}
 	}
 }
-
-// GetClientCount returns the current number of connected clients
 func (h *Hub) GetClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.Clients)
 }
 
-// BroadcastToAll sends a message to all connected clients
 func (h *Hub) BroadcastToAll(message []byte) {
 	h.mu.RLock()
 	clients := make([]*Client, 0, len(h.Clients))
@@ -288,7 +258,6 @@ func (h *Hub) BroadcastToAll(message []byte) {
 		clients = append(clients, client)
 	}
 	h.mu.RUnlock()
-
 	for _, client := range clients {
 		select {
 		case client.Send <- message:

@@ -41,12 +41,12 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
-const tools = ref([
- { id: 1, name: 'SSH',  path: '/remote/ssh', icon: '🔐', beta: true },
-  { id: 2, name: 'Telnet', path: '/remote/telnet', icon: '⌨️', beta: true },
+// const tools = ref([
+//  { id: 1, name: 'SSH',  path: '/remote/ssh', icon: '🔐', beta: true },
+//   { id: 2, name: 'Telnet', path: '/remote/telnet', icon: '⌨️', beta: true },
  
   
-])
+// ])
 
 const toolDescriptions = {
   'ssh': 'Secure Shell connection testing',

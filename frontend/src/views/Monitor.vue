@@ -43,7 +43,7 @@ const tools = ref([
   { id: 5, name: 'Ping Monitor', path: '/monitor/PingMonitor', icon: '   ', beta: false },
   // { id: 6, name: 'HTTP(s) Keyword', path: '/monitor/HTTPsKeyword', icon: '', beta: false },
   { id: 9, name: 'HTTP(s) Monitor', path: '/monitor/HTTPsMonitoring', icon: '', beta: false },
-  { id: 10, name: 'LanWakeup', path: '/monitor/LANWakeup', icon: '  ', beta: false },
+  // { id: 10, name: 'LanWakeup', path: '/monitor/LANWakeup', icon: '  ', beta: false },
   { id: 11, name: 'Domain Expiry', path: '/monitor/domain-expiry', icon: '', beta: false },
 ])
 

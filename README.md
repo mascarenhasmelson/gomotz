@@ -6,16 +6,16 @@
 
 <img src="https://img.shields.io/badge/version-0.5.5--beta-blueviolet?style=for-the-badge" />
 <img src="https://img.shields.io/badge/platform-Raspberry%20Pi-c51a4a?style=for-the-badge&logo=raspberry-pi" />
-<img src="https://img.shields.io/badge/arch-arm64-blue?style=for-the-badge&logo=arm" />
+<img src="https://img.shields.io/badge/arm64-blue?style=for-the-badge&logo=arm" />
 <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" />
 
 # GoMotz
 
 ### Open-Source Network Monitoring
 
-**Self-hosted, inspired by Domotz — built for Raspberry Pi.**
+**Self-hosted, Simple Network Monitoring System built for Raspberry Pi.**
 
-*Monitor, control, and secure your entire network from a single beautiful dashboard.*
+*Monitor, control, and secure your entire network from a single dashboard.*
 
 ---
 
@@ -23,9 +23,9 @@
 
 ## What is GoMotz?
 
-GoMotz is a free, open-source network monitoring and management system designed to run on a **Raspberry Pi**. It gives you full visibility and control over your local network — from device discovery to port forwarding, DNS lookups to service checks — all from an elegant real-time web dashboard.
+**GoMotz** is a free, open-source network monitoring and management system designed to run on a **Raspberry Pi**. It gives you full visibility and control over your local network from device discovery to port forwarding, DNS lookups to service checks all from an elegant real-time web dashboard.
 
-Whether you're a homelab enthusiast, a small business owner, MSP, IT department, commercial integrator, residential integrator, security professional, or network engineer — GoMotz puts enterprise-grade network monitoring in your hands, **for free**.
+Whether you're a homelab enthusiast, a small business owner, MSP, IT department, commercial integrator, residential integrator, security professional, or network engineer GoMotz puts enterprise-grade network monitoring in your hands, **for free**.
 
 ---
 
@@ -172,12 +172,6 @@ docker-compose up -d
 
 GoMotz is open source and contributions are welcome! Whether it's bug reports, feature suggestions, documentation, or code — all help is appreciated.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ---
 
 ## License
@@ -190,21 +184,11 @@ GoMotz is released under the [MIT License](LICENSE).
 
 Honestly, this started out of frustration.
 
-[Domotz](https://www.domotz.com/) is a powerful monitoring solution — both in software and hardware — but it comes at a relatively high cost, especially for personal or small-scale use. On top of that, I found myself juggling **multiple dashboards and tools**, mentally mapping ports, switching between browser tabs, and losing track of what was running where.
+**Domotz** is a powerful monitoring solution both in software and hardware  but it comes at a relatively high cost, especially for personal or small-scale use. On top of that, I found myself juggling **multiple dashboards and tools**, mentally mapping ports, switching between browser tabs, and losing track of what was running where.
 
-So I built GoMotz.
+So I built GoMotz. Since backend developed in Go hence named it as Gomotz 
 
-A single, self-hosted platform that gives me — and now you — **full visibility and control over your network**, without the subscription, without the fragmentation, and without the frustration. Everything in one place, running on hardware you already own.
-
-> *"The best tool is the one you build yourself — because it solves exactly your problem."*
-
----
-
-## Acknowledgements
-
-GoMotz is open-source and draws inspiration from Domotz, Tailscale, and the broader open-source networking community.
-
----
+A single, self-hosted platform that gives me and now you **full visibility and control over your network**, without the subscription, without the fragmentation, and without the frustration. Everything in one place, running on hardware you already own.
 
 <div align="center">
 

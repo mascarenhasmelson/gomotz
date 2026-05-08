@@ -11,29 +11,21 @@ import (
 	"github.com/mascarenhasmelson/gomotz/utils"
 )
 
-// ============================================
-// VLAN SCAN MANAGER
-// ============================================
 var hostnameCallbackRegistered bool
 var hostnameCallbackRegisteredOnce sync.Once
 
 type VLANScanManager struct {
-	mu       sync.RWMutex
-	scanners map[int]*VLANScanner
-	db       *PostgresDB
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-
-	// One HostnameDiscovery per physical interface, shared across VLANs.
+	mu                sync.RWMutex
+	scanners          map[int]*VLANScanner
+	db                *PostgresDB
+	ctx               context.Context
+	cancel            context.CancelFunc
+	wg                sync.WaitGroup
 	hostnameDiscovery map[string]*HostnameDiscovery
-
-	// pendingVLANs holds VLANs whose interface was not found at startup.
-	// The retry loop periodically attempts to start them.
-	pendingVLANs    map[int]*utils.VLANNetwork
-	pendingMu       sync.Mutex
-	parentInterface string
-	dbScanner       *DBARPScanner
+	pendingVLANs      map[int]*utils.VLANNetwork
+	pendingMu         sync.Mutex
+	parentInterface   string
+	dbScanner         *DBARPScanner
 }
 
 type VLANScanner struct {
@@ -49,14 +41,11 @@ type VLANScanner struct {
 func (m *VLANScanManager) StopVLANScanByInterface(interfaceName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	// Find the scanner whose config matches this interface name
 	for vlanID, vs := range m.scanners {
 		if vs.Config.InterfaceName == interfaceName {
 			m.pendingMu.Lock()
 			delete(m.pendingVLANs, vlanID)
 			m.pendingMu.Unlock()
-
 			vs.Cancel()
 
 			if !m.interfaceStillInUse(interfaceName, vlanID) {
@@ -88,15 +77,9 @@ func NewVLANScanManager(database *PostgresDB, parentInterface string) *VLANScanM
 	m.dbScanner = NewDBARPScanner(database, 2*time.Minute)
 	return m
 }
-
-// ============================================
-// SCAN LIFECYCLE
-// ============================================
 func (m *VLANScanManager) GetHostnameDiscovery() map[string]*HostnameDiscovery {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	// Return a copy to prevent external modification
 	result := make(map[string]*HostnameDiscovery)
 	for k, v := range m.hostnameDiscovery {
 		result[k] = v
@@ -104,7 +87,6 @@ func (m *VLANScanManager) GetHostnameDiscovery() map[string]*HostnameDiscovery {
 	return result
 }
 
-// TriggerDiscoveryScan manually triggers a discovery scan on specified interface
 func (m *VLANScanManager) TriggerDiscoveryScan(targetInterface string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -112,7 +94,6 @@ func (m *VLANScanManager) TriggerDiscoveryScan(targetInterface string) int {
 	triggered := 0
 
 	for ifaceName, hd := range m.hostnameDiscovery {
-		// ->FIXED: Compare ifaceName to targetInterface, not interfaceName to interfaceName
 		if targetInterface != "" && ifaceName != targetInterface {
 			continue
 		}
@@ -126,16 +107,12 @@ func (m *VLANScanManager) TriggerDiscoveryScan(targetInterface string) int {
 func (m *VLANScanManager) StartVLANScan(config *utils.VLANNetwork) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	//  Key by config.ID (DB primary key), not config.VLANId (which is 0 for physical)
 	if vs, exists := m.scanners[config.ID]; exists && vs.IsRunning {
 		return fmt.Errorf("scan already running for network %d (%s)", config.ID, config.InterfaceName)
 	}
 
 	return m.startVLANScanLocked(config)
 }
-
-// startVLANScanLocked does the actual work. Caller must hold m.mu.Lock().
 func (m *VLANScanManager) startVLANScanLocked(config *utils.VLANNetwork) error {
 	cidr, err := m.GetCIDRFromConfig(config)
 	if err != nil {
@@ -143,8 +120,7 @@ func (m *VLANScanManager) startVLANScanLocked(config *utils.VLANNetwork) error {
 	}
 
 	scanInterval := time.Duration(config.ScanIntervalSeconds) * time.Second
-
-	interfaceName, err := m.DetectInterfaceForCIDR(cidr, config.ID) //  pass config.ID
+	interfaceName, err := m.DetectInterfaceForCIDR(cidr, config.ID)
 	if err != nil {
 		log.Printf("[Network %d] Interface not found: %v", config.ID, err)
 		m.markAllDevicesOffline(config.ID)
@@ -161,46 +137,36 @@ func (m *VLANScanManager) startVLANScanLocked(config *utils.VLANNetwork) error {
 			m.registerHostnameCallbackOnce()
 		}
 	}
-
 	arpScanner, err := NewARPScanner(cidr, scanInterval)
 	if err != nil {
 		return fmt.Errorf("failed to create ARP scanner for network %d: %w", config.ID, err)
 	}
-
 	arpScanner.SetVendorLookup(NewDatabaseVendorLookup(m.db))
-
 	if hd, ok := m.hostnameDiscovery[interfaceName]; ok {
 		arpScanner.SetHostnameDiscovery(hd)
 	}
-
-	//  Use config.ID as the network identifier throughout
 	arpScanner.OnARPEvent = m.buildEventCallback(config.ID)
 
 	ctx, cancel := context.WithCancel(m.ctx)
 	vs := &VLANScanner{
-		NetworkId: config.ID, //  DB primary key
+		NetworkId: config.ID,
 		Scanner:   arpScanner,
 		Config:    config,
 		Status:    "running",
 		Cancel:    cancel,
 		IsRunning: true,
 	}
-	m.scanners[config.ID] = vs //  key by config.ID
-
+	m.scanners[config.ID] = vs
 	arpScanner.Start()
-
 	log.Printf("[Network %d] Scan started — interface: %s, CIDR: %s, interval: %ds",
 		config.ID, interfaceName, cidr, config.ScanIntervalSeconds)
-
 	m.wg.Add(1)
 	go m.monitorVLAN(ctx, vs)
-
 	return nil
 }
 func (m *VLANScanManager) markAllDevicesOffline(networkID int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	query := `
         UPDATE discovered_devices
         SET device_status = 'offline'
@@ -219,21 +185,17 @@ func (m *VLANScanManager) markAllDevicesOffline(networkID int) {
 func (m *VLANScanManager) StopVLANScan(networkID int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.pendingMu.Lock()
 	delete(m.pendingVLANs, networkID)
 	m.pendingMu.Unlock()
-
-	vs, exists := m.scanners[networkID] //  networkID is config.ID
+	vs, exists := m.scanners[networkID]
 	if !exists {
 		return fmt.Errorf("no scanner found for network %d", networkID)
 	}
 	if !vs.IsRunning {
 		return fmt.Errorf("scanner not running for network %d", networkID)
 	}
-
 	vs.Cancel()
-
 	cidr, _ := m.GetCIDRFromConfig(vs.Config)
 	if cidr != "" {
 		ifaceName, _ := m.DetectInterfaceForCIDR(cidr, networkID)
@@ -244,21 +206,17 @@ func (m *VLANScanManager) StopVLANScan(networkID int) error {
 			}
 		}
 	}
-
 	log.Printf("[Network %d] Scan stopped", networkID)
 	return nil
 }
 func (m *VLANScanManager) RecoverFromRestart() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	configs, err := m.db.GetEnabledVLANs(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get enabled VLANs: %w", err)
 	}
-
 	log.Printf("Recovering %d enabled VLAN scan(s)...", len(configs))
-
 	for _, config := range configs {
 		if err := m.StartVLANScan(config); err != nil {
 			log.Printf("[VLAN %d] Start failed: %v — adding to retry queue", config.VLANId, err)
@@ -268,7 +226,6 @@ func (m *VLANScanManager) RecoverFromRestart() error {
 		log.Printf("[VLAN %d] ->Recovered: %s", config.VLANId, config.VLANName)
 		time.Sleep(500 * time.Millisecond)
 	}
-
 	m.dbScanner.Start()
 	log.Printf("[DB-ARP] ->DB-based unicast ARP scanner started")
 	m.wg.Add(1)
@@ -282,18 +239,12 @@ func (m *VLANScanManager) queueForRetry(config *utils.VLANNetwork) {
 	defer m.pendingMu.Unlock()
 	m.pendingVLANs[config.VLANId] = config
 }
-
 func (m *VLANScanManager) retryPendingVLANs() {
 	defer m.wg.Done()
-
-	// ->Retry every 30 seconds - FOREVER
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-
 	log.Printf("[RETRY] ->  Infinite retry loop started (checks every 30s)")
-
 	retryCount := 0
-
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -302,20 +253,15 @@ func (m *VLANScanManager) retryPendingVLANs() {
 
 		case <-ticker.C:
 			retryCount++
-
 			m.pendingMu.Lock()
 			pendingCount := len(m.pendingVLANs)
-
 			if pendingCount == 0 {
 				m.pendingMu.Unlock()
-				// ->No pending VLANs, just wait for next tick
 				if retryCount%10 == 0 {
 					log.Printf("[RETRY] arping  #%d - No pending VLANs", retryCount)
 				}
 				continue
 			}
-
-			// Copy pending list
 			toRetry := make([]*utils.VLANNetwork, 0, pendingCount)
 			vlanIDs := make([]int, 0, pendingCount)
 			for vlanID, config := range m.pendingVLANs {
@@ -326,13 +272,9 @@ func (m *VLANScanManager) retryPendingVLANs() {
 
 			log.Printf("[RETRY] Attempt #%d - Trying to start %d VLAN(s): %v",
 				retryCount, len(toRetry), vlanIDs)
-
 			for _, config := range toRetry {
-				// ->Check if VLAN still exists in database before trying
-				// dbConfig, err := m.db.GetVLANNetwork(context.Background(), config.VLANId)
 				dbConfig, err := m.db.GetNetworkByID(context.Background(), config.ID)
 				if err != nil {
-					// VLAN deleted from database - remove from retry queue
 					log.Printf("[RETRY] VLAN %d deleted from database, removing from retry queue",
 						config.VLANId)
 
@@ -342,7 +284,6 @@ func (m *VLANScanManager) retryPendingVLANs() {
 					continue
 				}
 
-				// ->Check if monitoring is disabled
 				if !dbConfig.MonitoringEnabled {
 					log.Printf("[RETRY] VLAN %d monitoring disabled, removing from retry queue",
 						config.VLANId)
@@ -353,9 +294,8 @@ func (m *VLANScanManager) retryPendingVLANs() {
 					continue
 				}
 
-				// ->Try to start
 				m.mu.Lock()
-				err = m.startVLANScanLocked(dbConfig) // Use fresh config from DB
+				err = m.startVLANScanLocked(dbConfig)
 				m.mu.Unlock()
 
 				if err != nil {
@@ -363,16 +303,11 @@ func (m *VLANScanManager) retryPendingVLANs() {
 						config.VLANId, err)
 					continue
 				}
-
-				// Success — remove from pending
 				m.pendingMu.Lock()
 				delete(m.pendingVLANs, config.VLANId)
 				m.pendingMu.Unlock()
-
 				log.Printf("[RETRY] ->VLAN %d started successfully", config.VLANId)
 			}
-
-			// Log current pending count
 			m.pendingMu.Lock()
 			remaining := len(m.pendingVLANs)
 			m.pendingMu.Unlock()
@@ -388,7 +323,6 @@ func (m *VLANScanManager) retryPendingVLANs() {
 
 func (m *VLANScanManager) Shutdown() {
 	log.Println("Shutting down all VLAN scanners...")
-
 	m.mu.Lock()
 	for vlanID, vs := range m.scanners {
 		if vs.IsRunning {
@@ -397,7 +331,6 @@ func (m *VLANScanManager) Shutdown() {
 		}
 	}
 	m.mu.Unlock()
-
 	for ifaceName, hd := range m.hostnameDiscovery {
 		hd.Stop()
 		log.Printf("  Stopped hostname discovery on %s", ifaceName)
@@ -406,7 +339,6 @@ func (m *VLANScanManager) Shutdown() {
 		m.dbScanner.Stop()
 		log.Printf("  Stopped DB-based ARP scanner")
 	}
-
 	m.cancel()
 	m.wg.Wait()
 	log.Println("All scanners stopped.")
@@ -479,182 +411,6 @@ func (m *VLANScanManager) buildEventCallback(vlanID int) ARPEventCallback {
 	}
 }
 
-// func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
-// 	defer m.wg.Done()
-
-// 	// ->Health check every 30 seconds
-// 	ticker := time.NewTicker(30 * time.Second)
-// 	defer ticker.Stop()
-
-// 	consecutiveFailures := 0
-
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			vs.Scanner.Stop()
-// 			vs.IsRunning = false
-// 			vs.Status = "stopped"
-// 			return
-
-// 		case <-ticker.C:
-// 			vs.LastScanTime = time.Now()
-
-// 			// ->Check if VLAN still exists in database
-// 			dbConfig, err := m.db.GetVLANNetwork(context.Background(), vs.VLANId)
-// 			if err != nil {
-// 				// VLAN deleted from database - stop completely
-// 				log.Printf("[VLAN %d] ⚠️  VLAN deleted from database, stopping scanner", vs.VLANId)
-
-// 				vs.Scanner.Stop()
-// 				vs.IsRunning = false
-// 				vs.Status = "deleted"
-
-// 				// Remove from scanners map
-// 				m.mu.Lock()
-// 				delete(m.scanners, vs.VLANId)
-// 				m.mu.Unlock()
-
-// 				// Remove from pending if exists
-// 				m.pendingMu.Lock()
-// 				delete(m.pendingVLANs, vs.VLANId)
-// 				m.pendingMu.Unlock()
-
-// 				log.Printf("[VLAN %d] ->Cleanup complete", vs.VLANId)
-// 				return
-// 			}
-
-// 			// ->Check if monitoring is disabled
-// 			if !dbConfig.MonitoringEnabled {
-// 				log.Printf("[VLAN %d] ⚠️  Monitoring disabled in database, stopping scanner", vs.VLANId)
-
-// 				vs.Scanner.Stop()
-// 				vs.IsRunning = false
-// 				vs.Status = "disabled"
-
-// 				m.mu.Lock()
-// 				delete(m.scanners, vs.VLANId)
-// 				m.mu.Unlock()
-
-// 				m.pendingMu.Lock()
-// 				delete(m.pendingVLANs, vs.VLANId)
-// 				m.pendingMu.Unlock()
-
-// 				log.Printf("[VLAN %d] ->Stopped due to disabled monitoring", vs.VLANId)
-// 				return
-// 			}
-
-// 			// ->Check if interface is still available
-// 			cidr, _ := m.GetCIDRFromConfig(vs.Config)
-// 			if cidr != "" {
-// 				_, err := m.DetectInterfaceForCIDR(cidr, vs.VLANId)
-// 				// if err != nil {
-// 				// 	// Interface is down
-// 				// 	consecutiveFailures++
-// 				// 	log.Printf("[VLAN %d] Interface check failed (%d consecutive failures): %v",
-// 				// 		vs.VLANId, consecutiveFailures, err)
-
-// 				// 	// ->After 3 failures, mark offline and re-queue (NO MAX, keeps trying)
-// 				// 	if consecutiveFailures == 199 {
-// 				// 		log.Printf("[VLAN %d] ⚠️  Interface lost, marking devices offline and re-queuing",
-// 				// 			vs.VLANId)
-
-// 				// 		// Mark all devices offline
-// 				// 		m.markAllDevicesOffline(vs.VLANId)
-
-// 				// 		// Stop the scanner
-// 				// 		vs.Scanner.Stop()
-// 				// 		vs.IsRunning = false
-// 				// 		vs.Status = "interface_down"
-
-// 				// 		// ->Re-queue for continuous retry
-// 				// 		m.requeueForRetry(vs.Config, vs.VLANId)
-
-// 				// 		// Exit this monitor goroutine
-// 				// 		log.Printf("[VLAN %d] Monitor exited, retry loop will continue every 30s", vs.VLANId)
-// 				// 		return
-// 				// 	}
-// 				// }
-// 				if err != nil {
-// 					consecutiveFailures++
-
-// 					log.Printf("[VLAN %d] Interface DOWN (%d failures): %v",
-// 						vs.VLANId, consecutiveFailures, err)
-
-// 					if vs.IsRunning {
-// 						log.Printf("[VLAN %d] ⚠️ Stopping scanner (interface down)", vs.VLANId)
-
-// 						vs.Scanner.Stop()
-// 						vs.IsRunning = false
-// 						vs.Status = "interface_down"
-
-// 						m.markAllDevicesOffline(vs.VLANId)
-// 					}
-
-// 					continue
-// 				} else {
-// 					// Interface is up
-// 					// if consecutiveFailures > 0 {
-// 					// 	log.Printf("[VLAN %d] ->Interface recovered after %d failures",
-// 					// 		vs.VLANId, consecutiveFailures)
-// 					// }
-// 					// consecutiveFailures = 0
-// 					// vs.Status = "running"
-// 					if !vs.IsRunning {
-// 						log.Printf("[VLAN %d] ->Interface recovered, recreating scanner", vs.VLANId)
-
-// 						cidr, err := m.GetCIDRFromConfig(vs.Config)
-// 						if err != nil {
-// 							log.Printf("[VLAN %d] CIDR error: %v", vs.VLANId, err)
-// 							continue
-// 						}
-
-// 						scanInterval := time.Duration(vs.Config.ScanIntervalSeconds) * time.Second
-
-// 						ifaceName, err := m.DetectInterfaceForCIDR(cidr, vs.VLANId)
-// 						if err != nil {
-// 							log.Printf("[VLAN %d] Interface still not ready: %v", vs.VLANId, err)
-// 							continue
-// 						}
-
-// 						arpScanner, err := NewARPScanner(cidr, scanInterval)
-// 						if err != nil {
-// 							log.Printf("[VLAN %d] Failed to recreate scanner: %v", vs.VLANId, err)
-// 							continue
-// 						}
-
-// 						arpScanner.SetVendorLookup(NewDatabaseVendorLookup(m.db))
-
-// 						if hd, ok := m.hostnameDiscovery[ifaceName]; ok {
-// 							arpScanner.SetHostnameDiscovery(hd)
-// 						}
-
-// 						arpScanner.OnARPEvent = m.buildEventCallback(vs.VLANId)
-
-// 						// Replace scanner
-// 						vs.Scanner = arpScanner
-
-// 						arpScanner.Start()
-// 						vs.IsRunning = true
-// 					}
-
-// 					if consecutiveFailures > 0 {
-// 						log.Printf("[VLAN %d] Interface recovered after %d failures",
-// 							vs.VLANId, consecutiveFailures)
-// 					}
-
-// 					consecutiveFailures = 0
-// 					vs.Status = "running"
-// 				}
-// 			}
-
-// 			// Save current hosts to database
-// 			for _, host := range vs.Scanner.GetHosts() {
-// 				m.saveHostToDB(vs.VLANId, host)
-// 			}
-// 		}
-// 	}
-// }
-
 func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 	defer m.wg.Done()
 
@@ -675,27 +431,19 @@ func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 
 		case <-ticker.C:
 			vs.LastScanTime = time.Now()
-
-			// ================================
-			// ->1. Validate VLAN from DB
-			// ================================
-			// dbConfig, err := m.db.GetVLANNetwork(context.Background(), vs.VLANId)
 			dbConfig, err := m.db.GetNetworkByID(context.Background(), vs.Config.ID)
 			if err != nil {
-				log.Printf("[VLAN %d] ❌ Deleted from DB, stopping", vs.NetworkId)
+				log.Printf("[VLAN %d]  Deleted from DB, stopping", vs.NetworkId)
 				m.cleanupVLAN(vs.NetworkId, "deleted")
 				return
 			}
 
 			if !dbConfig.MonitoringEnabled {
-				log.Printf("[VLAN %d] ⚠️ Monitoring disabled", vs.NetworkId)
+				log.Printf("[VLAN %d]  Monitoring disabled", vs.NetworkId)
 				m.cleanupVLAN(vs.NetworkId, "disabled")
 				return
 			}
 
-			// ================================
-			// ->2. Detect Interface
-			// ================================
 			cidr, err := m.GetCIDRFromConfig(vs.Config)
 			if err != nil || cidr == "" {
 				log.Printf("[VLAN %d] CIDR error: %v", vs.NetworkId, err)
@@ -703,35 +451,23 @@ func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 			}
 
 			ifaceName, err := m.DetectInterfaceForCIDR(cidr, vs.NetworkId)
-
-			// ================================
-			// 🔴 3. Interface DOWN
-			// ================================
 			if err != nil {
 				consecutiveFailures++
-
-				log.Printf("[VLAN %d] 🔴 Interface DOWN (%d): %v",
+				log.Printf("[VLAN %d]  Interface DOWN (%d): %v",
 					vs.NetworkId, consecutiveFailures, err)
 
 				if vs.IsRunning {
 					log.Printf("[VLAN %d] Stopping scanner", vs.NetworkId)
-
 					vs.Scanner.Stop()
 					vs.IsRunning = false
 					vs.Status = "interface_down"
-
-					// 🔥 CRITICAL: sync DB
 					m.markAllDevicesOffline(vs.NetworkId)
 				}
 
 				continue
 			}
-
-			// ================================
-			// 🟢 4. Interface UP
-			// ================================
 			if !vs.IsRunning {
-				log.Printf("[VLAN %d] 🟢 Interface recovered, recreating scanner", vs.NetworkId)
+				log.Printf("[VLAN %d]  Interface recovered, recreating scanner", vs.NetworkId)
 
 				if err := m.recreateScanner(vs, cidr, ifaceName); err != nil {
 					log.Printf("[VLAN %d] Failed to recreate scanner: %v", vs.NetworkId, err)
@@ -740,7 +476,6 @@ func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 
 				vs.IsRunning = true
 			}
-
 			if consecutiveFailures > 0 {
 				log.Printf("[VLAN %d] ->Recovered after %d failures",
 					vs.NetworkId, consecutiveFailures)
@@ -748,10 +483,6 @@ func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 
 			consecutiveFailures = 0
 			vs.Status = "running"
-
-			// ================================
-			// ->5. Persist Hosts
-			// ================================
 			for _, host := range vs.Scanner.GetHosts() {
 				m.saveHostToDB(vs.NetworkId, host)
 			}
@@ -760,12 +491,10 @@ func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 }
 func (m *VLANScanManager) recreateScanner(vs *VLANScanner, cidr, ifaceName string) error {
 	scanInterval := time.Duration(vs.Config.ScanIntervalSeconds) * time.Second
-
 	arpScanner, err := NewARPScanner(cidr, scanInterval)
 	if err != nil {
 		return err
 	}
-
 	arpScanner.SetVendorLookup(NewDatabaseVendorLookup(m.db))
 
 	if hd, ok := m.hostnameDiscovery[ifaceName]; ok {
@@ -799,17 +528,10 @@ func (m *VLANScanManager) cleanupVLAN(vlanID int, reason string) {
 	log.Printf("[VLAN %d] ->Cleaned up (%s)", vlanID, reason)
 }
 
-/////////////////////////////////////////////
-
-// ->NEW: Re-queue a VLAN for retry after interface failure
 func (m *VLANScanManager) requeueForRetry(config *utils.VLANNetwork, vlanID int) {
 	m.pendingMu.Lock()
 	defer m.pendingMu.Unlock()
-
-	// Add to pending queue (or update if already there)
 	m.pendingVLANs[vlanID] = config
-
-	// Remove from active scanners
 	m.mu.Lock()
 	delete(m.scanners, vlanID)
 	m.mu.Unlock()
@@ -822,15 +544,10 @@ func (m *VLANScanManager) ensureRetryLoopRunning() {
 	case <-m.ctx.Done():
 		return
 	default:
-		// Start a new retry loop goroutine
 		m.wg.Add(1)
 		go m.retryPendingVLANs()
 	}
 }
-
-// ============================================
-// STATUS
-// ============================================
 
 func (m *VLANScanManager) GetAllStatuses() map[int]*VLANScanner {
 	m.mu.RLock()
@@ -841,8 +558,6 @@ func (m *VLANScanManager) GetAllStatuses() map[int]*VLANScanner {
 	}
 	return out
 }
-
-// GetPendingVLANs returns the list of VLANs still waiting for their interface.
 func (m *VLANScanManager) GetPendingVLANs() []int {
 	m.pendingMu.Lock()
 	defer m.pendingMu.Unlock()
@@ -862,11 +577,6 @@ func (m *VLANScanManager) GetScannerStatus(vlanID int) (*VLANScanner, error) {
 	}
 	return vs, nil
 }
-
-// ============================================
-// HELPERS
-// ============================================
-
 func (m *VLANScanManager) interfaceStillInUse(ifaceName string, excludeVLAN int) bool {
 	for id, vs := range m.scanners {
 		if id == excludeVLAN || !vs.IsRunning {
@@ -889,12 +599,10 @@ func (m *VLANScanManager) DetectInterfaceForCIDR(cidr string, vlanID int) (strin
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR %s: %w", cidr, err)
 	}
-
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "", fmt.Errorf("failed to get interfaces: %w", err)
 	}
-
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
@@ -923,12 +631,11 @@ func (m *VLANScanManager) GetCIDRFromConfig(config *utils.VLANNetwork) (string, 
 		return *config.CIDRFull, nil
 
 	case "auto", "dhcp":
-		//  First try CIDRFull from DB (populated at monitor time)
+
 		if config.CIDRFull != nil && *config.CIDRFull != "" {
 			return *config.CIDRFull, nil
 		}
 
-		//  Fallback: detect live from the actual interface
 		if config.InterfaceName == "" {
 			return "", fmt.Errorf("no interface name for network %d", config.ID)
 		}
@@ -968,8 +675,6 @@ func (m *VLANScanManager) detectCIDRFromInterface(interfaceName string) (string,
 		if !ok || ipNet.IP.To4() == nil {
 			continue
 		}
-
-		// Convert to network CIDR (e.g. 192.168.1.100/24 -> 192.168.1.0/24)
 		_, network, err := net.ParseCIDR(ipNet.String())
 		if err != nil {
 			continue
@@ -1019,10 +724,6 @@ func (m *VLANScanManager) registerHostnameCallbackOnce() {
 		log.Printf("[DISCOVERY] Hostname→DB callback registered")
 	})
 }
-
-// onHostnameDiscovered is called by the mDNS/SSDP scanner whenever a
-// hostname is discovered or updated. It finds which VLAN scanner owns
-// that IP and updates both the in-memory host and the database.
 func (m *VLANScanManager) onHostnameDiscovered(ip, hostname, proto string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -1031,15 +732,12 @@ func (m *VLANScanManager) onHostnameDiscovered(ip, hostname, proto string) {
 		if !vs.IsRunning {
 			continue
 		}
-
 		vs.Scanner.HostMutex.Lock()
 		host, exists := vs.Scanner.HostMap[ip]
 		if exists && host.Hostname != hostname {
 			host.Hostname = hostname
 			log.Printf("[%s] Updated hostname for %s → %s (VLAN %d)",
 				proto, ip, hostname, vlanID)
-
-			// Persist immediately — don't wait for the 30s sync.
 			hostCopy := copyHost(host)
 			vs.Scanner.HostMutex.Unlock()
 

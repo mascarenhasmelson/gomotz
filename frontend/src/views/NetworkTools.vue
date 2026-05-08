@@ -48,13 +48,13 @@ const route = useRoute()
 // })
 
 const tools = ref([
-  { id: 1, name: 'Portscan', path: '/tools/portscan', icon: '🔍', beta: false },
-  { id: 2, name: 'TCP Check', path: '/tools/tcp-check', icon: '🔗', beta: false },
-  { id: 3, name: 'DNS Lookup', path: '/tools/dns-lookup', icon: '🌐', beta: false },
-  { id: 4, name: 'Traceroute', path: '/tools/traceroute', icon: '🛣️', beta: false },
-  { id: 5, name: 'Ping', path: '/tools/ping', icon: '   ', beta: false },
-  { id: 6, name: 'HTTP(S) Check', path: '/tools/httpsCheck', icon: '🌍', beta: false },
-  { id: 7, name: 'Speedtest', path: '/tools/speedtest', icon: '⚡', beta: false },
+  { id: 1, name: 'Portscan', path: '/tools/portscan', icon: '', beta: false },
+  { id: 2, name: 'TCP Check', path: '/tools/tcp-check', icon: '', beta: false },
+  { id: 3, name: 'DNS Lookup', path: '/tools/dns-lookup', icon: '', beta: false },
+  { id: 4, name: 'Traceroute', path: '/tools/traceroute', icon: '', beta: false },
+  { id: 5, name: 'Ping', path: '/tools/ping', icon: '', beta: false },
+  { id: 6, name: 'HTTP(S) Check', path: '/tools/httpsCheck', icon: '', beta: false },
+  { id: 7, name: 'Speedtest', path: '/tools/speedtest', icon: '', beta: false },
 ])
 
 const toolDescriptions = {

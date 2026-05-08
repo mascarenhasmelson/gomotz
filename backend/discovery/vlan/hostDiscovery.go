@@ -548,15 +548,9 @@ func (h *HostnameDiscovery) Start() {
 	}
 }
 
-// hostnameUpdateCallbacks is called when a hostname is discovered or updated.
-// Register with OnHostnameDiscovered to get real-time DB updates.
-var _ = (*HostnameDiscovery)(nil) // compile check
+var _ = (*HostnameDiscovery)(nil)
 
 type HostnameUpdateFunc func(ip, hostname, proto string)
-
-// onHostnameUpdate is an optional callback registered by the scanner manager
-// to persist hostname updates to the DB immediately rather than waiting for
-// the next periodic sync.
 type hostnameUpdateCallback struct {
 	mu  sync.RWMutex
 	fns []HostnameUpdateFunc
@@ -564,9 +558,6 @@ type hostnameUpdateCallback struct {
 
 var globalHostnameCallbacks = &hostnameUpdateCallback{}
 
-// RegisterHostnameCallback registers a function to be called whenever a
-// hostname is discovered via mDNS or SSDP. The VLANScanManager uses this
-// to write hostname updates to the DB immediately.
 func RegisterHostnameCallback(fn HostnameUpdateFunc) {
 	globalHostnameCallbacks.mu.Lock()
 	defer globalHostnameCallbacks.mu.Unlock()
@@ -584,18 +575,14 @@ func (h *HostnameDiscovery) notifyHostnameUpdate(ip, hostname, proto string) {
 	}
 }
 
-// isValidDiscoveryName rejects raw JSON strings and other garbage that
-// occasionally slip through the mDNS hostname cleaner.
 func isValidDiscoveryName(name string) bool {
 	if name == "" || len(name) > 128 {
 		return false
 	}
-	// Reject anything that looks like raw JSON
 	if (strings.HasPrefix(name, "{") && strings.Contains(name, ":")) ||
 		strings.HasPrefix(name, `{\"`) {
 		return false
 	}
-	// Reject strings with too many special characters
 	special := 0
 	for _, r := range name {
 		if r == '{' || r == '}' || r == '[' || r == ']' || r == '\\' || r == '"' {
@@ -604,10 +591,6 @@ func isValidDiscoveryName(name string) bool {
 	}
 	return special <= 2
 }
-
-// ============================================
-// ACCESSORS
-// ============================================
 
 func (h *HostnameDiscovery) GetHostname(ip string) string {
 	h.mu.RLock()

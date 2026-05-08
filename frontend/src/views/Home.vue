@@ -222,8 +222,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-// const API_URL = import.meta.env.VITE_API_URL;
-const API_URL = "http://192.168.20.17:8082";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
 
 export default {
   data() {
@@ -291,7 +290,7 @@ export default {
       const startTime = Date.now();
       
       try {
-        const response = await fetch(`${API_URL}/v1/api/services/isp`);
+        const response = await fetch(`${API_BASE_URL}/v1/api/services/isp`);
         
         if (!response.ok) {
           throw new Error("Failed to fetch ISP info");

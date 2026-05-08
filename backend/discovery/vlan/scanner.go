@@ -41,7 +41,6 @@ type DBARPScanner struct {
 }
 
 type ARPEventCallback func(event ARPEvent, host *Host, oldHost *Host)
-
 type HostStatus string
 
 const (
@@ -96,24 +95,19 @@ func NewARPScanner(subnetCIDR string, scanInterval time.Duration) (*ARPScanner, 
 	if err != nil {
 		return nil, fmt.Errorf("invalid CIDR: %w", err)
 	}
-
 	iface, localIP, err := findInterfaceForSubnet(subnet)
 	if err != nil {
 		return nil, err
 	}
-
 	localAddr, ok := netip.AddrFromSlice(localIP.To4())
 	if !ok {
 		return nil, fmt.Errorf("failed to convert local IP to netip.Addr")
 	}
-
 	client, err := arp.Dial(iface)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ARP client: %w", err)
 	}
-
 	log.Printf("[ARP] Interface: %s | IP: %s | Subnet: %s", iface.Name, localIP, subnet)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ARPScanner{
@@ -267,30 +261,6 @@ func (s *ARPScanner) checkOfflineByFlag() {
 	}
 }
 
-// func (s *ARPScanner) checkOfflineByFlag() {
-// 	s.HostMutex.Lock()
-// 	defer s.HostMutex.Unlock()
-
-// 	now := time.Now()
-// 	offlineThreshold := 3 * s.scanInterval //
-
-// 	for _, host := range s.HostMap {
-// 		if host.Status != StatusOnline {
-// 			continue
-// 		}
-
-// 		if now.Sub(host.LastSeen) > offlineThreshold {
-// 			oldHost := copyHost(host)
-// 			host.Status = StatusOffline
-
-// 			log.Printf("[ARP] Went offline (timeout): %s (%s)", host.IP, host.MAC)
-
-//				if s.OnARPEvent != nil {
-//					go s.OnARPEvent(EventWentOffline, copyHost(host), oldHost)
-//				}
-//			}
-//		}
-//	}
 func (s *ARPScanner) duplicateIPSweep() {
 	s.HostMutex.RLock()
 	knownIPs := make([]net.IP, 0, len(s.HostMap))
@@ -390,7 +360,6 @@ func (s *ARPScanner) receiver() {
 		if s.isDupSweepActive() {
 			s.collectDupReply(packet)
 		}
-
 		s.processPacket(packet)
 		s.client.SetReadDeadline(time.Now().Add(time.Second))
 	}
@@ -399,7 +368,6 @@ func (s *ARPScanner) receiver() {
 func (s *ARPScanner) collectDupReply(packet *arp.Packet) {
 	senderIP := net.IP(packet.SenderIP.AsSlice())
 	senderMAC := net.HardwareAddr(packet.SenderHardwareAddr)
-
 	if !s.subnet.Contains(senderIP) || senderIP.Equal(s.localIP) {
 		return
 	}
@@ -420,17 +388,14 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 	senderIP := net.IP(packet.SenderIP.AsSlice())
 	senderMAC := net.HardwareAddr(packet.SenderHardwareAddr)
 	targetIP := net.IP(packet.TargetIP.AsSlice())
-
 	if !s.subnet.Contains(senderIP) || senderIP.Equal(s.localIP) {
 		return
 	}
 	isGarp := senderIP.Equal(targetIP)
 	s.HostMutex.Lock()
 	defer s.HostMutex.Unlock()
-
 	ipStr := senderIP.String()
 	existing, exists := s.HostMap[ipStr]
-
 	if !exists {
 		//new ip
 		oldIP := s.removeMACFromOtherIP(senderMAC, ipStr)
@@ -444,7 +409,6 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 			flag:      true,
 		}
 		s.HostMap[ipStr] = newHost
-
 		if oldIP != "" {
 			log.Printf("[ARP] IP change: MAC %s moved from %s to %s", senderMAC, oldIP, senderIP)
 			if s.OnARPEvent != nil {
@@ -460,14 +424,13 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 		go s.resolveVendorAsync(cloneMAC(senderMAC), newHost)
 		return
 	}
-
 	existing.flag = true
 	existing.LastSeen = time.Now()
 	macUnchanged := existing.MAC.String() == senderMAC.String()
 	if macUnchanged {
 		if isGarp {
 			if existing.Status == StatusOnline {
-				// reannouncing itself already online.
+
 				if s.OnARPEvent != nil {
 					go s.OnARPEvent(EventCameOnline1, copyHost(existing), nil)
 				}
@@ -490,12 +453,10 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 		}
 		return
 	}
-
 	oldIP := s.removeMACFromOtherIP(senderMAC, ipStr)
 	if existing.Status == StatusOnline {
 		oldHost := copyHost(existing)
-		existing.MAC = broadcastMAC() // mark conflict slot, mirrors C code
-
+		existing.MAC = broadcastMAC()
 		if oldIP != "" {
 			log.Printf("[ARP] IP conflict + IP change: MAC %s on %s (was at %s)",
 				senderMAC, senderIP, oldIP)
@@ -514,7 +475,6 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 		existing.MAC = cloneMAC(senderMAC)
 		existing.Status = StatusOnline
 		existing.LastSeen = time.Now()
-
 		if oldIP != "" {
 			log.Printf("[ARP] MAC change + IP change: MAC %s on %s (was at %s)",
 				senderMAC, senderIP, oldIP)
@@ -527,7 +487,6 @@ func (s *ARPScanner) processPacket(packet *arp.Packet) {
 				go s.OnARPEvent(EventMACChangeND, copyHost(existing), oldHost)
 			}
 		}
-
 		go s.resolveVendorAsync(cloneMAC(senderMAC), existing)
 	}
 }
@@ -566,7 +525,6 @@ func (s *ARPScanner) sendARPRequest(targetIP net.IP, dstMAC net.HardwareAddr) er
 func (s *ARPScanner) generateTargetIPs() []net.IP {
 	var ips []net.IP
 	network := s.subnet.IP.Mask(s.subnet.Mask)
-
 	broadcast := make(net.IP, len(network))
 	for i := range network {
 		broadcast[i] = network[i] | ^s.subnet.Mask[i]

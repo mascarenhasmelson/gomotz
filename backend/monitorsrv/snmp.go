@@ -98,8 +98,6 @@ func (s *SNMPMonitorService) GetActiveCount() int {
 
 func (s *SNMPMonitorService) runWorker(ctx context.Context, m *utils.SNMPMonitor) {
 	defer s.wg.Done()
-
-	// Poll immediately on start
 	s.pollAndSave(m)
 
 	ticker := time.NewTicker(time.Duration(m.PollingInterval) * time.Second)
@@ -146,7 +144,6 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 			m.FriendlyName, m.Hostname, m.Port, m.OID, value, responseMs)
 	}
 
-	// Retries on failure
 	if status == "down" && m.Retries > 0 {
 		for i := 0; i < m.Retries; i++ {
 			time.Sleep(2 * time.Second)
@@ -161,8 +158,6 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 			}
 		}
 	}
-
-	// Update DB
 	valueStr := ""
 	if valuePtr != nil {
 		valueStr = *valuePtr
@@ -171,7 +166,6 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 		log.Printf("[SNMP MONITOR] Failed to update status %d: %v", m.ID, err)
 	}
 
-	// Insert log
 	if err := s.db.InsertSNMPMonitorLog(ctx, &utils.SNMPMonitorLog{
 		MonitorID:    m.ID,
 		Status:       status,
@@ -182,7 +176,6 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 		log.Printf("[SNMP MONITOR] Failed to insert log %d: %v", m.ID, err)
 	}
 
-	// Broadcast
 	if s.broadcast != nil {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"type":          "snmp_monitor_update",
@@ -207,7 +200,6 @@ func (s *SNMPMonitorService) pollAndSave(m *utils.SNMPMonitor) {
 }
 
 func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
-	//  Build SNMP client
 	g := &gosnmp.GoSNMP{
 		Target:    m.Hostname,
 		Port:      uint16(m.Port),
@@ -216,7 +208,6 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 		Retries:   0, // handled manually
 	}
 
-	//  Set SNMP version
 	switch m.SNMPVersion {
 	case "v1":
 		g.Version = gosnmp.Version1
@@ -230,19 +221,14 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 		return "", fmt.Errorf("connect failed: %w", err)
 	}
 	defer g.Conn.Close()
-
 	result, err := g.Get([]string{m.OID})
 	if err != nil {
 		return "", fmt.Errorf("SNMP get failed: %w", err)
 	}
-
 	if len(result.Variables) == 0 {
 		return "", fmt.Errorf("no variables returned")
 	}
-
 	variable := result.Variables[0]
-
-	//  Check for error OID
 	if variable.Type == gosnmp.NoSuchObject || variable.Type == gosnmp.NoSuchInstance {
 		return "", fmt.Errorf("OID not found: %s", m.OID)
 	}
@@ -250,13 +236,11 @@ func (s *SNMPMonitorService) pollSNMP(m *utils.SNMPMonitor) (string, error) {
 	return formatSNMPValue(variable, m.ExpectedValueType), nil
 }
 
-// Format SNMP value based on expected type
 func formatSNMPValue(variable gosnmp.SnmpPDU, expectedType string) string {
 	switch variable.Type {
 	case gosnmp.OctetString:
 		b, ok := variable.Value.([]byte)
 		if ok {
-			// Try printable string first
 			printable := true
 			for _, c := range b {
 				if c < 32 || c > 126 {
@@ -267,20 +251,16 @@ func formatSNMPValue(variable gosnmp.SnmpPDU, expectedType string) string {
 			if printable {
 				return string(b)
 			}
-			// Return as hex
 			return fmt.Sprintf("%x", b)
 		}
 		return fmt.Sprintf("%v", variable.Value)
-
 	case gosnmp.Integer:
 		return fmt.Sprintf("%d", gosnmp.ToBigInt(variable.Value))
 
 	case gosnmp.Counter32, gosnmp.Counter64:
 		return fmt.Sprintf("%d", gosnmp.ToBigInt(variable.Value))
-
 	case gosnmp.Gauge32:
 		return fmt.Sprintf("%d", gosnmp.ToBigInt(variable.Value))
-
 	case gosnmp.TimeTicks:
 		ticks := gosnmp.ToBigInt(variable.Value).Uint64()
 		seconds := ticks / 100
@@ -304,7 +284,6 @@ func formatSNMPValue(variable gosnmp.SnmpPDU, expectedType string) string {
 	}
 }
 
-// PollOnce does a single poll — used for test connection
 func (s *SNMPMonitorService) PollOnce(m *utils.SNMPMonitor) (string, int, error) {
 	start := time.Now()
 	value, err := s.pollSNMP(m)
@@ -312,22 +291,15 @@ func (s *SNMPMonitorService) PollOnce(m *utils.SNMPMonitor) (string, int, error)
 	return value, responseMs, err
 }
 
-// validateOID checks if OID format is valid
-//
-//	Proper OID validation
 func validateOID(oid string) bool {
 	if len(oid) == 0 {
 		return false
 	}
-
-	// Remove leading dot if present (both .1.3.6.1 and 1.3.6.1 are valid)
 	trimmed := strings.TrimPrefix(oid, ".")
-
 	if len(trimmed) == 0 {
 		return false
 	}
 
-	// Each part must be a non-negative integer
 	parts := strings.Split(trimmed, ".")
 	if len(parts) < 2 {
 		return false
@@ -335,11 +307,11 @@ func validateOID(oid string) bool {
 
 	for _, part := range parts {
 		if len(part) == 0 {
-			return false // double dots like 1..3
+			return false
 		}
 		for _, c := range part {
 			if c < '0' || c > '9' {
-				return false // non-numeric
+				return false
 			}
 		}
 	}

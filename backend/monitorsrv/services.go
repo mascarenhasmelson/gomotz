@@ -151,13 +151,9 @@ func (s *PingMonitorService) GetActiveCount() int {
 
 func (s *PingMonitorService) runWorker(ctx context.Context, m *utils.PingMonitor) {
 	defer s.wg.Done()
-
-	// Ping immediately on start
 	s.pingAndSave(m)
-
 	ticker := time.NewTicker(time.Duration(m.CheckInterval) * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -186,7 +182,6 @@ func (s *PingMonitorService) pingAndSave(m *utils.PingMonitor) {
 			m.FriendlyName, m.Hostname, err.Error())
 	} else {
 		latencyPtr = &latencyMs
-		//  warning if latency exceeds threshold
 		if latencyMs > m.LatencyThreshold {
 			status = "warning"
 		} else {
@@ -195,7 +190,6 @@ func (s *PingMonitorService) pingAndSave(m *utils.PingMonitor) {
 		log.Printf("[PING MONITOR] %s (%s) → %s [%dms] threshold:%dms",
 			m.FriendlyName, m.Hostname, status, latencyMs, m.LatencyThreshold)
 	}
-
 	if err := s.db.UpdatePingMonitorStatus(ctx, m.ID, status, latencyPtr, errMsgPtr); err != nil {
 		log.Printf("[PING MONITOR] Failed to update status %d: %v", m.ID, err)
 	}
@@ -208,8 +202,6 @@ func (s *PingMonitorService) pingAndSave(m *utils.PingMonitor) {
 	}); err != nil {
 		log.Printf("[PING MONITOR] Failed to insert log %d: %v", m.ID, err)
 	}
-
-	//Broadcast realtime update
 	if s.broadcast != nil {
 		latency := 0
 		if latencyPtr != nil {
@@ -235,7 +227,6 @@ func (s *PingMonitorService) pingAndSave(m *utils.PingMonitor) {
 	}
 }
 
-// doPing sends a single ICMP echo and returns latency in ms
 func (s *PingMonitorService) doPing(target string, timeoutSecs int) (int, error) {
 	ipAddr, err := resolveTarget(target)
 	if err != nil {
@@ -297,7 +288,7 @@ func (s *PingMonitorService) doPing(target string, timeoutSecs int) (int, error)
 	}
 }
 
-// PingOnce does a single ping — used for test connection
+// test connection
 func (s *PingMonitorService) PingOnce(hostname string, timeoutSecs int) (int, error) {
 	return s.doPing(hostname, timeoutSecs)
 }
@@ -319,14 +310,14 @@ func resolveTarget(target string) (*net.IPAddr, error) {
 	return nil, fmt.Errorf("no IPv4 found for: %s", target)
 }
 
-func NewPortMonitorService(db *PostgresDB, broadcast BroadcastFunc) *PortMonitorService { //
+func NewPortMonitorService(db *PostgresDB, broadcast BroadcastFunc) *PortMonitorService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PortMonitorService{
 		db:        db,
 		ctx:       ctx,
 		cancel:    cancel,
 		monitors:  make(map[int]*portMonitorWorker),
-		broadcast: broadcast, //
+		broadcast: broadcast,
 	}
 }
 
@@ -411,11 +402,7 @@ func (s *PortMonitorService) checkAndSave(m *utils.PortMonitor) {
 		Port:    m.Port,
 		Timeout: 10,
 	})
-
-	//  Derive status from tcp status, not just resp.Success
 	status := tcpStatusToMonitorStatus(resp.Status)
-
-	// Retries only if down
 	if status == "down" && m.Retries > 0 {
 		for i := 0; i < m.Retries; i++ {
 			time.Sleep(time.Duration(m.HeartbeatRetryInterval) * time.Second)
@@ -491,7 +478,6 @@ func (s *PortMonitorService) checkAndSave(m *utils.PortMonitor) {
 	}
 }
 
-// Single place to define the mapping
 func tcpStatusToMonitorStatus(tcpStatus string) string {
 	switch tcpStatus {
 	case "open":
@@ -517,12 +503,10 @@ func NewSSLMonitorService(db *PostgresDB, broadcast BroadcastFunc) *SSLMonitorSe
 func (s *SSLMonitorService) RecoverFromDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	monitors, err := s.db.GetAllSSLMonitors(ctx)
 	if err != nil {
 		return err
 	}
-
 	log.Printf("[SSL MONITOR] Recovering %d monitor(s)", len(monitors))
 	for _, m := range monitors {
 		s.StartMonitor(m)
@@ -533,17 +517,13 @@ func (s *SSLMonitorService) RecoverFromDB() error {
 func (s *SSLMonitorService) StartMonitor(m *utils.SSLMonitor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if w, exists := s.monitors[m.ID]; exists {
 		w.cancel()
 	}
-
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.monitors[m.ID] = &sslWorker{monitor: m, cancel: cancel}
-
 	s.wg.Add(1)
 	go s.runWorker(ctx, m)
-
 	log.Printf("[SSL MONITOR] Started %d — %s every %ds",
 		m.ID, m.Domain, m.CheckInterval)
 }
@@ -551,7 +531,6 @@ func (s *SSLMonitorService) StartMonitor(m *utils.SSLMonitor) {
 func (s *SSLMonitorService) StopMonitor(id int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if w, exists := s.monitors[id]; exists {
 		w.cancel()
 		delete(s.monitors, id)
@@ -567,13 +546,9 @@ func (s *SSLMonitorService) Shutdown() {
 
 func (s *SSLMonitorService) runWorker(ctx context.Context, m *utils.SSLMonitor) {
 	defer s.wg.Done()
-
-	// Check immediately on start
 	s.checkAndSave(m)
-
 	ticker := time.NewTicker(time.Duration(m.CheckInterval) * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -586,36 +561,28 @@ func (s *SSLMonitorService) runWorker(ctx context.Context, m *utils.SSLMonitor) 
 
 func (s *SSLMonitorService) checkAndSave(m *utils.SSLMonitor) {
 	result, err := s.checkCertificate(m.Domain, m.Port, m.WarningDays, m.CriticalDays)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if err != nil {
 		errMsg := err.Error()
 		log.Printf("[SSL MONITOR] %s → error [%s]", m.Domain, errMsg)
-
 		s.db.UpdateSSLMonitorStatus(ctx, m.ID,
 			"error", "", "", nil, nil, nil, &errMsg)
-
 		s.db.InsertSSLMonitorLog(ctx, &utils.SSLMonitorLog{
 			MonitorID:    m.ID,
 			Status:       "error",
 			ErrorMessage: &errMsg,
 		})
-
 		s.broadcastUpdate(m, "error", 0, "", nil, &errMsg)
 		return
 	}
-
 	log.Printf("[SSL MONITOR] %s → %s [%d days] issuer: %s",
 		m.Domain, result.Status, result.DaysRemaining, result.Issuer)
-
 	s.db.UpdateSSLMonitorStatus(ctx, m.ID,
 		result.Status, result.Issuer, result.Subject,
 		&result.ValidFrom, &result.ValidUntil,
 		&result.DaysRemaining, nil,
 	)
-
 	s.db.InsertSSLMonitorLog(ctx, &utils.SSLMonitorLog{
 		MonitorID:     m.ID,
 		Status:        result.Status,
@@ -638,11 +605,8 @@ type certResult struct {
 }
 
 func (s *SSLMonitorService) checkCertificate(domain string, port, warningDays, criticalDays int) (*certResult, error) {
-	// ✅ Clean domain — remove http/https prefix
 	domain = cleanDomain(domain)
-
 	addr := fmt.Sprintf("%s:%d", domain, port)
-
 	conn, err := tls.DialWithDialer(
 		&net.Dialer{Timeout: 10 * time.Second},
 		"tcp",
@@ -661,13 +625,9 @@ func (s *SSLMonitorService) checkCertificate(domain string, port, warningDays, c
 	if len(certs) == 0 {
 		return nil, fmt.Errorf("no certificates found")
 	}
-
-	// ✅ Use leaf certificate (first one)
 	cert := certs[0]
 	now := time.Now()
 	daysRemaining := int(math.Ceil(cert.NotAfter.Sub(now).Hours() / 24))
-
-	// ✅ Determine status based on thresholds
 	var status string
 	switch {
 	case now.After(cert.NotAfter):
@@ -679,8 +639,6 @@ func (s *SSLMonitorService) checkCertificate(domain string, port, warningDays, c
 	default:
 		status = "valid"
 	}
-
-	// ✅ Extract issuer
 	issuer := cert.Issuer.Organization
 	issuerStr := "Unknown"
 	if len(issuer) > 0 {
@@ -688,7 +646,6 @@ func (s *SSLMonitorService) checkCertificate(domain string, port, warningDays, c
 	} else if cert.Issuer.CommonName != "" {
 		issuerStr = cert.Issuer.CommonName
 	}
-
 	return &certResult{
 		Status:        status,
 		Issuer:        issuerStr,
@@ -705,7 +662,6 @@ func (s *SSLMonitorService) broadcastUpdate(m *utils.SSLMonitor, status string, 
 	if s.broadcast == nil {
 		return
 	}
-
 	validUntilStr := ""
 	if validUntil != nil {
 		validUntilStr = validUntil.Format(time.RFC3339)
@@ -714,7 +670,6 @@ func (s *SSLMonitorService) broadcastUpdate(m *utils.SSLMonitor, status string, 
 	if errMsg != nil {
 		errStr = *errMsg
 	}
-
 	payload, _ := json.Marshal(map[string]interface{}{
 		"type":           "ssl_monitor_update",
 		"monitor_id":     m.ID,
@@ -732,7 +687,6 @@ func (s *SSLMonitorService) broadcastUpdate(m *utils.SSLMonitor, status string, 
 	s.broadcast(payload)
 }
 
-// CheckOnce does a single check — used for test connection
 func (s *SSLMonitorService) CheckOnce(domain string, port, warningDays, criticalDays int) (*certResult, error) {
 	return s.checkCertificate(domain, port, warningDays, criticalDays)
 }
@@ -741,8 +695,8 @@ func cleanDomain(domain string) string {
 	domain = strings.TrimPrefix(domain, "https://")
 	domain = strings.TrimPrefix(domain, "http://")
 	domain = strings.TrimPrefix(domain, "www.")
-	domain = strings.Split(domain, "/")[0] // remove path
-	domain = strings.Split(domain, ":")[0] // remove port
+	domain = strings.Split(domain, "/")[0]
+	domain = strings.Split(domain, ":")[0]
 	return strings.TrimSpace(domain)
 }
 
@@ -760,12 +714,10 @@ func NewDomainExpiryService(db *PostgresDB, broadcast BroadcastFunc) *DomainExpi
 func (s *DomainExpiryService) RecoverFromDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	monitors, err := s.db.GetAllDomainExpiryMonitors(ctx)
 	if err != nil {
 		return err
 	}
-
 	log.Printf("[DOMAIN EXPIRY] Recovering %d monitor(s)", len(monitors))
 	for _, m := range monitors {
 		s.StartMonitor(m)
@@ -776,14 +728,11 @@ func (s *DomainExpiryService) RecoverFromDB() error {
 func (s *DomainExpiryService) StartMonitor(m *utils.DomainExpiryMonitor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if w, exists := s.monitors[m.ID]; exists {
 		w.cancel()
 	}
-
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.monitors[m.ID] = &domainWorker{monitor: m, cancel: cancel}
-
 	s.wg.Add(1)
 	go s.runWorker(ctx, m)
 
@@ -794,7 +743,6 @@ func (s *DomainExpiryService) StartMonitor(m *utils.DomainExpiryMonitor) {
 func (s *DomainExpiryService) StopMonitor(id int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if w, exists := s.monitors[id]; exists {
 		w.cancel()
 		delete(s.monitors, id)
@@ -831,9 +779,7 @@ func (s *DomainExpiryService) runWorker(ctx context.Context, m *utils.DomainExpi
 
 func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 	log.Printf("[DOMAIN EXPIRY] Checking %s", m.Domain)
-
 	result, err := s.queryWHOIS(m.Domain)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -851,7 +797,6 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 	}
 	var daysRemaining *int
 	var status string
-
 	if result.ExpiresOn != nil {
 		days := int(math.Ceil(result.ExpiresOn.Sub(time.Now()).Hours() / 24))
 		daysRemaining = &days
@@ -871,12 +816,9 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 		s.db.UpdateDomainExpiryMonitorStatus(ctx, m.ID, status, result, nil, &errMsg)
 		return
 	}
-
 	log.Printf("[DOMAIN EXPIRY] %s → %s [%d days] registrar: %s",
 		m.Domain, status, *daysRemaining, result.Registrar)
-
 	s.db.UpdateDomainExpiryMonitorStatus(ctx, m.ID, status, result, daysRemaining, nil)
-
 	registrar := result.Registrar
 	s.db.InsertDomainExpiryLog(ctx, &utils.DomainExpiryLog{
 		MonitorID:     m.ID,
@@ -885,7 +827,6 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 		ExpiresOn:     result.ExpiresOn,
 		DaysRemaining: daysRemaining,
 	})
-
 	s.broadcastUpdate(m, status, daysRemaining, result, nil)
 }
 
@@ -899,12 +840,10 @@ func (s *DomainExpiryService) broadcastUpdate(
 	if s.broadcast == nil {
 		return
 	}
-
 	days := 0
 	if daysRemaining != nil {
 		days = *daysRemaining
 	}
-
 	registrar := ""
 	expiresOn := ""
 	if result != nil {
@@ -913,12 +852,10 @@ func (s *DomainExpiryService) broadcastUpdate(
 			expiresOn = result.ExpiresOn.Format(time.RFC3339)
 		}
 	}
-
 	errStr := ""
 	if errMsg != nil {
 		errStr = *errMsg
 	}
-
 	payload, _ := json.Marshal(map[string]interface{}{
 		"type":           "domain_expiry_update",
 		"monitor_id":     m.ID,
@@ -936,13 +873,11 @@ func (s *DomainExpiryService) broadcastUpdate(
 	s.broadcast(payload)
 }
 
-// CheckOnce does a single WHOIS check — used for test/preview
 func (s *DomainExpiryService) CheckOnce(domain string) (*utils.WhoisResult, int, error) {
 	result, err := s.queryWHOIS(domain)
 	if err != nil {
 		return nil, 0, err
 	}
-
 	days := 0
 	if result.ExpiresOn != nil {
 		days = int(math.Ceil(result.ExpiresOn.Sub(time.Now()).Hours() / 24))
@@ -1007,7 +942,6 @@ func (s *DomainExpiryService) queryWHOIS(domain string) (*utils.WhoisResult, err
 	if err != nil {
 		return nil, fmt.Errorf("WHOIS query failed for %s: %w", domain, err)
 	}
-
 	referral := parseWHOISReferral(raw)
 	if referral != "" && referral != server {
 		raw2, err := queryWHOISServer(referral, domain)
@@ -1015,7 +949,6 @@ func (s *DomainExpiryService) queryWHOIS(domain string) (*utils.WhoisResult, err
 			raw = raw2 // use the more detailed response
 		}
 	}
-
 	result := parseWHOISResponse(raw)
 	if result.ExpiresOn == nil {
 		return result, fmt.Errorf("expiry date not found in WHOIS response for %s", domain)
@@ -1030,7 +963,6 @@ func queryWHOISServer(server, domain string) (string, error) {
 		return "", fmt.Errorf("connect to %s failed: %w", server, err)
 	}
 	defer conn.Close()
-
 	conn.SetDeadline(time.Now().Add(15 * time.Second))
 	fmt.Fprintf(conn, "%s\r\n", domain)
 
@@ -1040,7 +972,6 @@ func queryWHOISServer(server, domain string) (string, error) {
 		sb.WriteString(scanner.Text())
 		sb.WriteString("\n")
 	}
-
 	return sb.String(), nil
 }
 
@@ -1083,7 +1014,6 @@ func parseWHOISDate(raw string) *time.Time {
 			raw = raw[:idx]
 		}
 	}
-
 	for _, format := range whoisDateFormats {
 		if t, err := time.Parse(format, raw); err == nil {
 			return &t
@@ -1095,25 +1025,20 @@ func parseWHOISDate(raw string) *time.Time {
 func parseWHOISResponse(raw string) *utils.WhoisResult {
 	result := &utils.WhoisResult{}
 	nsSet := make(map[string]bool)
-
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "%") || strings.HasPrefix(line, "#") {
 			continue
 		}
-
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
 			continue
 		}
-
 		key := strings.ToLower(strings.TrimSpace(parts[0]))
 		val := strings.TrimSpace(parts[1])
-
 		if val == "" {
 			continue
 		}
-
 		switch key {
 		case "registrar", "registrar name", "sponsoring registrar":
 			if result.Registrar == "" {

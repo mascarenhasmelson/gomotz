@@ -130,7 +130,7 @@ type Complete struct {
 
 //---------------------------Tracerouteend------------------------------
 
-//---------------------------ICMP------------------------------
+//---------------------------icmp------------------------------
 
 type PingRequest struct {
 	Target   string  `json:"target"`
@@ -147,7 +147,7 @@ type PingMessage struct {
 }
 
 //-------------------------------------------------------------
-//---------------------------HTTPS-----------------------------
+//---------------------------https-----------------------------
 
 type HTTPSCheckRequest struct {
 	URL              string `json:"url"`
@@ -180,7 +180,7 @@ type Error struct {
 	Message string
 }
 
-// ------------------------VLAN---------------------------------
+// ------------------------vlan---------------------------------
 type VLANNetwork struct {
 	ID                  int       `json:"id"`
 	VLANId              int       `json:"vlan_id"`
@@ -247,20 +247,17 @@ type CustomTime struct {
 	time.Time
 }
 
-// UnmarshalJSON handles both RFC3339 and PostgreSQL timestamp formats
 func (ct *CustomTime) UnmarshalJSON(b []byte) error {
 	s := string(b)
-	// Remove quotes
 	s = s[1 : len(s)-1]
 
-	// Try different formats
 	formats := []string{
 		time.RFC3339,
 		time.RFC3339Nano,
-		"2006-01-02T15:04:05.999999", // PostgreSQL timestamp
-		"2006-01-02T15:04:05",        // PostgreSQL timestamp without microseconds
-		"2006-01-02 15:04:05.999999", // PostgreSQL timestamp with space
-		"2006-01-02 15:04:05",        // PostgreSQL timestamp with space, no microseconds
+		"2006-01-02T15:04:05.999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05.999999",
+		"2006-01-02 15:04:05",
 	}
 
 	var err error
@@ -302,7 +299,7 @@ type MACVendor struct {
 	LastSeen       time.Time `json:"last_seen"`
 }
 
-//----------------------------------VLAN END-----------------------------------
+//----------------------------------vlan end-----------------------------------
 
 //---------------------------------TCP monitoring----------------------------------
 
@@ -505,7 +502,6 @@ type CreateDomainExpiryRequest struct {
 	CriticalDays  int    `json:"critical_days"`
 }
 
-// whoisResult
 type WhoisResult struct {
 	Registrar    string
 	Registrant   string
