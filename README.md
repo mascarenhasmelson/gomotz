@@ -29,10 +29,7 @@ Whether you're a homelab enthusiast or network engineer GoMotz puts network moni
 
 ---
 <p align="center">
-<img src="images/Discovery.png" width="300">
- <img src="images/Dashboard.png" width="300">
-  <img src="images/Speedtest.png" width="300">
-  <img src="images/Tcp_Portscanner.png" width="300">
+<img src="images/Discovery.png" width="1200">
 </p>
 
 ## Architecture
