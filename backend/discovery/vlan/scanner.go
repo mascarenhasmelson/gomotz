@@ -1,3 +1,9 @@
+// unicast arp request for offline and online update for avoid broadcast flooding
+// subnet broadcast every 30sec
+// inmemory arp cache
+// arp db fetch and request
+// passive and active-scan
+// inspired by arpwatch - https://ee.lbl.gov/downloads/arpwatch/
 package vlan
 
 import (

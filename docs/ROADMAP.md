@@ -59,7 +59,7 @@ A built-in reverse proxy that allows GoMotz — even when running behind NAT —
 ---
 
 ##  Device Asset Inventory
-A structured inventory of all devices discovered on your network. Track device details such as hostname, vendor, MAC address, first seen, last seen, open ports, and custom notes — giving you a complete and searchable register of everything on your network.
+A structured inventory of all devices discovered on your network. Track device details such as hostname, vendor, MAC address, first seen, last seen, open ports, Device image and custom notes  giving you a complete and searchable register of everything on your network.
 
 ---
 <div align="center">

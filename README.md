@@ -25,9 +25,15 @@
 
 **GoMotz** is a free, open-source network monitoring and management system designed to run on a **Raspberry Pi**. It gives you full visibility and control over your local network from device discovery to port forwarding, DNS lookups to service checks all from an elegant real-time web dashboard.
 
-Whether you're a homelab enthusiast, a small business owner, MSP, IT department, commercial integrator, residential integrator, security professional, or network engineer GoMotz puts enterprise-grade network monitoring in your hands, **for free**.
+Whether you're a homelab enthusiast or network engineer GoMotz puts network monitoring in your hands, **for free**.
 
 ---
+<p align="center">
+ <img src="images/Dashboard.png" width="250">
+  <img src="images/Discovery.png" width="250">
+  <img src="images/Speedtest.png" width="250">
+  <img src="images/Tcp_Portscanner.png" width="250">
+</p>
 
 ## Architecture
 
@@ -60,7 +66,7 @@ GoMotz follows a lightweight, modular architecture optimized to run efficiently 
 ```
 
 **Key design principles:**
-- **Self-contained** — Everything runs on the Pi; no cloud dependency
+- **Self-contained** — Everything runs on the Pi no cloud dependency
 - **Real-time** — WebSocket-driven live updates across all dashboard panels
 - **Lightweight** — Designed to run efficiently on Raspberry Pi 4 (2GB+)
 
@@ -79,20 +85,6 @@ Real-time overview of your entire network at a glance.
 
 ---
 
-### Network Configuration
-Manage and monitor your network interfaces directly from the dashboard.
-
-- **Interface Discovery** — Auto-detect all available network interfaces (Ethernet, Wi-Fi, VLAN)
-- **Per-Interface Monitoring** — Enable or disable monitoring per interface independently
-- **Interface Details** — View IP address, MAC address, CIDR, default gateway, and monitor status at a glance
-- **Named Networks** — Assign friendly names to interfaces (e.g. `wifi`, `lan`, `guest`)
-- **Configurable Scan Interval** — Set how frequently each network is scanned (10–3600 seconds)
-- **VLAN Support** — Add and monitor VLAN sub-interfaces (e.g. `eth0.10`, `eth0.20`)
-
-📖 See the full setup guide: **[docs/SETUP.md](docs/SETUP.md)**
-
----
-
 ### Device Monitoring
 Scan and track every device on your network.
 
@@ -106,11 +98,21 @@ Scan and track every device on your network.
 ---
 
 ### Port Forwarding & Service Exposure
-Expose internal services securely using intelligent port translation.
 
+Expose your internal services for remote access using port forwarding with Tailscale.
+
+> ⚠️ **Note:** GoMotz does not yet include a built-in reverse proxy. Remote access is currently handled through **Tailscale**. To access your LAN services remotely, install Tailscale on your Raspberry Pi and connect your devices to the same Tailscale network.
+
+When adding a port forwarding rule, the **local IP** can be set in one of two ways:
+- **Tailscale IP** (e.g. `100.x.x.x`) — to bind the rule specifically to your Tailscale interface, making it accessible only over your Tailscale network
+- **`0.0.0.0`** — to bind to all interfaces, making it accessible from both your local network and Tailscale
+
+This gives you flexible, secure control over which services are exposed and how they are reached remotely.
+
+**Features:**
 - **Port Forwarding Rules** — Translate internal IP:Port combinations to custom external ports
-- **Tailscale Interface Binding** — Bind rules directly to your Tailscale VPN interface for secure, private exposure
-- **Multiple IP/Port Mapping** — Manage complex multi-service environments with ease
+- **Tailscale Interface Binding** — Bind rules to your Tailscale IP for secure, private remote access
+- **Multiple Device IP/Port Mapping** — Manage complex multi-service environments with ease
 - **Real-Time Service Monitoring** — Track the live status of all forwarded services
 
 ---
