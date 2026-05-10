@@ -156,6 +156,23 @@ git clone https://github.com/mascarenhasmelson/gomotz.git
 cd gomotz
 docker-compose up -d
 ```
+## Access the Services
+
+| Service  | URL                  | Description                          |
+|-----------|---------------------|--------------------------------------|
+| Frontend  | http://localhost:8000 | Gomotz Web GUI                     |
+| Backend   | http://localhost:8082 | Go Server                        |
+| Database  | localhost:5432        | PostgreSQL (admin / StrongPassword123) |
+
+Added `.env` file for runtime, these are the default parameters
+
+```
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=StrongPassword123
+POSTGRES_DB=tunnel_services
+POSTGRES_PORT=5432
+VITE_API_URL=http://localhost:8082
+```
 
 📖 For detailed setup including VLAN configuration, network interface setup, and first-run walkthrough:
 
