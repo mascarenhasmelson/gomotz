@@ -404,7 +404,7 @@ func extractDeviceNameFromURL(location string) string {
 		hostPort := parts[2]
 		host := strings.Split(hostPort, ":")[0]
 		if net.ParseIP(host) != nil {
-			return "" // just an IP, not a name
+			return ""
 		}
 		return strings.TrimSuffix(host, ".local")
 	}

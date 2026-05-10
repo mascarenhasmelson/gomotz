@@ -7,7 +7,6 @@ import (
 	"github.com/mascarenhasmelson/gomotz/utils"
 )
 
-// VLANConfig holds VLAN network configuration
 type VLANConfig struct {
 	VLANId       int
 	VLANName     string
@@ -17,7 +16,6 @@ type VLANConfig struct {
 	ScanInterval time.Duration
 }
 
-// Database interface for persistence
 type Database interface {
 	UpsertDevice(ctx context.Context, device *utils.DiscoveredDevice) error
 	GetEnabledVLANs(ctx context.Context) ([]*utils.VLANNetwork, error)
@@ -26,7 +24,6 @@ type Database interface {
 	UpdateVendorLastSeen(ctx context.Context, oui string) error
 }
 
-// NotificationHandler receives device notifications
 type NotificationHandler interface {
 	HandleNotification(notification *utils.DeviceNotification)
 }

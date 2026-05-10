@@ -395,8 +395,8 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-// const API_URL = import.meta.env.VITE_API_URL;
-const API_URL = "http://192.168.20.17:8082";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082'
 export default {
   name: 'TcpCheck',
   data() {
@@ -587,7 +587,7 @@ export default {
       this.startProgressSimulation(timeoutValue)
       
       try {
-        const response = await fetch(`${API_URL}/v1/api/tcpCheck`, {
+        const response = await fetch(`${API_BASE_URL}/v1/api/tcpCheck`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -605,7 +605,6 @@ export default {
         
         const data = await response.json()
         
-        // If we get a response (open port), immediately update progress and show results
         if (data && data.status === 'open') {
           this.isWaitingForResponse = false
           this.progress = 100
@@ -616,7 +615,6 @@ export default {
         
       } catch (err) {
         console.error('TCP check error:', err)
-        // Only handle as error if we haven't already processed a result
         if (this.isWaitingForResponse) {
           this.isWaitingForResponse = false
           this.handleError(err)
@@ -635,13 +633,10 @@ export default {
         const elapsedMs = Date.now() - this.testStartTime
         this.elapsedTime = (elapsedMs / 1000).toFixed(1)
         
-        // If we're still waiting for response, continue progress simulation
         if (this.isWaitingForResponse) {
-          // Calculate progress based on elapsed time vs timeout
           const progressPercent = Math.min((elapsedMs / timeoutMs) * 100, 95)
           this.progress = Math.round(progressPercent)
           
-          // Update steps based on progress
           if (elapsedMs < 500) {
             this.currentStep = 1 // DNS Lookup
           } else if (elapsedMs < 1000) {
@@ -652,7 +647,6 @@ export default {
             this.currentStep = 3 // Still waiting
           }
           
-          // If we've reached timeout, show that we're waiting for response
           if (elapsedMs >= timeoutMs) {
             this.currentStep = 3 // Still in waiting response
           }

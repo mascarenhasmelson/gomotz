@@ -74,8 +74,6 @@
             <span class="input-hint">Enter the OID you want to monitor</span>
           </div>
         </div>
-
-        <!-- SNMP Version -->
         <div class="form-row">
           <div class="form-group">
             <label>SNMP Version</label>
@@ -83,7 +81,7 @@
               <select v-model="config.snmp_version" class="form-select">
                 <option value="v1">SNMPv1</option>
                 <option value="v2c">SNMPv2c</option>
-                <option value="v3">SNMPv3</option>
+                <!-- <option value="v3">SNMPv3</option> -->
               </select>
               <span class="select-arrow">▼</span>
             </div>
@@ -417,8 +415,6 @@ export default {
       })
       return sorted
     })
-
-    // Helper function to capitalize value type for DB compatibility
     const capitalizeValueType = (type) => {
       const map = {
         'integer': 'Integer',
@@ -430,8 +426,6 @@ export default {
       }
       return map[type?.toLowerCase()] || type
     }
-
-    // WebSocket Connection
     const connectWebSocket = () => {
       const wsUrl = `${WS_BASE_URL}/v1/api/ws/snmp`
       ws.value = new WebSocket(wsUrl)
@@ -445,8 +439,6 @@ export default {
         try {
           const data = JSON.parse(event.data)
           console.log('📨 WebSocket message:', data.type)
-          
-          //   Fix: Handle initial_state with proper status mapping
           if (data.type === 'initial_state') {
             monitors.value = (data.monitors || []).map(m => ({
               ...m,
@@ -457,7 +449,6 @@ export default {
             }))
             console.log(`Loaded ${monitors.value.length} monitors via WebSocket`)
           } 
-          //   Fix: Handle snmp_monitor_update (not snmp_update)
           else if (data.type === 'snmp_monitor_update') {
             const idx = monitors.value.findIndex(m => m.id === data.monitor_id)
             if (idx !== -1) {
@@ -472,7 +463,6 @@ export default {
               console.log(`Updated monitor ${data.monitor_id}: ${data.status}`)
             }
           } 
-          //   Fix: Handle snmp_monitor_created
           else if (data.type === 'snmp_monitor_created') {
             monitors.value.push({
               ...data.monitor,
@@ -483,7 +473,6 @@ export default {
             })
             console.log(`Monitor created: ${data.monitor.friendly_name}`)
           } 
-          //   Fix: Handle snmp_monitor_updated
           else if (data.type === 'snmp_monitor_updated') {
             const idx = monitors.value.findIndex(m => m.id === data.monitor.id)
             if (idx !== -1) {
@@ -497,7 +486,6 @@ export default {
               console.log(`Monitor updated: ${data.monitor.friendly_name}`)
             }
           } 
-          //   Fix: Handle snmp_monitor_deleted
           else if (data.type === 'snmp_monitor_deleted') {
             monitors.value = monitors.value.filter(m => m.id !== data.monitor_id)
             console.log(`Monitor deleted: ${data.monitor_id}`)
@@ -515,14 +503,12 @@ export default {
       ws.value.onerror = (err) => console.error('WebSocket error:', err)
     }
 
-    // API Methods
     const fetchMonitors = async () => {
       isLoading.value = true
       try {
         const response = await fetch(`${API_BASE_URL}/v1/api/snmp`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
-        //   Fix: Keep all three status states (up, down, pending)
         monitors.value = (data || []).map(m => ({
           ...m,
           status: m.status || 'pending',
@@ -533,7 +519,6 @@ export default {
         console.log('Fetched monitors:', monitors.value.length)
       } catch (error) {
         console.error('Error fetching monitors:', error)
-        // alert('Failed to load SNMP monitors')
       } finally { isLoading.value = false }
     }
 
@@ -625,8 +610,6 @@ export default {
     }
 
     const cancelEdit = () => resetForm()
-
-    //   Fix: Test connection using backend response structure
     const testConnection = async () => {
       if (!config.hostname) { alert('Please enter a hostname'); return }
       if (!config.oid) { alert('Please enter an OID'); return }
@@ -651,8 +634,6 @@ export default {
         })
 
         const data = await response.json()
-
-        //   Use data.success not response.ok — backend always returns 200
         if (data.success) {
           testResult.value = {
             status: 'success',
@@ -712,8 +693,6 @@ export default {
       if (community.length <= 3) return '*'.repeat(community.length)
       return community[0] + '*'.repeat(community.length - 2) + community[community.length - 1]
     }
-
-    //   Fix: Handle both field names (last_checked_at and last_check)
     const formatLastCheck = (monitor) => {
       const timestamp = monitor.last_checked_at || monitor.last_check
       if (!timestamp) return 'Never'

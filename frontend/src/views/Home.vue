@@ -303,8 +303,6 @@ export default {
         this.Public_IP = data.ip || "Unknown";
         this.ISP_Info = data.org || "Unknown ISP";
         this.ASN = data.asn || "Unknown";
-        // this.country = data.country || "Unknown";
-        // this.region = data.region || "Unknown";
         this.city = data.city || "Unknown";
         this.Internet_Status = "Online";
         this.latency = Math.round(Math.random() * 50 + 10); // Simulated latency
@@ -316,7 +314,6 @@ export default {
           latency: this.latency
         });
         
-        // Keep only last 100 records
         if (this.uptimeData.length > 100) {
           this.uptimeData.shift();
         }
@@ -351,7 +348,6 @@ export default {
         message: message
       });
       
-      // Keep only last 10 events
       if (this.connectionHistory.length > 10) {
         this.connectionHistory.pop();
       }
@@ -405,7 +401,6 @@ export default {
       this.fetchISPInfo();
     }, FIVE_HOURS); // Check every 30 seconds
 
-    // Add initial history event
     this.addHistoryEvent('info', 'Dashboard initialized');
   },
 

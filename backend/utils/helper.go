@@ -7,11 +7,9 @@ func LocalIP() net.IP {
 	if ip := localIPVia("1.1.1.1:53"); ip != nil {
 		return ip
 	}
-
 	if ip := localIPVia("8.8.8.8:53"); ip != nil {
 		return ip
 	}
-
 	return net.IPv4(127, 0, 0, 1)
 }
 
@@ -21,7 +19,6 @@ func localIPVia(addr string) net.IP {
 		return nil
 	}
 	defer conn.Close()
-
 	if udpAddr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
 		return udpAddr.IP
 	}

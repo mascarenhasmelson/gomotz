@@ -349,14 +349,12 @@ export default {
   name: 'TCPMonitor',
   
   setup() {
-    // State
+  
     const monitors = ref([])
     const isLoading = ref(false)
     const editingMonitorId = ref(null)
     const ws = ref(null)
     const wsConnected = ref(false)
-    
-    // Configuration state
     const config = reactive({
       friendly_name: '',
       hostname: '',
@@ -365,12 +363,8 @@ export default {
       retries: 2,
       heartbeat_retry_interval: 5
     })
-
-    // Sorting state
     const sortBy = ref('status')
     const sortDirection = ref('desc')
-
-    // Test modal state
     const showTestModal = ref(false)
     const testResult = ref({
       status: 'success',
@@ -381,8 +375,6 @@ export default {
         responseTime: 0
       }
     })
-
-    // Computed properties
     const upCount = computed(() => {
       return monitors.value.filter(m => m.status === 'up').length
     })
@@ -416,8 +408,6 @@ export default {
       
       return sorted
     })
-
-    // WebSocket Connection
     const connectWebSocket = () => {
       const wsUrl = `${WS_BASE_URL}/v1/ws/monitors`
       console.log('Connecting to WebSocket:', wsUrl)
@@ -493,8 +483,6 @@ export default {
         wsConnected.value = false
       }
     }
-
-    // API Methods
     const fetchMonitors = async () => {
       isLoading.value = true
       try {
@@ -515,7 +503,6 @@ export default {
         console.log('Loaded monitors via REST API:', monitors.value.length)
       } catch (error) {
         console.error('Error fetching monitors:', error)
-        // alert(`Failed to load monitors: ${error.message}`)
       } finally {
         isLoading.value = false
       }
@@ -566,8 +553,6 @@ export default {
           const error = await response.json()
           throw new Error(error.message || `HTTP ${response.status}`)
         }
-
-        alert(editingMonitorId.value ? 'Monitor updated successfully' : 'Monitor created successfully')
         resetForm()
         
         if (!wsConnected.value) {
@@ -687,8 +672,6 @@ export default {
       config.retries = 2
       config.heartbeat_retry_interval = 5
     }
-
-    // Helper Methods
     const formatHeartbeatTime = (seconds) => {
       if (!seconds) return '0s'
       const hours = Math.floor(seconds / 3600)
@@ -770,8 +753,6 @@ export default {
     const closeTestModal = () => {
       showTestModal.value = false
     }
-
-    // Lifecycle
     onMounted(() => {
       fetchMonitors()
       connectWebSocket()

@@ -502,7 +502,7 @@ type CreateDomainExpiryRequest struct {
 	CriticalDays  int    `json:"critical_days"`
 }
 
-type WhoisResult struct {
+type RDAPResult struct {
 	Registrar    string
 	Registrant   string
 	RegisteredOn *time.Time

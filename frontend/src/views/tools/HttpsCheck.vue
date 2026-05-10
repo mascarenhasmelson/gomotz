@@ -224,8 +224,7 @@
 </template>
 
 <script>
-// const API_URL = import.meta.env.VITE_API_URL;
-const API_URL = "http://192.168.20.17:8082";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082'
 export default {
   name: 'HttpsChecker',
   data() {
@@ -248,7 +247,6 @@ export default {
     }
   },
   mounted() {
-    // Load recent checks from localStorage
     const savedChecks = localStorage.getItem('httpsCheckHistory');
     if (savedChecks) {
       this.recentChecks = JSON.parse(savedChecks);
@@ -270,23 +268,18 @@ export default {
       this.checkStartTime = new Date();
       this.currentStep = 1;
       this.showDebug = false;
-
-      // Start step animation
       this.startStepAnimation();
 
       try {
-        // Clean the URL
         const cleanUrl = this.cleanUrl(this.url.trim());
-        
-        // Call backend API
-        const response = await fetch(`${API_URL}/v1/api/httpsCheck`, {
+        const response = await fetch(`${API_BASE_URL}/v1/api/httpsCheck`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             url: cleanUrl,
-            timeout: 10, // seconds
+            timeout: 10, 
             checkRedirects: true,
             checkCertificate: true,
             checkSecurityHeaders: true
@@ -296,13 +289,8 @@ export default {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-
         const data = await response.json();
-        
-        // Process the response
         this.processResult(data, cleanUrl);
-        
-        // Save to recent checks
         this.saveToHistory(data, cleanUrl);
         
       } catch (err) {
@@ -322,15 +310,12 @@ export default {
     },
 
     cleanUrl(url) {
-      // Remove protocol if present, we'll let backend handle it
       url = url.replace(/^https?:\/\//i, '');
-      // Remove trailing slash
       url = url.replace(/\/$/, '');
       return url;
     },
 
     processResult(data, originalUrl) {
-      // Format the result for display
       this.result = {
         url: originalUrl,
         httpsSupported: data.httpsSupported || false,
@@ -358,16 +343,10 @@ export default {
         statusCode: data.statusCode,
         responseTime: data.responseTime
       };
-
-      // Add to beginning of array
       this.recentChecks.unshift(checkRecord);
-      
-      // Keep only last 10 checks
       if (this.recentChecks.length > 10) {
         this.recentChecks = this.recentChecks.slice(0, 10);
       }
-
-      // Save to localStorage
       localStorage.setItem('httpsCheckHistory', JSON.stringify(this.recentChecks));
     },
 

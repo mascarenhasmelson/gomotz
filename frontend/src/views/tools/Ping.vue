@@ -266,8 +266,6 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-
-// State
 const pingAddress = ref('')
 const pingResults = ref([])
 const pingOutput = ref('')
@@ -277,16 +275,12 @@ const pingHistory = ref([])
 const backendStatus = ref(null)
 const currentPingStats = ref(null)
 const websocket = ref(null)
-
-// Quick options
 const quickOptions = ref([
   { name: 'Google DNS', address: '8.8.8.8' },
   { name: 'Cloudflare DNS', address: '1.1.1.1' },
   { name: 'OpenDNS', address: '208.67.222.222' },
   { name: 'Quad9 DNS', address: '9.9.9.9' },
 ])
-
-// Advanced options (matching backend defaults)
 const advancedOptions = ref({
   packetCount: 4,
   packetSize: 56,
@@ -294,7 +288,6 @@ const advancedOptions = ref({
   interval: 1
 })
 
-// Computed properties
 const successfulPings = computed(() => {
   return pingResults.value.filter(r => r.status === 'success').length
 })
@@ -305,9 +298,8 @@ const failedPings = computed(() => {
 
 const outputContent = ref(null)
 
-// WebSocket setup
+
 const setupWebSocket = () => {
-  // Close existing connection if any
   if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
     websocket.value.close()
   }
@@ -331,7 +323,6 @@ const setupWebSocket = () => {
   ws.onerror = (error) => {
     console.error('WebSocket error:', error)
     backendStatus.value = { connected: false }
-  //  showNotification('Backend connection error', 'error')
   }
   
   ws.onclose = () => {
@@ -343,8 +334,6 @@ const setupWebSocket = () => {
   websocket.value = ws
   return ws
 }
-
-// Methods
 const selectQuickOption = (option) => {
   pingAddress.value = option.address
   performPing()
@@ -358,29 +347,20 @@ const checkBackendConnection = () => {
 
 const performPing = async () => {
   if (!pingAddress.value.trim() || isPinging.value) return
-  
   const address = pingAddress.value.trim()
-  
-  // Validate input
   if (!isValidHost(address)) {
     showNotification('Please enter a valid IP address or domain name', 'error')
     return
   }
-  
-  // Reset state
   pingResults.value = []
   pingOutput.value = ''
   currentPingStats.value = null
   isPinging.value = true
-  
-  // Setup WebSocket if not connected
   if (!websocket.value || websocket.value.readyState !== WebSocket.OPEN) {
     setupWebSocket()
-    
-    // Wait for connection with timeout
     try {
       await new Promise((resolve, reject) => {
-        const maxWaitTime = 5000 // 5 seconds
+        const maxWaitTime = 5000 
         const startTime = Date.now()
         
         const checkInterval = setInterval(() => {
@@ -425,7 +405,6 @@ const processPingData = (data) => {
       if (data.message) {
         pingOutput.value += data.message + '\n'
         
-        // Scroll output to bottom
         if (outputContent.value) {
           setTimeout(() => {
             outputContent.value.scrollTop = outputContent.value.scrollHeight
@@ -451,7 +430,6 @@ const processPingData = (data) => {
       if (data.message) {
         pingOutput.value += data.message + '\n'
         
-        // Scroll output to bottom
         if (outputContent.value) {
           setTimeout(() => {
             outputContent.value.scrollTop = outputContent.value.scrollHeight
@@ -472,10 +450,8 @@ const processPingData = (data) => {
           max: data.data.max
         }
         
-        // Add to history when we have summary
         addToHistory(pingAddress.value)
         
-        // IMPORTANT: Reset pinging state after receiving summary
         isPinging.value = false
       }
       break
@@ -539,12 +515,10 @@ const addToHistory = (address) => {
   
   pingHistory.value.unshift(historyItem)
   
-  // Keep only last 20 items
   if (pingHistory.value.length > 20) {
     pingHistory.value = pingHistory.value.slice(0, 20)
   }
   
-  // Save to localStorage
   try {
     localStorage.setItem('pingHistory', JSON.stringify(pingHistory.value))
   } catch (error) {
@@ -568,11 +542,9 @@ const selectFromHistory = (item) => {
 }
 
 const isValidHost = (host) => {
-  // Simple validation for IP address or domain
   const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
   const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
   
-  // Also accept localhost
   return ipRegex.test(host) || domainRegex.test(host) || host === 'localhost'
 }
 
@@ -601,7 +573,6 @@ const getPacketLossClass = (loss) => {
 }
 
 const showNotification = (message, type = 'success') => {
-  // Remove any existing notifications
   const existingNotifications = document.querySelectorAll('.notification')
   existingNotifications.forEach(notification => {
     if (notification.parentNode) {
@@ -637,9 +608,7 @@ const showNotification = (message, type = 'success') => {
   }, 3000)
 }
 
-// Lifecycle
 onMounted(() => {
-  // Load history from localStorage
   try {
     const savedHistory = localStorage.getItem('pingHistory')
     if (savedHistory) {
@@ -649,10 +618,8 @@ onMounted(() => {
     console.error('Failed to load ping history:', error)
   }
   
-  // Setup WebSocket connection
   setupWebSocket()
   
-  // Check connection periodically
   const interval = setInterval(() => {
     if (!websocket.value || websocket.value.readyState !== WebSocket.OPEN) {
       setupWebSocket()
@@ -662,7 +629,6 @@ onMounted(() => {
   onUnmounted(() => {
     clearInterval(interval)
     
-    // Close WebSocket connection
     if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
       websocket.value.close()
     }
@@ -671,7 +637,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Dark Mode Theme */
 .ping-tool {
   min-height: 100vh;
   background: linear-gradient(135deg, #0a0c10 0%, #1a1e24 100%);

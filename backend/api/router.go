@@ -148,7 +148,6 @@ func (r *Router) handleDomains(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 
 	switch req.Method {
@@ -180,10 +179,12 @@ func (r *Router) createDomain(w http.ResponseWriter, req *http.Request) {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
+
 	if input.Domain == "" {
 		respondError(w, http.StatusBadRequest, "Domain is required")
 		return
 	}
+
 	if input.CheckInterval == 0 {
 		input.CheckInterval = 86400 // 24 hours
 	}
@@ -210,6 +211,7 @@ func (r *Router) createDomain(w http.ResponseWriter, req *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
 	if r.domainMonitor != nil {
 		r.domainMonitor.StartMonitor(monitor)
 	}
@@ -221,8 +223,8 @@ func (r *Router) handleDomainWithID(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
+
 	path := strings.TrimPrefix(req.URL.Path, "/v1/api/domains/")
 	parts := strings.Split(path, "/")
 
@@ -236,21 +238,19 @@ func (r *Router) handleDomainWithID(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Invalid domain ID", http.StatusBadRequest)
 		return
 	}
+
 	if len(parts) > 1 {
 		switch parts[1] {
 		case "logs":
 			r.getDomainLogs(w, req, domainID)
-			return
 		case "check":
 			r.checkDomainNow(w, req, domainID)
-			return
 		default:
 			http.Error(w, "Unknown sub-route", http.StatusNotFound)
-			return
 		}
+		return
 	}
 
-	// Handle main domain operations
 	switch req.Method {
 	case http.MethodGet:
 		r.getDomain(w, req, domainID)
@@ -286,14 +286,12 @@ func (r *Router) updateDomain(w http.ResponseWriter, req *http.Request, domainID
 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
 	defer cancel()
 
-	// Get existing monitor
 	monitor, err := r.monitorDB.GetDomainExpiryMonitorByID(ctx, domainID)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Domain not found")
 		return
 	}
 
-	// Update fields
 	if input.FriendlyName != "" {
 		monitor.FriendlyName = input.FriendlyName
 	}
@@ -312,7 +310,6 @@ func (r *Router) updateDomain(w http.ResponseWriter, req *http.Request, domainID
 		return
 	}
 
-	// Restart monitor with new settings
 	if r.domainMonitor != nil {
 		r.domainMonitor.StopMonitor(domainID)
 		r.domainMonitor.StartMonitor(monitor)
@@ -325,7 +322,6 @@ func (r *Router) deleteDomain(w http.ResponseWriter, req *http.Request, domainID
 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
 	defer cancel()
 
-	// Stop monitor first
 	if r.domainMonitor != nil {
 		r.domainMonitor.StopMonitor(domainID)
 	}
@@ -376,7 +372,6 @@ func (r *Router) checkDomainNow(w http.ResponseWriter, req *http.Request, domain
 		return
 	}
 
-	// Force immediate check
 	if r.domainMonitor != nil {
 		go r.domainMonitor.CheckOnce(monitor.Domain)
 	}
@@ -387,39 +382,31 @@ func (r *Router) checkDomainNow(w http.ResponseWriter, req *http.Request, domain
 	})
 }
 
-// Test domain before adding
 func (r *Router) testDomain(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
 	}
-
 	if req.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 
 	var input struct {
 		Domain string `json:"domain"`
 	}
-
 	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
-
 	if input.Domain == "" {
 		respondError(w, http.StatusBadRequest, "Domain is required")
 		return
 	}
-
-	// Perform WHOIS check
 	if r.domainMonitor == nil {
 		respondError(w, http.StatusInternalServerError, "Domain monitor service not available")
 		return
 	}
-
 	result, days, err := r.domainMonitor.CheckOnce(input.Domain)
 	if err != nil {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -430,11 +417,12 @@ func (r *Router) testDomain(w http.ResponseWriter, req *http.Request) {
 	}
 
 	status := "active"
-	if days <= 0 {
+	switch {
+	case days <= 0:
 		status = "expired"
-	} else if days <= 7 {
+	case days <= 7:
 		status = "critical"
-	} else if days <= 30 {
+	case days <= 30:
 		status = "warning"
 	}
 
@@ -451,6 +439,7 @@ func (r *Router) testDomain(w http.ResponseWriter, req *http.Request) {
 		"name_servers":   result.NameServers,
 	})
 }
+
 func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
@@ -464,35 +453,50 @@ func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request)
 	defer conn.Close()
 
 	log.Printf("[WS] Domain client connected from %s", req.RemoteAddr)
-
-	// Initial state
 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
 	monitors, err := r.monitorDB.GetAllDomainExpiryMonitors(ctx)
 	cancel()
-
 	if err == nil {
-		initialState := map[string]interface{}{
+		if data, err := json.Marshal(map[string]interface{}{
 			"type":    "initial_state",
 			"domains": monitors,
-		}
-		if data, err := json.Marshal(initialState); err == nil {
+		}); err == nil {
 			conn.WriteMessage(websocket.TextMessage, data)
 		}
 	}
+	hubClient := &ws.Client{
+		Hub:  r.wsHub,
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+	r.wsHub.Register <- hubClient
 
-	// 🔥 Create dedicated pgx connection for LISTEN
+	defer func() {
+		r.wsHub.Unregister <- hubClient
+	}()
 	listenConn, err := r.monitorDB.GetPool().Acquire(r.ctx)
 	if err != nil {
-		log.Printf("[WS-DOMAIN] Failed to acquire connection: %v", err)
+		log.Printf("[WS-DOMAIN] Failed to acquire pg connection: %v", err)
 		return
 	}
 	defer listenConn.Release()
-
-	_, err = listenConn.Exec(r.ctx, "LISTEN domain_expiry_change")
-	if err != nil {
+	if _, err = listenConn.Exec(r.ctx, "LISTEN domain_expiry_change"); err != nil {
 		log.Printf("[WS-DOMAIN] LISTEN failed: %v", err)
 		return
 	}
+	pgCh := make(chan string, 32)
+	go func() {
+		for {
+			n, err := listenConn.Conn().WaitForNotification(r.ctx)
+			if err != nil {
+				close(pgCh)
+				return
+			}
+			if n != nil {
+				pgCh <- n.Payload
+			}
+		}
+	}()
 
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()
@@ -508,20 +512,23 @@ func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request)
 				return
 			}
 
-		default:
-			// 🔥 Wait for PostgreSQL notification
-			notification, err := listenConn.Conn().WaitForNotification(r.ctx)
-			if err != nil {
-				log.Printf("[WS-DOMAIN] Notification error: %v", err)
+		case payload, ok := <-hubClient.Send:
+			if !ok {
 				return
 			}
-
-			if notification == nil {
-				continue
+			var msg map[string]interface{}
+			if json.Unmarshal(payload, &msg) == nil && msg["type"] == "domain_expiry_update" {
+				if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+					log.Printf("[WS-DOMAIN] Write error: %v", err)
+					return
+				}
 			}
 
-			// Forward to WebSocket
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(notification.Payload)); err != nil {
+		case payload, ok := <-pgCh:
+			if !ok {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(payload)); err != nil {
 				log.Printf("[WS-DOMAIN] Write error: %v", err)
 				return
 			}
@@ -529,84 +536,6 @@ func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request)
 	}
 }
 
-// Domain WebSocket handler
-// func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request) {
-// 	if EnableCORS(&w, req) {
-// 		return
-// 	}
-
-// 	conn, err := r.upgrader.Upgrade(w, req, nil)
-// 	if err != nil {
-// 		log.Printf("[WS] Domain upgrade failed: %v", err)
-// 		return
-// 	}
-// 	defer conn.Close()
-
-// 	log.Printf("[WS] Domain client connected from %s", req.RemoteAddr)
-
-// 	// Send initial state
-// 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
-// 	monitors, err := r.monitorDB.GetAllDomainExpiryMonitors(ctx)
-// 	cancel()
-
-// 	if err == nil {
-// 		initialState := map[string]interface{}{
-// 			"type":    "initial_state",
-// 			"domains": monitors,
-// 		}
-// 		if data, err := json.Marshal(initialState); err == nil {
-// 			conn.WriteMessage(websocket.TextMessage, data)
-// 		}
-// 	}
-
-// 	// Subscribe to PostgreSQL NOTIFY channel
-// 	listener := pq.NewListener(
-// 		os.Getenv("DATABASE_URL"),
-// 		10*time.Second,
-// 		time.Minute,
-// 		func(ev pq.ListenerEventType, err error) {
-// 			if err != nil {
-// 				log.Printf("[WS-DOMAIN] Listener error: %v", err)
-// 			}
-// 		},
-// 	)
-// 	defer listener.Close()
-
-// 	if err := listener.Listen("domain_expiry_change"); err != nil {
-// 		log.Printf("[WS-DOMAIN] Failed to listen: %v", err)
-// 		return
-// 	}
-
-// 	// Keep connection alive and forward notifications
-// 	pingTicker := time.NewTicker(30 * time.Second)
-// 	defer pingTicker.Stop()
-
-// 	for {
-// 		select {
-// 		case <-r.ctx.Done():
-// 			return
-
-// 		case <-pingTicker.C:
-// 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-// 				log.Printf("[WS-DOMAIN] Ping failed: %v", err)
-// 				return
-// 			}
-
-// 		case notification := <-listener.Notify:
-// 			if notification == nil {
-// 				continue
-// 			}
-
-// 			// Forward notification to WebSocket client
-// 			if err := conn.WriteMessage(websocket.TextMessage, []byte(notification.Extra)); err != nil {
-// 				log.Printf("[WS-DOMAIN] Write error: %v", err)
-// 				return
-// 			}
-// 		}
-// 	}
-// }
-
-// -- domain expiry end---
 func (r *Router) handleSSLMonitors(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
@@ -1442,7 +1371,7 @@ func (r *Router) handleMonitorWebSocket(w http.ResponseWriter, req *http.Request
 		log.Printf("Monitor WebSocket upgrade error: %v", err)
 		return
 	}
-	monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx) //  was r.GetAllPortMonitors
+	monitors, err := r.monitorDB.GetAllPortMonitors(r.ctx)
 	if err == nil {
 		if monitors == nil {
 			monitors = []*utils.PortMonitor{}
@@ -1546,7 +1475,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 				limit = l
 			}
 		}
-		logs, err := r.monitorDB.GetPortMonitorLogs(r.ctx, id, limit) //
+		logs, err := r.monitorDB.GetPortMonitorLogs(r.ctx, id, limit)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -1559,7 +1488,7 @@ func (r *Router) handlePortMonitorWithID(w http.ResponseWriter, req *http.Reques
 	}
 	switch req.Method {
 	case http.MethodGet:
-		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id) //
+		m, err := r.monitorDB.GetPortMonitorByID(r.ctx, id)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "monitor not found")
 			return
@@ -2127,14 +2056,13 @@ func (r *Router) updateVLAN(w http.ResponseWriter, req *http.Request, id int) {
 func (r *Router) deleteVLAN(w http.ResponseWriter, req *http.Request, id int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	existing, err := r.db.GetNetworkByID(r.ctx, id) //  get first to find interface_name
+	existing, err := r.db.GetNetworkByID(r.ctx, id)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Network not found")
 		return
 	}
 	r.scanManager.StopVLANScan(existing.VLANId)
-	if err := r.db.DeleteNetwork(r.ctx, existing.InterfaceName); //  delete by interface_name
-	err != nil {
+	if err := r.db.DeleteNetwork(r.ctx, existing.InterfaceName); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

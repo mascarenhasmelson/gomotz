@@ -317,7 +317,6 @@ const offlineCount = computed(() =>
 const filteredServices = computed(() => {
   let filtered = services.value;
   
-  // Apply search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     filtered = filtered.filter(service => 
@@ -327,7 +326,6 @@ const filteredServices = computed(() => {
     );
   }
   
-  // Apply status filter
   if (activeFilter.value === 'online') {
     filtered = filtered.filter(service => service.online);
   } else if (activeFilter.value === 'offline') {
@@ -338,7 +336,6 @@ const filteredServices = computed(() => {
 });
 
 async function fetchServices() {
-  // Don't show loading overlay for periodic refreshes
   if (initialLoad.value) {
     loading.value = true;
   }
@@ -351,22 +348,20 @@ async function fetchServices() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    services.value = data || []; // Ensure it's always an array
+    services.value = data || []; 
   } catch (err) {
     error.value = `Failed to fetch services: ${err.message}`;
     console.error('Error fetching services:', err);
     services.value = []; // Set to empty array on error
   } finally {
     loading.value = false;
-    initialLoad.value = false; // Mark initial load as complete
+    initialLoad.value = false; 
   }
 }
 
 async function refreshService(id) {
   const service = services.value.find(s => s.id === id);
   if (!service) return;
-  
-  // Optimistically update UI
   service.online = false;
   
   try {
@@ -450,7 +445,6 @@ async function saveService() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // Reset form
     form.value = {
       service_name: '',
       local_ip: '',

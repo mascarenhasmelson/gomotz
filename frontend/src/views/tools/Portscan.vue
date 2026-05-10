@@ -342,7 +342,8 @@
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
-const API_URL = "http://192.168.20.17:8082";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082'
 
 export default {
   name: 'PortScan',
@@ -489,7 +490,6 @@ export default {
         const elapsed = (Date.now() - this.scanStartTimestamp) / 1000;
         this.scanRate = Math.round(this.scannedPortsCount / elapsed);
         
-        // Calculate estimated time remaining
         if (this.scanRate > 0) {
           const remainingPorts = 65535 - this.scannedPortsCount;
           this.estimatedTimeRemaining = Math.round(remainingPorts / this.scanRate);
@@ -526,7 +526,6 @@ export default {
         this.updateScanRate();
       }, 1000);
       
-      // Progress simulation
       this.progressSimulationInterval = setInterval(() => {
         if (this.scanProgress < 100) {
           this.scanProgress += 3.7;

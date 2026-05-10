@@ -1,6 +1,6 @@
 <template>
   <div class="lan-scanner">
-    <!-- Top Bar -->
+
     <div class="top-bar">
       <div class="controls-bar">
         <div class="vlan-filter">
@@ -199,7 +199,7 @@
           </div>
 
           <div v-if="filteredDevicesCount === 0 && !loading" class="no-devices">
-            <div class="no-devices-icon">   </div>
+            <div class="no-devices-icon">📡</div>
             <h3>No Devices Found</h3>
             <p v-if="searchQuery">No devices match your search criteria</p>
             <p v-else-if="selectedNetworkId !== 'all'">No devices in selected network</p>
@@ -299,8 +299,14 @@
             <div class="action-buttons">
               <button @click="copyToClipboard(selectedDevice.ip_address)" class="action-btn copy-ip">📋 Copy IP</button>
               <button @click="copyToClipboard(selectedDevice.mac_address)" class="action-btn copy-mac">📋 Copy MAC</button>
-              <button @click="pingDevice(selectedDevice)" class="action-btn ping">    Ping</button>
+              <button @click="pingDevice(selectedDevice)" class="action-btn ping">📡 Ping</button>
+
+              <button @click="scanPort(selectedDevice)" class="action-btn scan-port" title="Coming soon">🔍 Scan Port</button>
               <button @click="showConflictsForIP(selectedDevice)" class="action-btn conflict-info" v-if="selectedDevice.status === 'conflict'">⚠️ View Conflicts</button>
+            </div>
+            <div class="future-release-note">
+              <span class="note-icon">🚀</span>
+              <span class="note-text">Scan Port and Ping feature coming in future release</span>
             </div>
           </div>
         </div>
@@ -318,7 +324,7 @@
           <span>Loading conflicts...</span>
         </div>
         <div v-else-if="conflictsData.length === 0" class="no-conflicts">
-          <span>  No active IP conflicts detected</span>
+          <span>✅ No active IP conflicts detected</span>
         </div>
         <div v-else>
           <div v-for="conflict in conflictsData" :key="`${conflict.network_id}:${conflict.ip_address}`" class="conflict-item">
@@ -334,7 +340,7 @@
             </div>
             <div class="conflict-actions">
               <button @click="investigateConflict(conflict)" class="investigate-btn">🔍 Investigate</button>
-              <button @click="resolveConflict(conflict)" class="resolve-btn">  Mark Resolved</button>
+              <button @click="resolveConflict(conflict)" class="resolve-btn">✅ Mark Resolved</button>
             </div>
           </div>
         </div>
@@ -345,8 +351,7 @@
 
 <script>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-
-// WebSocket Singleton
+ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
 class WebSocketManager {
   constructor() {
     this.ws = null
@@ -379,7 +384,7 @@ class WebSocketManager {
     this.ws = new WebSocket(url)
 
     this.ws.onopen = () => {
-      console.log('  WebSocket connected')
+      console.log('✅ WebSocket connected')
       this.isConnected = true
       this.isConnecting = false
       this.reconnectAttempts = 0
@@ -395,7 +400,7 @@ class WebSocketManager {
     }
 
     this.ws.onclose = () => {
-      console.log('   WebSocket closed')
+      console.log('🔌 WebSocket closed')
       this.isConnected = false
       this.isConnecting = false
       this.reconnect()
@@ -464,16 +469,11 @@ export default {
     const currentDisplayLimit = ref(50)
     const isLoadingMore = ref(false)
     const hasMore = ref(true)
-
     const conflictsData = ref([])
     const conflictsLoading = ref(false)
     const showConflictsPanel = ref(false)
-
     let refreshInterval = null
     let messageHandler = null
-
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082'
-    
     const apiUrl = (path) => {
       const cleanPath = path.startsWith('/') ? path : `/${path}`
       return `${API_BASE_URL}${cleanPath}`
@@ -563,8 +563,6 @@ export default {
     const filteredDevicesCount = computed(() => filteredDevicesList.value.length)
     const displayedDevices = computed(() => filteredDevicesList.value.slice(0, currentDisplayLimit.value))
     const displayedDevicesCount = computed(() => displayedDevices.value.length)
-
-    // Fetch all networks
     const fetchNetworks = async () => {
       try {
         const res = await fetch(apiUrl('/v1/api/vlans'))
@@ -572,7 +570,7 @@ export default {
         const data = await res.json()
         if (Array.isArray(data)) {
           networks.value = data
-          console.log(`    Loaded ${networks.value.length} networks:`, networks.value.map(n => n.vlan_name))
+          console.log(`📡 Loaded ${networks.value.length} networks:`, networks.value.map(n => n.vlan_name))
         }
         return true
       } catch (err) {
@@ -580,8 +578,6 @@ export default {
         return false
       }
     }
-
-    // Fetch devices for a specific network by network ID
     const fetchDevicesForNetwork = async (network) => {
       try {
         const res = await fetch(apiUrl(`/v1/api/vlans/${network.id}/devices`))
@@ -597,27 +593,21 @@ export default {
       }
     }
 
-    // Fetch all devices from all networks
     const fetchAllDevices = async () => {
       loading.value = true
       try {
-        // First fetch networks
         const networksLoaded = await fetchNetworks()
         if (!networksLoaded || networks.value.length === 0) {
           console.log('No networks found')
           devices.value = []
           return
         }
-
-        // Then fetch devices for each network in parallel
         const devicePromises = networks.value.map(network => fetchDevicesForNetwork(network))
         const devicesArrays = await Promise.all(devicePromises)
-        
-        // Flatten all devices into a single array
         const allDevices = devicesArrays.flat()
         devices.value = allDevices
         resetInfiniteScroll()
-        console.log(`📱 Loaded ${devices.value.length} devices from ${networks.value.length} networks`)
+        console.log(` Loaded ${devices.value.length} devices from ${networks.value.length} networks`)
       } catch (err) {
         console.error('Failed to fetch all devices:', err)
         connectionError.value = `Failed to fetch devices: ${err.message}`
@@ -635,7 +625,6 @@ export default {
         
         if (data && data.conflicts) {
           conflictsData.value = data.conflicts
-          // Add network names to conflicts
           conflictsData.value.forEach(conflict => {
             const network = networks.value.find(n => n.id === conflict.network_id)
             if (network) {
@@ -745,8 +734,6 @@ export default {
 
     const handleWebSocketMessage = (data) => {
       console.log('📨 WebSocket message:', data.event_type || 'device_update')
-      
-      // Find network name if available
       let networkName = null
       let interfaceName = null
       if (data.network_id) {
@@ -898,7 +885,11 @@ export default {
 
     const selectDevice = (d) => { selectedDevice.value = d }
     const clearSelection = () => { selectedDevice.value = null }
-    const pingDevice = (device) => alert(`Ping ${device.ip_address} - Feature coming soon`)
+    const pingDevice = (device) => alert(`Ping ${device.ip_address} will be available in a future release.\n\nThis feature will allow you to scan open ports on this device.`)
+    const scanPort = (device) => {
+      alert(`🔍 Port scanning for ${device.ip_address} will be available in a future release.\n\nThis feature will allow you to scan open ports on this device.`)
+    }
+    
     const reconnect = () => {
       wsManager.disconnect()
       setTimeout(() => {
@@ -923,8 +914,6 @@ export default {
         refreshInterval = null
       }
     }
-
-    // Update connection status periodically
     const connectionInterval = setInterval(() => {
       connected.value = wsManager.isConnected
     }, 1000)
@@ -933,15 +922,9 @@ export default {
 
     onMounted(async () => {
       console.log('🚀 Component mounted, initializing...')
-      
-      // Register message handler
       messageHandler = handleWebSocketMessage
       wsManager.onMessage(messageHandler)
-      
-      // Connect WebSocket
       wsManager.connect(getWebSocketUrl())
-      
-      // Initial data fetch
       await refreshData()
       
       startPeriodicRefresh()
@@ -951,8 +934,6 @@ export default {
       console.log('🧹 Cleaning up...')
       stopPeriodicRefresh()
       clearInterval(connectionInterval)
-      
-      // Remove message handler
       if (messageHandler) {
         wsManager.offMessage(messageHandler)
       }
@@ -989,6 +970,7 @@ export default {
       selectDevice,
       clearSelection,
       pingDevice,
+      scanPort,
       reconnect,
       handleScroll,
       refreshData,

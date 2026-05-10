@@ -225,8 +225,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-// const API_URL = import.meta.env.VITE_API_URL;
-const API_URL = "http://192.168.20.17:8082";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082'
 export default {
   name: 'DnsLookup',
 
@@ -281,8 +280,6 @@ export default {
         const types = this.recordType === 'ALL' 
           ? this.allRecordTypes 
           : [this.recordType]
-
-        // Query types sequentially instead of all at once
         for (const type of types) {
           const response = await this.dnsQuery(this.domain, type)
           if (response && response.answers && response.answers.length > 0) {
@@ -292,7 +289,6 @@ export default {
               timestamp: new Date().toISOString()
             })
           } else if (this.recordType !== 'ALL') {
-            // Only show empty result for single queries, not for ALL
             this.results.push({
               type: type,
               answers: [],
@@ -300,8 +296,6 @@ export default {
             })
           }
         }
-
-        // Update URL hash
         window.location.hash = `${this.domain}|${this.recordType}`
       } catch (error) {
         console.error('DNS lookup error:', error)
@@ -313,16 +307,14 @@ export default {
 
  async dnsQuery(domain, type) {
   try {
-    // Using POST request as per your Go API
     const requestBody = {
       domain: domain,
       type: type,
-      server: '1.1.1.1' // Default DNS server
+      server: '1.1.1.1'
     }
 
-    console.log('Making DNS query:', { domain, type }) // Debug log
-    //  const response = await fetch(`${API_URL}/v1/services/isp`);
-    const response = await fetch(`${API_URL}/v1/api/dnsCheck`, {
+    console.log('Making DNS query:', { domain, type }) 
+    const response = await fetch(`${API_BASE_URL}/v1/api/dnsCheck`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -331,7 +323,7 @@ export default {
       body: JSON.stringify(requestBody)
     })
 
-    console.log('Response status:', response.status) // Debug log
+    console.log('Response status:', response.status) 
     
     if (!response.ok) {
       let errorText = 'Unknown error'
@@ -345,11 +337,9 @@ export default {
     }
 
     const data = await response.json()
-    console.log('API Response data:', data) // Debug log - check this in browser console
-    
-    // Format response based on your Go API structure
+    console.log('API Response data:', data) 
     const formatted = this.formatResponse(data, domain, type)
-    console.log('Formatted response:', formatted) // Debug log
+    console.log('Formatted response:', formatted) 
     
     return formatted
   } catch (error) {
@@ -359,12 +349,8 @@ export default {
 },
 
  formatResponse(data, domain, type) {
-  // Format response from your Go API - UPDATED
   let answers = []
-  
-  // Check the actual structure from your Go API
   if (data.answers && Array.isArray(data.answers)) {
-    // This matches your Go API's APIResponse struct
     answers = data.answers.map(answer => ({
       name: answer.name || domain,
       ttl: answer.ttl || answer.TTL || 0,
@@ -372,7 +358,6 @@ export default {
       value: answer.value || ''
     }))
   } else if (data.Answers && Array.isArray(data.Answers)) {
-    // Alternative format
     answers = data.Answers.map(answer => ({
       name: answer.name || domain,
       ttl: answer.ttl || answer.TTL || 0,
@@ -380,7 +365,6 @@ export default {
       value: answer.value || answer.data || ''
     }))
   } else if (Array.isArray(data)) {
-    // Direct array format
     answers = data.map(item => ({
       name: item.name || domain,
       ttl: item.ttl || item.TTL || 0,
@@ -388,7 +372,6 @@ export default {
       value: item.value || item.data || ''
     }))
   } else if (data.result && Array.isArray(data.result)) {
-    // Another possible format
     answers = data.result.map(item => ({
       name: item.name || domain,
       ttl: item.ttl || 0,

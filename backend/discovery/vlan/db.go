@@ -65,47 +65,16 @@ func (p *PostgresDB) CreateVLANNetwork(ctx context.Context, vlan *utils.VLANNetw
 	).Scan(&vlan.ID, &vlan.CreatedAt, &vlan.UpdatedAt)
 }
 
-// func scanVLANRow(rows interface {
-// 	Scan(dest ...interface{}) error
-// }) (*utils.VLANNetwork, error) {
-// 	network := &utils.VLANNetwork{}
-// 	var ipAddress, cidrNotation, cidrFull, defaultGateway string
-
-// 	err := rows.Scan(
-// 		&network.ID, &network.VLANId, &network.VLANName, &network.NetworkMode,
-// 		&ipAddress, &cidrNotation, &cidrFull, &defaultGateway,
-// 		&network.MonitoringEnabled, &network.ScanIntervalSeconds,
-// 		&network.CreatedAt, &network.UpdatedAt,
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if ipAddress != "" {
-// 		network.IPAddress = &ipAddress
-// 	}
-// 	if cidrNotation != "" {
-// 		network.CIDRNotation = &cidrNotation
-// 	}
-// 	if cidrFull != "" {
-// 		network.CIDRFull = &cidrFull
-// 	}
-// 	if defaultGateway != "" {
-// 		network.DefaultGateway = &defaultGateway
-// 	}
-
-//		return network, nil
-//	}
 func scanVLANRow(rows interface {
 	Scan(dest ...interface{}) error
 }) (*utils.VLANNetwork, error) {
 	network := &utils.VLANNetwork{}
 	var vlanID *int
-	var interfaceName *string // declared but never passed to Scan()!
+	var interfaceName *string
 	var ipAddress, cidrNotation, cidrFull, defaultGateway string
 
 	err := rows.Scan(
-		&network.ID, &vlanID, &interfaceName, &network.VLANName, &network.NetworkMode, //  added &interfaceName
+		&network.ID, &vlanID, &interfaceName, &network.VLANName, &network.NetworkMode,
 		&ipAddress, &cidrNotation, &cidrFull, &defaultGateway,
 		&network.MonitoringEnabled, &network.ScanIntervalSeconds,
 		&network.CreatedAt, &network.UpdatedAt,
@@ -136,19 +105,6 @@ func scanVLANRow(rows interface {
 	return network, nil
 }
 
-// const vlanSelectCols = `
-//
-//	SELECT
-//		id, vlan_id, vlan_name, network_mode,
-//		COALESCE(ip_address::text, '')     AS ip_address,
-//		COALESCE(cidr_notation, '')        AS cidr_notation,
-//		COALESCE(cidr_full, '')            AS cidr_full,
-//		COALESCE(default_gateway::text, '') AS default_gateway,
-//		monitoring_enabled, scan_interval_seconds,
-//		created_at, updated_at
-//	FROM vlan_networks
-//
-// `
 const vlanSelectCols = `
 	SELECT
 		id, vlan_id, interface_name, vlan_name, network_mode,
@@ -279,46 +235,6 @@ func (p *PostgresDB) DeleteVLANNetwork(ctx context.Context, vlanID int) error {
 }
 
 func (p *PostgresDB) UpsertDevice(ctx context.Context, device *utils.DiscoveredDevice) error {
-	// query := `
-	// 	INSERT INTO discovered_devices
-	// 	(vlan_id, ip_address, mac_address, hostname, vendor, device_status, first_seen, last_seen)
-	// 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	// 	ON CONFLICT (vlan_id, ip_address)
-	// 	DO UPDATE SET
-	// 		mac_address   = EXCLUDED.mac_address,
-	// 		hostname      = EXCLUDED.hostname,
-	// 		vendor        = EXCLUDED.vendor,
-	// 		device_status = EXCLUDED.device_status,
-	// 		last_seen     = EXCLUDED.last_seen
-	// 	RETURNING id, created_at, updated_at
-	// `
-	// return p.pool.QueryRow(ctx, query,
-	// 	device.VLANId, device.IPAddress, device.MACAddress,
-	// 	device.Hostname, device.Vendor, device.DeviceStatus,
-	// 	device.FirstSeen, device.LastSeen,
-	// ).Scan(&device.ID, &device.CreatedAt, &device.UpdatedAt)
-	// query := `
-	// 	INSERT INTO discovered_devices (
-	// 		vlan_id, ip_address, mac_address, hostname, vendor,
-	// 		device_status, first_seen, last_seen
-	// 	)
-	// 	VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-	// 	ON CONFLICT (vlan_id, mac_address)
-	// 	DO UPDATE SET
-	// 		ip_address = EXCLUDED.ip_address,
-	// 		hostname = CASE
-	// 			WHEN EXCLUDED.hostname IS NOT NULL AND EXCLUDED.hostname != '' THEN EXCLUDED.hostname
-	// 			WHEN discovered_devices.hostname IS NOT NULL AND discovered_devices.hostname != '' THEN discovered_devices.hostname
-	// 			ELSE EXCLUDED.hostname
-	// 		END,
-	// 		vendor = CASE
-	// 			WHEN EXCLUDED.vendor IS NOT NULL AND EXCLUDED.vendor != '' THEN EXCLUDED.vendor
-	// 			WHEN discovered_devices.vendor IS NOT NULL AND discovered_devices.vendor != '' THEN discovered_devices.vendor
-	// 			ELSE EXCLUDED.vendor
-	// 		END,
-	// 		device_status = EXCLUDED.device_status,
-	// 		last_seen = NOW()
-	// `
 	query := `
     INSERT INTO discovered_devices (
         network_id, ip_address, mac_address, hostname, vendor, 
@@ -354,19 +270,6 @@ func (p *PostgresDB) UpsertDevice(ctx context.Context, device *utils.DiscoveredD
 
 }
 
-// const deviceSelectCols = `
-//
-//	SELECT
-//		id, vlan_id,
-//		host(ip_address)      AS ip_address,
-//		mac_address,
-//		COALESCE(hostname, '') AS hostname,
-//		COALESCE(vendor, '')   AS vendor,
-//		device_status,
-//		first_seen, last_seen, created_at, updated_at
-//	FROM discovered_devices
-//
-// `
 const deviceSelectCols = `
     SELECT
         id, network_id,
@@ -620,13 +523,11 @@ func (p *PostgresDB) StartListening(ctx context.Context, connString string, call
 	return nil
 }
 
-// GetVLANNetworkByInterface gets network config by interface name
 func (p *PostgresDB) GetVLANNetworkByInterface(ctx context.Context, interfaceName string) (*utils.VLANNetwork, error) {
 	row := p.pool.QueryRow(ctx, vlanSelectCols+"WHERE interface_name = $1", interfaceName)
 	return scanVLANRow(row)
 }
 
-// CreateVLANNetworkByInterface creates a network entry for any interface type
 func (p *PostgresDB) CreateVLANNetworkByInterface(ctx context.Context, vlan *utils.VLANNetwork, interfaceName string) error {
 	var vlanID *int
 	if vlan.VLANId != 0 {
@@ -661,7 +562,6 @@ func (p *PostgresDB) CreateVLANNetworkByInterface(ctx context.Context, vlan *uti
 
 func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *utils.VLANNetwork, interfaceName string) error {
 	if vlan.NetworkMode == "auto" {
-		//  For auto mode — persist IP/CIDR so recovery works on restart
 		query := `
 			UPDATE vlan_networks
 			SET vlan_name = $1,
@@ -709,7 +609,6 @@ func (p *PostgresDB) UpdateVLANNetworkByInterface(ctx context.Context, vlan *uti
 		return err
 	}
 
-	// static mode
 	query := `
 		UPDATE vlan_networks
 		SET vlan_name = $1,

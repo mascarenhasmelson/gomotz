@@ -11,7 +11,6 @@ import (
 	"github.com/mascarenhasmelson/gomotz/utils"
 )
 
-var hostnameCallbackRegistered bool
 var hostnameCallbackRegisteredOnce sync.Once
 
 type VLANScanManager struct {
@@ -414,7 +413,7 @@ func (m *VLANScanManager) buildEventCallback(vlanID int) ARPEventCallback {
 func (m *VLANScanManager) monitorVLAN(ctx context.Context, vs *VLANScanner) {
 	defer m.wg.Done()
 
-	ticker := time.NewTicker(40 * time.Second) // ->changed to 40s
+	ticker := time.NewTicker(40 * time.Second)
 	defer ticker.Stop()
 
 	consecutiveFailures := 0

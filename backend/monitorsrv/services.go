@@ -1,7 +1,7 @@
 package monitorsrv
 
 import (
-	"bufio"
+	// "bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -20,20 +21,23 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-type DomainExpiryService struct {
-	db        *PostgresDB
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.RWMutex
-	monitors  map[int]*domainWorker
-	wg        sync.WaitGroup
-	broadcast BroadcastFunc
-}
+type BroadcastFunc func([]byte)
 
 type domainWorker struct {
 	monitor *utils.DomainExpiryMonitor
 	cancel  context.CancelFunc
 }
+
+type DomainExpiryService struct {
+	db        *PostgresDB
+	ctx       context.Context
+	cancel    context.CancelFunc
+	monitors  map[int]*domainWorker
+	mu        sync.RWMutex
+	wg        sync.WaitGroup
+	broadcast BroadcastFunc
+}
+
 type SSLMonitorService struct {
 	db        *PostgresDB
 	ctx       context.Context
@@ -49,8 +53,6 @@ type sslWorker struct {
 	cancel  context.CancelFunc
 }
 
-type BroadcastFunc func(payload []byte)
-
 type PortMonitorService struct {
 	db        *PostgresDB
 	ctx       context.Context
@@ -58,7 +60,7 @@ type PortMonitorService struct {
 	mu        sync.RWMutex
 	monitors  map[int]*portMonitorWorker
 	wg        sync.WaitGroup
-	broadcast BroadcastFunc //  instead of *vlan.Hub
+	broadcast BroadcastFunc
 }
 
 type portMonitorWorker struct {
@@ -714,10 +716,12 @@ func NewDomainExpiryService(db *PostgresDB, broadcast BroadcastFunc) *DomainExpi
 func (s *DomainExpiryService) RecoverFromDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	monitors, err := s.db.GetAllDomainExpiryMonitors(ctx)
 	if err != nil {
 		return err
 	}
+
 	log.Printf("[DOMAIN EXPIRY] Recovering %d monitor(s)", len(monitors))
 	for _, m := range monitors {
 		s.StartMonitor(m)
@@ -728,21 +732,23 @@ func (s *DomainExpiryService) RecoverFromDB() error {
 func (s *DomainExpiryService) StartMonitor(m *utils.DomainExpiryMonitor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if w, exists := s.monitors[m.ID]; exists {
 		w.cancel()
 	}
+
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.monitors[m.ID] = &domainWorker{monitor: m, cancel: cancel}
 	s.wg.Add(1)
 	go s.runWorker(ctx, m)
 
-	log.Printf("[DOMAIN EXPIRY] Started %d — %s every %ds",
-		m.ID, m.Domain, m.CheckInterval)
+	log.Printf("[DOMAIN EXPIRY] Started %d — %s every %ds", m.ID, m.Domain, m.CheckInterval)
 }
 
 func (s *DomainExpiryService) StopMonitor(id int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if w, exists := s.monitors[id]; exists {
 		w.cancel()
 		delete(s.monitors, id)
@@ -764,9 +770,12 @@ func (s *DomainExpiryService) GetActiveCount() int {
 
 func (s *DomainExpiryService) runWorker(ctx context.Context, m *utils.DomainExpiryMonitor) {
 	defer s.wg.Done()
+
 	s.checkAndSave(m)
+
 	ticker := time.NewTicker(time.Duration(m.CheckInterval) * time.Second)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -779,13 +788,16 @@ func (s *DomainExpiryService) runWorker(ctx context.Context, m *utils.DomainExpi
 
 func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 	log.Printf("[DOMAIN EXPIRY] Checking %s", m.Domain)
-	result, err := s.queryWHOIS(m.Domain)
+
+	result, err := s.queryRDAP(m.Domain)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err != nil {
 		errMsg := err.Error()
 		log.Printf("[DOMAIN EXPIRY] %s → error [%s]", m.Domain, errMsg)
+
 		s.db.UpdateDomainExpiryMonitorStatus(ctx, m.ID, "error", nil, nil, &errMsg)
 		s.db.InsertDomainExpiryLog(ctx, &utils.DomainExpiryLog{
 			MonitorID:    m.ID,
@@ -795,11 +807,14 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 		s.broadcastUpdate(m, "error", nil, nil, &errMsg)
 		return
 	}
+
 	var daysRemaining *int
 	var status string
+
 	if result.ExpiresOn != nil {
 		days := int(math.Ceil(result.ExpiresOn.Sub(time.Now()).Hours() / 24))
 		daysRemaining = &days
+
 		switch {
 		case days <= 0:
 			status = "expired"
@@ -812,13 +827,16 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 		}
 	} else {
 		status = "error"
-		errMsg := "could not parse expiry date from WHOIS"
+		errMsg := "could not parse expiry date from RDAP response"
 		s.db.UpdateDomainExpiryMonitorStatus(ctx, m.ID, status, result, nil, &errMsg)
 		return
 	}
+
 	log.Printf("[DOMAIN EXPIRY] %s → %s [%d days] registrar: %s",
 		m.Domain, status, *daysRemaining, result.Registrar)
+
 	s.db.UpdateDomainExpiryMonitorStatus(ctx, m.ID, status, result, daysRemaining, nil)
+
 	registrar := result.Registrar
 	s.db.InsertDomainExpiryLog(ctx, &utils.DomainExpiryLog{
 		MonitorID:     m.ID,
@@ -827,6 +845,7 @@ func (s *DomainExpiryService) checkAndSave(m *utils.DomainExpiryMonitor) {
 		ExpiresOn:     result.ExpiresOn,
 		DaysRemaining: daysRemaining,
 	})
+
 	s.broadcastUpdate(m, status, daysRemaining, result, nil)
 }
 
@@ -834,16 +853,18 @@ func (s *DomainExpiryService) broadcastUpdate(
 	m *utils.DomainExpiryMonitor,
 	status string,
 	daysRemaining *int,
-	result *utils.WhoisResult,
+	result *utils.RDAPResult,
 	errMsg *string,
 ) {
 	if s.broadcast == nil {
 		return
 	}
+
 	days := 0
 	if daysRemaining != nil {
 		days = *daysRemaining
 	}
+
 	registrar := ""
 	expiresOn := ""
 	if result != nil {
@@ -852,10 +873,12 @@ func (s *DomainExpiryService) broadcastUpdate(
 			expiresOn = result.ExpiresOn.Format(time.RFC3339)
 		}
 	}
+
 	errStr := ""
 	if errMsg != nil {
 		errStr = *errMsg
 	}
+
 	payload, _ := json.Marshal(map[string]interface{}{
 		"type":           "domain_expiry_update",
 		"monitor_id":     m.ID,
@@ -870,14 +893,16 @@ func (s *DomainExpiryService) broadcastUpdate(
 		"error":          errStr,
 		"checked_at":     time.Now().UTC(),
 	})
+
 	s.broadcast(payload)
 }
 
-func (s *DomainExpiryService) CheckOnce(domain string) (*utils.WhoisResult, int, error) {
-	result, err := s.queryWHOIS(domain)
+func (s *DomainExpiryService) CheckOnce(domain string) (*utils.RDAPResult, int, error) {
+	result, err := s.queryRDAP(domain)
 	if err != nil {
 		return nil, 0, err
 	}
+
 	days := 0
 	if result.ExpiresOn != nil {
 		days = int(math.Ceil(result.ExpiresOn.Sub(time.Now()).Hours() / 24))
@@ -886,47 +911,41 @@ func (s *DomainExpiryService) CheckOnce(domain string) (*utils.WhoisResult, int,
 	return result, days, nil
 }
 
-var whoisServers = map[string]string{
-	"com":    "whois.verisign-grs.com",
-	"net":    "whois.verisign-grs.com",
-	"org":    "whois.pir.org",
-	"io":     "whois.nic.io",
-	"co":     "whois.nic.co",
-	"ai":     "whois.nic.ai",
-	"app":    "whois.nic.google",
-	"dev":    "whois.nic.google",
-	"in":     "whois.registry.in",
-	"uk":     "whois.nic.uk",
-	"de":     "whois.denic.de",
-	"fr":     "whois.nic.fr",
-	"au":     "whois.auda.org.au",
-	"ca":     "whois.cira.ca",
-	"jp":     "whois.jprs.jp",
-	"cn":     "whois.cnnic.cn",
-	"ru":     "whois.tcinet.ru",
-	"br":     "whois.registro.br",
-	"info":   "whois.afilias.net",
-	"biz":    "whois.biz",
-	"name":   "whois.nic.name",
-	"mobi":   "whois.dotmobiregistry.net",
-	"us":     "whois.nic.us",
-	"eu":     "whois.eu",
-	"tv":     "tvwhois.verisign-grs.com",
-	"cc":     "ccwhois.verisign-grs.com",
-	"me":     "whois.nic.me",
-	"ly":     "whois.nic.ly",
-	"to":     "whois.tonic.to",
-	"tech":   "whois.nic.tech",
-	"online": "whois.nic.online",
-	"site":   "whois.nic.site",
-	"store":  "whois.nic.store",
-	"xyz":    "whois.nic.xyz",
-	"club":   "whois.nic.club",
-	"shop":   "whois.nic.shop",
+func getRDAPBaseURL(tld string) (string, error) {
+	resp, err := http.Get("https://data.iana.org/rdap/dns.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch IANA RDAP bootstrap: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var bootstrap struct {
+		Services [][]interface{} `json:"services"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&bootstrap); err != nil {
+		return "", fmt.Errorf("failed to decode IANA RDAP bootstrap: %w", err)
+	}
+
+	for _, svc := range bootstrap.Services {
+		tlds, ok := svc[0].([]interface{})
+		if !ok {
+			continue
+		}
+		urls, ok := svc[1].([]interface{})
+		if !ok || len(urls) == 0 {
+			continue
+		}
+		for _, t := range tlds {
+			if strings.EqualFold(t.(string), tld) {
+				return urls[0].(string), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no RDAP server found for TLD: %s", tld)
 }
 
-func (s *DomainExpiryService) queryWHOIS(domain string) (*utils.WhoisResult, error) {
-	domain = cleanDomainForWHOIS(domain)
+func (s *DomainExpiryService) queryRDAP(domain string) (*utils.RDAPResult, error) {
+	domain = cleanDomain(domain)
 
 	parts := strings.Split(domain, ".")
 	if len(parts) < 2 {
@@ -934,160 +953,125 @@ func (s *DomainExpiryService) queryWHOIS(domain string) (*utils.WhoisResult, err
 	}
 	tld := strings.ToLower(parts[len(parts)-1])
 
-	server, ok := whoisServers[tld]
-	if !ok {
-		server = "whois.iana.org"
-	}
-	raw, err := queryWHOISServer(server, domain)
+	baseURL, err := getRDAPBaseURL(tld)
 	if err != nil {
-		return nil, fmt.Errorf("WHOIS query failed for %s: %w", domain, err)
+		return nil, err
 	}
-	referral := parseWHOISReferral(raw)
-	if referral != "" && referral != server {
-		raw2, err := queryWHOISServer(referral, domain)
-		if err == nil && len(raw2) > len(raw) {
-			raw = raw2 // use the more detailed response
+
+	url := strings.TrimRight(baseURL, "/") + "/domain/" + domain
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("RDAP query failed for %s: %w", domain, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("domain not found in RDAP: %s", domain)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("RDAP server returned %d for %s", resp.StatusCode, domain)
+	}
+
+	var rdap struct {
+		Events []struct {
+			EventAction string `json:"eventAction"`
+			EventDate   string `json:"eventDate"`
+		} `json:"events"`
+		Entities []struct {
+			Roles      []string      `json:"roles"`
+			VCardArray []interface{} `json:"vcardArray"`
+			PublicIDs  []struct {
+				Type       string `json:"type"`
+				Identifier string `json:"identifier"`
+			} `json:"publicIds"`
+		} `json:"entities"`
+		Nameservers []struct {
+			LDHName string `json:"ldhName"`
+		} `json:"nameservers"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&rdap); err != nil {
+		return nil, fmt.Errorf("failed to decode RDAP response for %s: %w", domain, err)
+	}
+
+	result := &utils.RDAPResult{}
+	for _, e := range rdap.Events {
+		t, err := time.Parse(time.RFC3339, e.EventDate)
+		if err != nil {
+			t2, err2 := time.Parse("2006-01-02T15:04:05", e.EventDate)
+			if err2 != nil {
+				continue
+			}
+			t = t2
+		}
+		switch e.EventAction {
+		case "expiration":
+			result.ExpiresOn = &t
+		case "registration":
+			result.RegisteredOn = &t
+		case "last changed":
+			result.UpdatedOn = &t
 		}
 	}
-	result := parseWHOISResponse(raw)
+	for _, entity := range rdap.Entities {
+		isRegistrar := false
+		isRegistrant := false
+		for _, role := range entity.Roles {
+			switch role {
+			case "registrar":
+				isRegistrar = true
+			case "registrant":
+				isRegistrant = true
+			}
+		}
+
+		name := extractVCardName(entity.VCardArray)
+
+		if isRegistrar && result.Registrar == "" && name != "" {
+			result.Registrar = name
+		}
+		if isRegistrant && result.Registrant == "" && name != "" {
+			result.Registrant = name
+		}
+	}
+
+	for _, ns := range rdap.Nameservers {
+		if ns.LDHName != "" {
+			result.NameServers = append(result.NameServers, strings.ToLower(ns.LDHName))
+		}
+	}
+
 	if result.ExpiresOn == nil {
-		return result, fmt.Errorf("expiry date not found in WHOIS response for %s", domain)
+		return result, fmt.Errorf("expiry date not found in RDAP response for %s", domain)
 	}
 
 	return result, nil
 }
 
-func queryWHOISServer(server, domain string) (string, error) {
-	conn, err := net.DialTimeout("tcp", server+":43", 10*time.Second)
-	if err != nil {
-		return "", fmt.Errorf("connect to %s failed: %w", server, err)
+func extractVCardName(vCardArray []interface{}) string {
+	if len(vCardArray) < 2 {
+		return ""
 	}
-	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(15 * time.Second))
-	fmt.Fprintf(conn, "%s\r\n", domain)
-
-	var sb strings.Builder
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		sb.WriteString(scanner.Text())
-		sb.WriteString("\n")
+	entries, ok := vCardArray[1].([]interface{})
+	if !ok {
+		return ""
 	}
-	return sb.String(), nil
-}
-
-func parseWHOISReferral(raw string) string {
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
-		lower := strings.ToLower(line)
-		if strings.HasPrefix(lower, "whois server:") ||
-			strings.HasPrefix(lower, "registrar whois server:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
+	for _, entry := range entries {
+		row, ok := entry.([]interface{})
+		if !ok || len(row) < 4 {
+			continue
+		}
+		fieldName, ok := row[0].(string)
+		if !ok {
+			continue
+		}
+		if strings.ToLower(fieldName) == "fn" {
+			if val, ok := row[3].(string); ok && val != "" {
+				return val
 			}
 		}
 	}
 	return ""
-}
-
-var whoisDateFormats = []string{
-	"2006-01-02T15:04:05Z",
-	"2006-01-02T15:04:05.999999999Z",
-	"2006-01-02 15:04:05",
-	"2006-01-02",
-	"02-Jan-2006",
-	"January 02 2006",
-	"02 Jan 2006",
-	"2006.01.02",
-	"02/01/2006",
-	"01/02/2006",
-	"20060102",
-	"2006-01-02T15:04:05+00:00",
-	"2006-01-02T15:04:05-07:00",
-}
-
-func parseWHOISDate(raw string) *time.Time {
-	raw = strings.TrimSpace(raw)
-	if idx := strings.LastIndex(raw, " "); idx != -1 {
-		possibleTZ := raw[idx+1:]
-		if len(possibleTZ) <= 4 && strings.ToUpper(possibleTZ) == strings.ToUpper(possibleTZ) {
-			raw = raw[:idx]
-		}
-	}
-	for _, format := range whoisDateFormats {
-		if t, err := time.Parse(format, raw); err == nil {
-			return &t
-		}
-	}
-	return nil
-}
-
-func parseWHOISResponse(raw string) *utils.WhoisResult {
-	result := &utils.WhoisResult{}
-	nsSet := make(map[string]bool)
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "%") || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.ToLower(strings.TrimSpace(parts[0]))
-		val := strings.TrimSpace(parts[1])
-		if val == "" {
-			continue
-		}
-		switch key {
-		case "registrar", "registrar name", "sponsoring registrar":
-			if result.Registrar == "" {
-				result.Registrar = val
-			}
-
-		case "registrant", "registrant name", "registrant organization",
-			"registrant org", "owner":
-			if result.Registrant == "" {
-				result.Registrant = val
-			}
-
-		case "expiry date", "expiration date", "registry expiry date",
-			"registrar registration expiration date", "expire date",
-			"expires", "expires on", "expiration time",
-			"paid-till", "valid-date", "renewal date",
-			"domain expiration date":
-			if result.ExpiresOn == nil {
-				result.ExpiresOn = parseWHOISDate(val)
-			}
-		case "creation date", "created date", "created on",
-			"domain registration date", "registration time",
-			"registered", "registered on", "created":
-			if result.RegisteredOn == nil {
-				result.RegisteredOn = parseWHOISDate(val)
-			}
-
-		case "updated date", "last updated", "last modified",
-			"last update", "modified", "changed":
-			if result.UpdatedOn == nil {
-				result.UpdatedOn = parseWHOISDate(val)
-			}
-		case "name server", "nserver", "nameserver", "name servers":
-			ns := strings.ToLower(strings.Fields(val)[0])
-			if !nsSet[ns] {
-				nsSet[ns] = true
-				result.NameServers = append(result.NameServers, ns)
-			}
-		}
-	}
-
-	return result
-}
-
-func cleanDomainForWHOIS(domain string) string {
-	domain = strings.TrimPrefix(domain, "https://")
-	domain = strings.TrimPrefix(domain, "http://")
-	domain = strings.TrimPrefix(domain, "www.")
-	domain = strings.Split(domain, "/")[0]
-	domain = strings.Split(domain, ":")[0]
-	return strings.ToLower(strings.TrimSpace(domain))
 }

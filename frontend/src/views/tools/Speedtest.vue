@@ -116,7 +116,6 @@ const downloadProgress = ref(0);
 const uploadProgress = ref(0);
 
 const startSpeedtest = () => {
-  // Reset state
   downloadSpeed.value = "0.00";
   uploadSpeed.value = "0.00";
   testTime.value = 0;

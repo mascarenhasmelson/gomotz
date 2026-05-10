@@ -168,6 +168,7 @@ docker-compose up -d
 📄 **[View the full Roadmap →](docs/ROADMAP.md)**
 
 ---
+
 ## Contributing
 
 GoMotz is open source and contributions are welcome! Whether it's bug reports, feature suggestions, documentation, or code — all help is appreciated.

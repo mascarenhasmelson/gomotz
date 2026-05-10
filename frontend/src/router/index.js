@@ -115,10 +115,10 @@ const router = createRouter({
       component: () => import('../views/Settings.vue'),
     },
 
-  {
-      path: '/block',
-      component: () => import('../views/Block.vue'),
-    }
+  // {
+  //     path: '/block',
+  //     component: () => import('../views/Block.vue'),
+  //   }
 
   ]
 })

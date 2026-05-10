@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/mascarenhasmelson/gomotz/api"
+	"github.com/mascarenhasmelson/gomotz/bgservices"
 	"github.com/mascarenhasmelson/gomotz/discovery/vlan"
 	"github.com/mascarenhasmelson/gomotz/monitorsrv"
 )
@@ -74,6 +75,8 @@ func main() {
 	if parentInterface == "" {
 		parentInterface = "eth0"
 	}
+
+	go bgservices.StartPortMonitor(ctx, pool)
 	scanManager := vlan.NewVLANScanManager(database, parentInterface)
 	log.Println("VLAN scan manager created")
 	time.Sleep(500 * time.Millisecond)
@@ -174,7 +177,7 @@ func main() {
 	log.Println(" server running on http://localhost:8082")
 	log.Println("------------------------------------------------------")
 	log.Println("------------------------------------------------------")
-	log.Println(" need sudo/root privileges")
+	log.Println(" need sudo root privileges")
 	log.Println("------------------------------------------------------")
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

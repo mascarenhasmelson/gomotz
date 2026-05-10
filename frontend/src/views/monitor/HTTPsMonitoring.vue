@@ -381,14 +381,8 @@ export default {
       warning_days: 30,
       critical_days: 7
     })
-
-    // ============================================
-    // COMPUTED
-    // ============================================
     const filteredMonitors = computed(() => {
       let list = [...monitors.value]
-
-      // Global search
       if (search.value) {
         const q = search.value.toLowerCase()
         list = list.filter(m =>
@@ -397,13 +391,9 @@ export default {
           (m.issuer || '').toLowerCase().includes(q)
         )
       }
-
-      // Status filter
       if (filterStatus.value) {
         list = list.filter(m => m.status === filterStatus.value)
       }
-
-      // Sort
       list.sort((a, b) => {
         let va = a[sortBy.value]
         let vb = b[sortBy.value]
@@ -421,10 +411,6 @@ export default {
 
     const countByStatus = (status) =>
       monitors.value.filter(m => m.status === status).length
-
-    // ============================================
-    // WEBSOCKET
-    // ============================================
     const connectWebSocket = () => {
       ws = new WebSocket(`${WS_BASE_URL}/v1/api/ws/ssl`)
 
@@ -492,10 +478,6 @@ export default {
           break
       }
     }
-
-    // ============================================
-    // API
-    // ============================================
     const fetchMonitors = async () => {
       loading.value = true
       try {
@@ -637,9 +619,6 @@ export default {
       })
     }
 
-    // ============================================
-    // CSV EXPORT
-    // ============================================
     const exportCSV = () => {
       const headers = ['ID', 'Domain', 'Friendly Name', 'Issuer', 'Expiry', 'Days Remaining', 'Status']
       const rows = monitors.value.map(m => [
@@ -664,10 +643,6 @@ export default {
       a.click()
       URL.revokeObjectURL(url)
     }
-
-    // ============================================
-    // HELPERS
-    // ============================================
     const statusLabel = (status) => {
       const map = {
         valid: '✅ Valid',

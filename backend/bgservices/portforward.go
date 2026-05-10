@@ -30,7 +30,7 @@ func PortForward(ctx context.Context, localIP, localPort, remoteIP, remotePort s
 		return 0, err
 	}
 	go func() {
-		_ = cmd.Wait() // prevents zombie ps
+		_ = cmd.Wait() // prevent zombie ps
 	}()
 	fmt.Printf("Started port forward with PID %d\n", cmd.Process.Pid)
 	return cmd.Process.Pid, nil

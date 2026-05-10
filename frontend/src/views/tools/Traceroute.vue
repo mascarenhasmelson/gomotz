@@ -208,7 +208,6 @@ export default {
         return;
       }
 
-      // Reset state
       this.isTracing = true;
       this.error = null;
       this.traceResults = [];
@@ -223,13 +222,10 @@ export default {
       this.connectionStatus = 'Starting traceroute...';
       this.connectionStatusClass = 'connecting';
       
-      // Clean up any existing connections
       this.cleanup();
       
-      // Connect via WebSocket
       this.connectWebSocket();
       
-      // Start elapsed time counter
       this.traceInterval = setInterval(() => {
         this.elapsedTime = Math.floor((Date.now() - this.traceStartTimestamp) / 1000);
         this.updateProgress();
@@ -246,7 +242,6 @@ export default {
         this.connectionStatus = 'Connected, starting trace...';
         this.connectionStatusClass = 'connected';
         
-        // Send trace request
         this.ws.send(JSON.stringify({
           action: 'startTrace',
           target: this.targetHost.trim(),
@@ -258,7 +253,6 @@ export default {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
           switch (data.type) {
             case 'hopResult':
               this.handleHopResult(data.hop);
@@ -308,26 +302,21 @@ export default {
     },
     
     handleHopResult(hopData) {
-      // Check if hop already exists
       const existingIndex = this.traceResults.findIndex(h => h.hop === hopData.hop);
       
       if (existingIndex !== -1) {
-        // Update existing hop
         const existing = this.traceResults[existingIndex];
         
-        // Add new RTT if not already present
         if (hopData.rtt && !existing.rtts.includes(hopData.rtt)) {
           existing.rtts.push(hopData.rtt);
           existing.avgRtt = Math.round(existing.rtts.reduce((a, b) => a + b, 0) / existing.rtts.length);
         }
         
-        // Update other fields
         if (hopData.ip && !existing.ip) existing.ip = hopData.ip;
         if (hopData.hostname && !existing.hostname) existing.hostname = hopData.hostname;
         if (hopData.status) existing.status = hopData.status;
         
       } else {
-        // Add new hop
         const hop = {
           hop: hopData.hop,
           ip: hopData.ip || '',
@@ -341,7 +330,6 @@ export default {
         this.traceResults.sort((a, b) => a.hop - b.hop);
       }
       
-      // Check if this is the target
       if (hopData.isTarget) {
         this.traceCompleted = true;
       }
@@ -359,7 +347,6 @@ export default {
       this.connectionStatus = 'Trace completed';
       this.connectionStatusClass = 'completed';
       
-      // Add any final hops from complete data
       if (data.hops && Array.isArray(data.hops)) {
         data.hops.forEach(hop => {
           this.handleHopResult(hop);
@@ -373,7 +360,6 @@ export default {
       this.isTracing = false;
       this.traceCompleted = data.reached || false;
       
-      // Cleanup
       this.cleanup();
     },
     
