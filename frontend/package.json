@@ -1,0 +1,26 @@
+{
+  "name": "gomotz",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource/fira-sans": "^5.2.7",
+    "@m-lab/ndt7": "^0.0.6",
+    "axios": "^1.6.0",
+    "chart.js": "^4.4.0",
+    "lottie-web": "^5.12.0",
+    "vue": "^3.5.22",
+    "vue-chartjs": "^5.2.0",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "sass-embedded": "^1.93.3",
+    "vite": "^7.1.7"
+  }
+}
