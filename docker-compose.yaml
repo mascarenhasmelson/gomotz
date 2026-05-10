@@ -29,7 +29,7 @@ services:
       # redis:
       #   condition: service_started
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5431/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}
       # - REDIS_ADDR=${REDIS_ADDR}   
     network_mode: host
     command: ./gomotz
