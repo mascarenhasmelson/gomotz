@@ -439,20 +439,17 @@ func (r *Router) testDomain(w http.ResponseWriter, req *http.Request) {
 		"name_servers":   result.NameServers,
 	})
 }
-
 func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request) {
 	if EnableCORS(&w, req) {
 		return
 	}
-
 	conn, err := r.upgrader.Upgrade(w, req, nil)
 	if err != nil {
-		log.Printf("[WS] Domain upgrade failed: %v", err)
+		log.Printf("[WS-DOMAIN] Upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
-
-	log.Printf("[WS] Domain client connected from %s", req.RemoteAddr)
+	log.Printf("[WS-DOMAIN] Client connected from %s", req.RemoteAddr)
 	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
 	monitors, err := r.monitorDB.GetAllDomainExpiryMonitors(ctx)
 	cancel()
@@ -461,18 +458,32 @@ func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request)
 			"type":    "initial_state",
 			"domains": monitors,
 		}); err == nil {
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			conn.WriteMessage(websocket.TextMessage, data)
 		}
 	}
-	hubClient := &ws.Client{
-		Hub:  r.wsHub,
-		Conn: conn,
-		Send: make(chan []byte, 256),
-	}
-	r.wsHub.Register <- hubClient
-
-	defer func() {
-		r.wsHub.Unregister <- hubClient
+	sendCh := make(chan []byte, 256)
+	hubDone := make(chan struct{})
+	go func() {
+		defer close(hubDone)
+		for {
+			select {
+			case <-r.ctx.Done():
+				return
+			case msg, ok := <-r.wsHub.Broadcast:
+				if !ok {
+					return
+				}
+				var m map[string]interface{}
+				if json.Unmarshal(msg, &m) == nil && m["type"] == "domain_expiry_update" {
+					select {
+					case sendCh <- msg:
+					default:
+						log.Printf("[WS-DOMAIN] sendCh full, dropping message")
+					}
+				}
+			}
+		}
 	}()
 	listenConn, err := r.monitorDB.GetPool().Acquire(r.ctx)
 	if err != nil {
@@ -485,49 +496,75 @@ func (r *Router) handleDomainWebSocket(w http.ResponseWriter, req *http.Request)
 		return
 	}
 	pgCh := make(chan string, 32)
+	pgDone := make(chan struct{})
 	go func() {
+		defer close(pgDone)
 		for {
 			n, err := listenConn.Conn().WaitForNotification(r.ctx)
 			if err != nil {
-				close(pgCh)
+				log.Printf("[WS-DOMAIN] pg notify error: %v", err)
 				return
 			}
 			if n != nil {
-				pgCh <- n.Payload
+				select {
+				case pgCh <- n.Payload:
+				case <-r.ctx.Done():
+					return
+				}
 			}
 		}
 	}()
+	conn.SetReadLimit(512)
+	conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+		return nil
+	})
 
-	pingTicker := time.NewTicker(30 * time.Second)
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("[WS-DOMAIN] Read closed: %v", err)
+				return
+			}
+		}
+	}()
+	pingTicker := time.NewTicker(54 * time.Second)
 	defer pingTicker.Stop()
-
 	for {
 		select {
 		case <-r.ctx.Done():
+			log.Printf("[WS-DOMAIN] Server context done, closing")
+			return
+		case <-readDone:
+			log.Printf("[WS-DOMAIN] Client disconnected")
 			return
 
 		case <-pingTicker.C:
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("[WS-DOMAIN] Ping failed: %v", err)
 				return
 			}
 
-		case payload, ok := <-hubClient.Send:
+		case payload, ok := <-sendCh:
 			if !ok {
 				return
 			}
-			var msg map[string]interface{}
-			if json.Unmarshal(payload, &msg) == nil && msg["type"] == "domain_expiry_update" {
-				if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-					log.Printf("[WS-DOMAIN] Write error: %v", err)
-					return
-				}
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+				log.Printf("[WS-DOMAIN] Write error: %v", err)
+				return
 			}
 
 		case payload, ok := <-pgCh:
 			if !ok {
 				return
 			}
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(payload)); err != nil {
 				log.Printf("[WS-DOMAIN] Write error: %v", err)
 				return

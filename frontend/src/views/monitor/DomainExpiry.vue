@@ -15,13 +15,13 @@
     </div>
 
 
-    <div class="connection-bar" :class="connectionStatus">
+    <!-- <div class="connection-bar" :class="connectionStatus">
       <span class="dot"></span>
       <span>{{ connectionMessage }}</span>
       <button v-if="connectionStatus === 'disconnected'" @click="reconnectWebSocket" class="reconnect-btn">
         Reconnect
       </button>
-    </div>
+    </div> -->
 
 
     <div class="stats-row">

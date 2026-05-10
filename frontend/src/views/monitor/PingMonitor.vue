@@ -7,13 +7,13 @@
     </div>
 
     <!-- Connection Status -->
-    <div class="connection-bar" :class="connectionStatus">
+    <!-- <div class="connection-bar" :class="connectionStatus">
       <span class="status-indicator"></span>
       <span class="status-text">{{ connectionMessage }}</span>
       <button v-if="connectionStatus === 'disconnected'" @click="connectWebSocket" class="reconnect-btn">
         Reconnect
       </button>
-    </div>
+    </div> -->
 
     <!-- Add New Monitor Form -->
     <div class="add-monitor-card">
