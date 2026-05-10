@@ -28,8 +28,9 @@
 Whether you're a homelab enthusiast or network engineer GoMotz puts network monitoring in your hands, **for free**.
 
 ---
+
 <p align="center">
-<img src="images/Discovery.png" width="1200">
+  <img src="images/Discovery.png" width="1200" style="border-radius: 10px; box-shadow: 0 0 20px #00ffff;">
 </p>
 
 ## Architecture
