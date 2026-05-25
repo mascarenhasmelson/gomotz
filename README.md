@@ -33,43 +33,6 @@ Whether you're a homelab enthusiast or network engineer GoMotz puts network moni
   <img src="images/Discovery.png" width="1200" style="border-radius: 10px; box-shadow: 0 0 20px #00ffff;">
 </p>
 
-## Architecture
-
-GoMotz follows a lightweight, modular architecture optimized to run efficiently on Raspberry Pi hardware.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        GoMotz Agent                         │
-│                    (Raspberry Pi Device)                    │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐  │
-│  │   Network   │  │   Service   │  │   Port Forwarding  │  │
-│  │  Discovery  │  │  Monitors   │  │  & Tailscale Bind  │  │
-│  └──────┬──────┘  └──────┬──────┘  └─────────┬──────────┘  │
-│         │                │                   │             │
-│  ┌──────▼────────────────▼───────────────────▼──────────┐  │
-│  │                    Core Engine                       │  │
-│  │         (SNMP · ARP · ICMP · TCP · HTTP)             │  │
-│  └──────────────────────────┬───────────────────────────┘  │
-│                             │                              │
-│  ┌──────────────────────────▼───────────────────────────┐  │
-│  │                 REST API / WebSocket                 │  │
-│  └──────────────────────────┬───────────────────────────┘  │
-└─────────────────────────────│──────────────────────────────┘
-                              │
-              ┌───────────────▼────────────────┐
-              │          Web Dashboard         │
-              │  (Real-time UI · Any Browser)  │
-              └────────────────────────────────┘
-```
-
-**Key design principles:**
-- **Self-contained** — Everything runs on the Pi no cloud dependency
-- **Real-time** — WebSocket-driven live updates across all dashboard panels
-- **Lightweight** — Designed to run efficiently on Raspberry Pi 4 (2GB+)
-
----
-
 ## Features
 
 ### Network Dashboard
