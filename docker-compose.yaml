@@ -1,4 +1,5 @@
 services:
+
   postgres_db:
     image: postgres:16-alpine
     container_name: gomotz_postgres
@@ -13,24 +14,16 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 5
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: gomotz_redis
-  #   network_mode: host
-  #   restart: unless-stopped
-  
+      retries: 5  
+
   backend:
     build: ./backend
     container_name: gomotz-backend
     depends_on:
       postgres_db:
         condition: service_healthy
-      # redis:
-      #   condition: service_started
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}
-      # - REDIS_ADDR=${REDIS_ADDR}   
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}   
     network_mode: host
     command: ./gomotz
     restart: unless-stopped
