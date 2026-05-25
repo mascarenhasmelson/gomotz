@@ -1,7 +1,7 @@
 services:
 
   postgres_db:
-    build: ./db
+    image: ghcr.io/mascarenhasmelson/gomotz-db:latest
     container_name: gomotz_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -15,7 +15,7 @@ services:
       retries: 5  
 
   backend:
-    build: ./backend
+    image: ghcr.io/mascarenhasmelson/gomotz-backend:latest
     container_name: gomotz-backend
     depends_on:
       postgres_db:
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/mascarenhasmelson/gomotz-frontend:latest
     container_name: gomotz-frontend
     depends_on:
       - backend
