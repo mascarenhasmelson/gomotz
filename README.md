@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="images/gomotz.png" alt="GoMotz Logo" width="300">
-</p>
-
 <div align="center">
 
 <img src="https://img.shields.io/badge/version-0.5.5--beta-blueviolet?style=for-the-badge" />
