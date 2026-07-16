@@ -1,0 +1,37 @@
+services:
+  postgres_db:
+    build: ./db
+    container_name: gomotz_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5  
+
+  backend:
+    build: ./backend
+    container_name: gomotz-backend
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}   
+    network_mode: host
+    command: ./gomotz
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: gomotz-frontend
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
+    network_mode: host
+    command: npm run dev
+    restart: unless-stopped
