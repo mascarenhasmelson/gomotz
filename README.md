@@ -152,18 +152,3 @@ GoMotz is released under the [MIT License](LICENSE).
 
 ---
 
-## Motivation
-
-Honestly, this started out of frustration.
-
-**Domotz** is a powerful monitoring solution both in software and hardware  but it comes at a relatively high cost, especially for personal or small-scale use. On top of that, I found myself juggling **multiple dashboards and tools**, mentally mapping ports, switching between browser tabs, and losing track of what was running where.
-
-So I built GoMotz. Since backend developed in Go hence named it as Gomotz 
-
-A single, self-hosted platform that gives me and now you **full visibility and control over your network**, without the subscription, without the fragmentation, and without the frustration. Everything in one place, running on hardware you already own.
-
-<div align="center">
-
-If you love this project, please consider giving it a ⭐
-
-</div>
