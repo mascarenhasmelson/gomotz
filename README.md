@@ -7,7 +7,7 @@
 
 # GoMotz
 
-### Open-Source Network Monitoring
+### Open-Source Network Management
 
 **Self-hosted, Simple Network Monitoring System built for Raspberry Pi.**
 
