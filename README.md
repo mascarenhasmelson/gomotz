@@ -154,7 +154,7 @@ Remote access is currently provided through Tailscale, as a temporary solution u
 
 ## Support the Developer
 
-I'm a **hobbyist developer** with a deep interest in **embedded web systems**, building primarily with **Go & Vue.js**. I'm the creator of GoMotz — an Asset Management, Network Monitoring, and Remote Access Cloud SaaS.
+I'm a **hobbyist developer** with a interest in **embedded web systems**, building primarily with **Go & Vue.js**. I'm the creator of GoMotz — an Asset Management, Network Monitoring, and Remote Access Cloud SaaS.
 
 If you find GoMotz useful and want to support its development, you can buy me a coffee. Every contribution helps keep the project alive and growing!
 
