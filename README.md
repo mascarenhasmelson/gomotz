@@ -13,6 +13,8 @@
 
 *Monitor, control, and secure your entire network from a single dashboard.*
 
+<img src="images/Dashboard.png" alt="GoMotz Dashboard" width="100%" />
+
 ---
 
 </div>
@@ -66,15 +68,39 @@ This gives you flexible, secure control over which services are exposed and how 
 
 A full suite of diagnostic utilities built right in.
 
-| Tool | Description | Status |
-|---|---|---|
-| ~~Port Scan~~ | ~~Scan any host for open TCP ports~~ | Completed |
-| ~~TCP Check~~ | ~~Verify TCP connectivity to any IP and port~~ | Completed |
-| ~~DNS Lookup~~ | ~~Resolve domains with support for all record types (A, AAAA, MX, CNAME, TXT, SOA, NS, SRV, PTR, and more)~~ | Completed |
-| ~~Traceroute~~ | ~~Visualize the network path to any destination~~ | Completed |
-| ~~Ping Monitor~~ | ~~Continuous latency monitoring for any host~~ | Completed |
-| ~~HTTP(S) Check~~ | ~~Validate HTTP/HTTPS endpoint availability and response~~ | Completed |
-| ~~Speed Test~~ | ~~Measure your real-time internet bandwidth~~ | Completed |
+- [x] **Port Scan**: Scan any host for open TCP ports
+- [x] **TCP Check**: Verify TCP connectivity to any IP and port
+- [x] **DNS Lookup**: Resolve domains with support for all record types (A, AAAA, MX, CNAME, TXT, SOA, NS, SRV, PTR, and more)
+- [x] **Traceroute**: Visualize the network path to any destination
+- [x] **Ping Monitor**: Continuous latency monitoring for any host
+- [x] **HTTP(S) Check**: Validate HTTP/HTTPS endpoint availability and response
+- [x] **Speed Test**: Measure your real-time internet bandwidth
+
+---
+
+## Coming Soon: Energy Management System
+
+An **Energy Management System (EMS)** will soon be integrated into GoMotz, extending it beyond network monitoring to collect, analyze, and report on energy use and carbon emissions.
+
+**Features**
+
+- **Asset Management**: Track and manage energy assets and equipment in one place
+- **Data Acquisition**: Collect data from devices and systems using industrial and building protocols:
+  - Modbus
+  - OPC UA
+  - BACnet
+  - EtherNet/IP
+  - Siemens S7
+  - MQTT
+- **System Integration**: Connect with BMS, ERP, and AR
+
+**What it measures**
+
+Electricity, water, gas, cooling, and heating, along with the associated carbon emissions.
+
+**Where it can be used**
+
+Buildings, factories, shopping malls, hospitals, parks, and energy and carbon management centers.
 
 ---
 
