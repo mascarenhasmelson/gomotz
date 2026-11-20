@@ -1,8 +1,26 @@
-# 🛠️ GoMotz Setup Guide
+# GoMotz — Installation and Setup Guide
 
-This guide walks you through installing GoMotz, configuring your network interfaces for monitoring, and setting up VLANs on your Raspberry Pi.
+## Access the Services
 
----
+| Service | URL / Address | Description |
+|---|---|---|
+| Frontend | [http://localhost:8000](http://localhost:8000) | GoMotz Web GUI |
+| Backend | [http://localhost:8082](http://localhost:8082) | Go Server |
+| Database | `localhost:5432` | PostgreSQL |
+
+### Default Runtime Environment
+
+The `.env` file contains the following default parameters:
+
+```ini
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=StrongPassword123
+POSTGRES_DB=tunnel_services
+POSTGRES_PORT=5432
+VITE_API_URL=http://localhost:8082
+```
+
+> Change default credentials before using GoMotz in a production or exposed environment.
 
 ## Table of Contents
 
@@ -20,28 +38,28 @@ This guide walks you through installing GoMotz, configuring your network interfa
   - [Step 5: Add VLAN Interfaces to GoMotz](#step-5-add-vlan-interfaces-to-gomotz)
 - [Troubleshooting](#troubleshooting)
 
----
-
 ## Prerequisites
 
 Before installing GoMotz, make sure you have:
 
-- Raspberry Pi 4 (2GB RAM or more recommended)
+- Raspberry Pi 4 (2 GB RAM or more recommended)
 - Raspberry Pi OS 64-bit (Bookworm or Bullseye)
 - Docker and Docker Compose installed
-- Your Pi connected to the network via Ethernet (`eth0`) or Wi-Fi (`wlan0`)
+- Raspberry Pi connected to the network via Ethernet (`eth0`) or Wi-Fi (`wlan0`)
 
-**Install Docker if you haven't already:**
+### Install Docker
+
+If Docker is not installed:
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
+sudo usermod -aG docker "$USER"
 newgrp docker
 ```
 
----
-
 ## Installation
+
+Clone the repository and start the services:
 
 ```bash
 git clone https://github.com/mascarenhasmelson/gomotz.git
@@ -49,70 +67,57 @@ cd gomotz
 docker-compose up -d
 ```
 
-Once running, open your browser and navigate to:
+Once the containers are running, open the frontend:
 
-```
+```text
 http://<your-pi-ip>:8000
 ```
 
----
-
 ## First Run — Network Configuration
 
-After launching GoMotz, the first thing to do is tell it which network interfaces to monitor. Navigate to **Settings → Network Configuration** from the sidebar.
-
----
+After launching GoMotz, configure which network interfaces it should monitor. Navigate to **Settings → Network Configuration** in the sidebar.
 
 ### Step 1: Open Network Configuration
 
-GoMotz will automatically detect all available network interfaces on your Raspberry Pi. You will see a list under **Network Interfaces** on the left panel.
+GoMotz automatically detects available network interfaces on your Raspberry Pi. The **Network Interfaces** list appears in the left panel.
 
-Each interface shows:
-- **Interface name** (e.g. `eth0`)
+Each interface displays:
+
+- **Interface name** (for example, `eth0`)
 - **IP address** and **MAC address**
 - **Monitor status** — `MONITORED` or `NOT MONITORED`
 
-Click on any interface to view its full details on the right panel, including CIDR, default gateway, and current monitor status.
-
----
+Select an interface to view its details in the right panel, including CIDR, default gateway, and monitor status.
 
 ### Step 2: Create a Network to Monitor
 
-If an interface shows **NOT MONITORED**, click it and you will see the **Create Network** form on the right.
-
-Fill in the following:
+If an interface is marked **NOT MONITORED**, select it to open the **Create Network** form.
 
 | Field | Description | Example |
-|-------|-------------|---------|
-| **Network Name** | A friendly label for this network | `wifi`, `lan`, `guest` |
+|---|---|---|
+| **Network Name** | Friendly label for the network | `wifi`, `lan`, `guest` |
 | **Scan Interval** | How often GoMotz scans this network (10–3600 seconds) | `30` |
-| **Enable monitoring** | Toggle to activate monitoring immediately | ✅ Checked |
+| **Enable monitoring** | Enable monitoring immediately | Checked |
 
-Click **Create Network** to save. GoMotz will begin scanning the interface at the interval you set.
+Click **Create Network** to save. GoMotz will begin scanning the interface at the configured interval.
 
-> 💡 **Tip:** Use descriptive names like `home-lan`, `iot-vlan`, or `office-wifi` — especially when monitoring multiple interfaces.
-
----
+Tip: Use descriptive names such as `home-lan`, `iot-vlan`, or `office-wifi`, especially when monitoring multiple interfaces.
 
 ### Step 3: Verify Monitoring is Active
 
-After creating the network, the interface card on the left will update to show **MONITORED** with a green dot. The right panel will display:
+After creating the network, the interface card should show **MONITORED**. The right panel will display:
 
 - Interface name, IP, MAC, CIDR, and gateway
-- Network name you assigned
+- The network name you assigned
 - IP range being scanned
-- **Monitoring Active** badge
+- Monitoring Active status
 - Options to **Stop Monitoring** or **Delete Network**
 
-Your devices on that network will now begin appearing in the **Device Monitoring** section.
-
----
+Devices on that network should begin appearing in the **Device Monitoring** section.
 
 ## VLAN Setup on Raspberry Pi
 
-If you want GoMotz to monitor traffic across multiple VLANs, you first need to configure VLAN sub-interfaces on the Raspberry Pi itself. Here's a complete step-by-step guide.
-
----
+To monitor multiple VLANs, configure VLAN sub-interfaces on the Raspberry Pi first. These instructions use `eth0` as the physical interface and VLAN IDs 10 and 20 as examples. Adapt the interface names, VLAN IDs, IP addresses, and gateway addresses to your network.
 
 ### Step 1: Install VLAN Package
 
@@ -120,53 +125,51 @@ If you want GoMotz to monitor traffic across multiple VLANs, you first need to c
 sudo apt-get update
 sudo apt-get install vlan -y
 
-# Load the 8021q kernel module on boot
-sudo su -c "echo '8021q' >> /etc/modules"
+# Load the 802.1Q kernel module at boot
+echo 8021q | sudo tee -a /etc/modules
 ```
-
----
 
 ### Step 2: Create VLAN Interfaces
 
-Create the file `/etc/network/interfaces.d/vlans` and define your VLAN sub-interfaces. The naming convention is `<physical-interface>.<VLAN-ID>`.
+Create `/etc/network/interfaces.d/vlans`:
 
 ```bash
 sudo nano /etc/network/interfaces.d/vlans
 ```
 
-Add the following (adjust VLAN IDs to match your network):
+Add the following configuration, adjusting VLAN IDs as required:
 
-```
+```text
 # VLAN 10
 auto eth0.10
 iface eth0.10 inet manual
-  vlan-raw-device eth0
+    vlan-raw-device eth0
 
 # VLAN 20
 auto eth0.20
 iface eth0.20 inet manual
-  vlan-raw-device eth0
+    vlan-raw-device eth0
 ```
 
-> You can add as many VLANs as needed by repeating this block with different IDs.
+Add more VLANs by repeating the blocks with different VLAN IDs.
 
----
+> Note: This configuration uses the `ifupdown` networking system. Raspberry Pi OS installations using NetworkManager or another network manager may require a different configuration method.
 
 ### Step 3: Assign Static IPs
 
-Edit `/etc/dhcpcd.conf` to assign static IP addresses to each VLAN interface:
+If your system uses `dhcpcd`, edit `/etc/dhcpcd.conf`:
 
 ```bash
 sudo nano /etc/dhcpcd.conf
 ```
 
-Add at the end of the file:
+Example configuration (replace the addresses with values appropriate for your network):
 
-```bash
+```text
 # Main interface
 interface eth0
-static ip_address=10.0.20.125/24
-static routers=10.0.20.1
+static ip_address=10.0.30.125/24
+static routers=10.0.30.1
 static domain_name_servers=1.1.1.1
 
 # VLAN 10
@@ -182,64 +185,67 @@ static routers=10.0.20.1
 static domain_name_servers=1.1.1.1
 ```
 
----
+Ensure each interface has an IP address appropriate for its VLAN and that the addresses do not conflict with other devices. The example uses different subnets for the physical interface and VLAN interfaces.
 
 ### Step 4: Reboot and Verify
+
+Reboot the Raspberry Pi:
 
 ```bash
 sudo reboot
 ```
 
-After rebooting, verify the VLAN interfaces are up:
+After reboot, verify the VLAN interfaces:
 
 ```bash
-sudo ifconfig
+ip -brief address
 ```
 
-You should see output similar to:
+You can also use:
 
-```
-eth0.10: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
-        inet 10.0.10.125  netmask 255.255.255.0  broadcast 10.0.10.255
-        ether b8:27:eb:10:70:13  txqueuelen 1000  (Ethernet)
-
-eth0.20: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
-        inet 10.0.20.125  netmask 255.255.255.0  broadcast 10.0.20.255
-        ether b8:27:eb:10:70:13  txqueuelen 1000  (Ethernet)
+```bash
+ip link show
 ```
 
----
+Example output (addresses and MAC values will vary):
+
+```text
+eth0.10: <UP,BROADCAST,RUNNING,MULTICAST> mtu 1500
+    inet 10.0.10.125/24
+
+eth0.20: <UP,BROADCAST,RUNNING,MULTICAST> mtu 1500
+    inet 10.0.20.125/24
+```
 
 ### Step 5: Add VLAN Interfaces to GoMotz
 
-Once your VLAN interfaces are up, go back to GoMotz **Settings → Network Configuration**. The new VLAN interfaces (e.g. `eth0.10`, `eth0.20`) will appear automatically in the interface list.
+Once the VLAN interfaces are up, return to **Settings → Network Configuration** in GoMotz. The VLAN interfaces (such as `eth0.10` and `eth0.20`) should appear in the interface list.
 
-Click each one and follow [Step 2](#step-2-create-a-network-to-monitor) to create a named network and enable monitoring.
+Select each interface and follow [Step 2: Create a Network to Monitor](#step-2-create-a-network-to-monitor) to create a named network and enable monitoring.
 
-> 💡 **Tip:** Name your VLAN networks clearly — e.g. `iot-vlan10`, `cameras-vlan20` — so they are easy to identify in the Device Monitoring view.
-
----
+Use clear names such as `iot-vlan10` or `cameras-vlan20` to identify networks easily in Device Monitoring.
 
 ## Troubleshooting
 
-**Interface not appearing in GoMotz?**
-- Make sure the interface is UP: `ip link show`
+### Interface not appearing in GoMotz
+
+- Confirm that the interface is up: `ip link show`
 - Restart GoMotz: `docker-compose restart`
 
-**VLAN interface not coming up after reboot?**
-- Confirm `8021q` is in `/etc/modules`
-- Run `sudo modprobe 8021q` manually to load without rebooting
-- Check `/etc/network/interfaces.d/vlans` for typos
+### VLAN interface not coming up after reboot
 
-**Devices not appearing after enabling monitoring?**
-- Check that GoMotz has the necessary permissions to run ARP scans
-- Verify the scan interval isn't set too high
-- Ensure GoMotz container is running with `docker ps`
+- Confirm that `8021q` is listed in `/etc/modules`.
+- Load the module manually: `sudo modprobe 8021q`
+- Check `/etc/network/interfaces.d/vlans` for errors.
+- Confirm that your Raspberry Pi OS networking system supports the configuration method used in this guide.
+
+### Devices not appearing after enabling monitoring
+
+- Check that GoMotz has the permissions required to perform ARP scans.
+- Verify that the scan interval is not set too high.
+- Ensure the GoMotz containers are running: `docker ps`
+- Confirm the Raspberry Pi is connected to the VLANs and that the switch port is configured to carry the required VLAN tags.
 
 ---
 
-<div align="center">
-
-[⬅️ Back to README](../README.md) · [🗺️ View Roadmap](ROADMAP.md)
-
-</div>
+[Back to README](../README.md) · [View Roadmap](ROADMAP.md)
