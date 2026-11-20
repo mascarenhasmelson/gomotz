@@ -125,29 +125,24 @@ Buildings, factories, shopping malls, hospitals, parks, and energy and carbon ma
 
 ---
 
-Frequently Asked Questions
-What devices can GoMotz monitor?
+## Frequently Asked Questions
 
+### What devices can GoMotz monitor?
 GoMotz can discover, monitor, and keep an inventory of any IP-enabled device or asset on your network, including routers, switches, firewalls, access points, servers, workstations, cameras, printers, UPS systems, smart plugs, PDUs, POS terminals, digital signage, and IoT devices. Each device is tracked with its IP address, MAC address, hostname, and vendor information.
 
-Is GoMotz cloud-based?
-
+### Is GoMotz cloud-based?
 No. GoMotz is self-hosted. A lightweight agent runs on your Raspberry Pi, and the real-time dashboard is served from your own network. Remote access is currently provided through Tailscale as a temporary solution, until the GoMotz VPN-based remote access tool is completed. A unified cloud dashboard is on the roadmap.
 
-What is GoMotz used for?
-
+### What is GoMotz used for?
 GoMotz is used to discover, monitor, and manage network-connected devices and assets. Common use cases include network monitoring, device inventory, remote troubleshooting, and network security monitoring for homelabs and small networks.
 
-Can GoMotz be used for asset management?
-
+### Can GoMotz be used for asset management?
 Yes. GoMotz already keeps a full device inventory with IP, MAC, hostname, and vendor information. A dedicated device asset inventory is on the roadmap, and asset management for energy equipment will come with the Energy Management System.
 
-What is the Energy Management System?
-
+### What is the Energy Management System?
 The Energy Management System (EMS) is coming soon and will be integrated into GoMotz. It will collect data using protocols such as Modbus, OPC UA, BACnet, EtherNet/IP, Siemens S7, and MQTT, and integrate with BMS, ERP, and AR. It is designed for collecting, analyzing, and reporting energy and carbon emissions across electricity, water, gas, cooling, and heating in buildings, factories, shopping malls, hospitals, parks, and energy and carbon management centers.
 
-How do I access GoMotz remotely?
-
+### How do I access GoMotz remotely?
 Remote access is currently provided through Tailscale, as a temporary solution until the GoMotz VPN-based remote access tool is completed. GoMotz does not yet include a built-in reverse proxy.
 
 **[Read the Setup Guide →](docs/SETUP.md)**
