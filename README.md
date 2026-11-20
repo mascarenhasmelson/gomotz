@@ -4,6 +4,7 @@
 <img src="https://img.shields.io/badge/platform-Raspberry%20Pi-c51a4a?style=for-the-badge&logo=raspberry-pi" />
 <img src="https://img.shields.io/badge/arm64-blue?style=for-the-badge&logo=arm" />
 <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" />
+<a href="https://buymeacoffee.com/0xmm" target="_blank"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20GoMotz-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" /></a>
 
 # GoMotz
 
@@ -16,6 +17,8 @@
 <img src="images/Dashboard.png" alt="GoMotz Dashboard" width="100%" />
 
 ---
+
+<a href="https://buymeacoffee.com/0xmm" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 </div>
 
@@ -146,6 +149,16 @@ The Energy Management System (EMS) is coming soon and will be integrated into Go
 Remote access is currently provided through Tailscale, as a temporary solution until the GoMotz VPN-based remote access tool is completed. GoMotz does not yet include a built-in reverse proxy.
 
 **[Read the Setup Guide →](docs/SETUP.md)**
+
+---
+
+## Support the Developer
+
+I'm a **hobbyist developer** with a deep interest in **embedded web systems**, building primarily with **Go & Vue.js**. I'm the creator of GoMotz — an Asset Management, Network Monitoring, and Remote Access Cloud SaaS.
+
+If you find GoMotz useful and want to support its development, you can buy me a coffee. Every contribution helps keep the project alive and growing!
+
+<a href="https://buymeacoffee.com/0xmm" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ---
 
